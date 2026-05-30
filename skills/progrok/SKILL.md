@@ -119,11 +119,32 @@ response = client.chat.completions.create(
 | `grok-4.3` (default) | General reasoning, chat |
 | `grok-4.20-0309-reasoning` | Deep analysis, complex coding |
 | `grok-4.20-0309-non-reasoning` | Fast responses, simple tasks |
-| `grok-4.20-multi-agent-0309` | Agent orchestration |
+| `grok-4.20-multi-agent-0309` | Deep research (4 or 16 parallel agents) |
 | `grok-build-0.1` | Code generation |
 | `grok-imagine-image` | Fast image gen |
 | `grok-imagine-image-quality` | HQ image gen |
 | `grok-imagine-video` | Video gen (async) |
+
+## Multi-Agent Model
+
+`grok-4.20-multi-agent-0309` spawns parallel agents internally.
+
+```bash
+# 4 agents (default, fast)
+curl .../v1/responses -d '{"model":"grok-4.20-multi-agent-0309","reasoning":{"effort":"low"},...}'
+
+# 16 agents (thorough, ~100 web searches)
+curl .../v1/responses -d '{"model":"grok-4.20-multi-agent-0309","reasoning":{"effort":"xhigh"},...}'
+```
+
+| effort | Agents | Searches | Cost | Time |
+|--------|:------:|:--------:|-----:|-----:|
+| low/medium | 4 | ~32 | ~$0.33 | ~38s |
+| high/xhigh | 16 | ~102 | ~$1.05 | ~43s |
+
+Supports: `web_search`, `x_search`, `json_schema` structured output, `function` calling.
+
+Does NOT support: per-agent role/tool/schema definition. Agent orchestration is a black box — you control count only.
 
 ## Tools (Responses API)
 
@@ -136,6 +157,36 @@ response = client.chat.completions.create(
   {"type": "function", "name": "my_func", "parameters": {...}}
 ]}
 ```
+
+## Structured Output (JSON Schema)
+
+Force the response into a specific JSON structure:
+
+```bash
+curl http://127.0.0.1:18645/v1/responses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-4.3",
+    "input": [{"role":"user","content":"Latest AI releases"}],
+    "tools": [{"type":"web_search"}],
+    "text": {
+      "format": {
+        "type": "json_schema",
+        "name": "results",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "items": {"type": "array", "items": {"type": "object", "properties": {"name":{"type":"string"},"summary":{"type":"string"}}, "required":["name","summary"]}}
+          },
+          "required": ["items"]
+        },
+        "strict": true
+      }
+    }
+  }'
+```
+
+Works with all models including `grok-4.20-multi-agent-0309`.
 
 ## Ports
 

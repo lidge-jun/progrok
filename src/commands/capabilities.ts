@@ -136,7 +136,15 @@ export function buildCapabilities() {
       {
         id: "grok-4.20-multi-agent-0309",
         type: "multi-agent",
-        use: "Agent orchestration",
+        use: "Deep research (4 or 16 parallel agents)",
+        config: {
+          agentCount: [4, 16],
+          reasoningEffort: ["low", "medium", "high", "xhigh"],
+          effortToAgents: { low: 4, medium: 4, high: 16, xhigh: 16 },
+          structuredOutput: true,
+          perAgentConfig: false,
+          note: "Agent count only — no per-agent role/tool/schema definition. Black-box orchestration by xAI.",
+        },
       },
       { id: "grok-build-0.1", type: "code", use: "Code generation" },
       {
