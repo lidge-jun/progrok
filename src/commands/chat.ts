@@ -9,7 +9,12 @@ import { log } from "../utils/logger.js";
 
 export function chatCommand(): Command {
   return new Command("chat")
-    .description("Open Grok chat in your browser")
+    .description(
+      `Open Grok chat in your browser.
+  Starts a web UI + proxy server on the same port.
+  Features: sessions, markdown, code highlighting, tool results, model switching.
+  Proxy is also available at the same port under /v1/*.`,
+    )
     .option("-p, --port <port>", "Port number", String(CHAT_DEFAULT_PORT))
     .option("--host <host>", "Host to bind", PROXY_DEFAULT_HOST)
     .action(async (opts: { port: string; host: string }) => {

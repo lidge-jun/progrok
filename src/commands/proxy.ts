@@ -9,7 +9,12 @@ import { log } from "../utils/logger.js";
 
 export function proxyCommand(): Command {
   return new Command("proxy")
-    .description("Start OpenAI-compatible proxy server for Grok")
+    .description(
+      `Start OpenAI-compatible proxy server for Grok.
+  Forwards ALL /v1/* requests to api.x.ai with your OAuth token injected.
+  Any client (curl, OpenAI SDK, LangChain, etc.) can connect — no API key needed.
+  Supports streaming (SSE), multipart (stt), and binary responses (tts).`,
+    )
     .option("-p, --port <port>", "Port number", String(PROXY_DEFAULT_PORT))
     .option("--host <host>", "Host to bind", PROXY_DEFAULT_HOST)
     .action(async (opts: { port: string; host: string }) => {
