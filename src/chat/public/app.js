@@ -339,57 +339,79 @@ async function sendMessage(text) {
             bubble.innerHTML = renderMarkdown(assistantMsg.content);
             highlightAll(bubble);
             messagesEl.scrollTop = messagesEl.scrollHeight;
-          } else if (event.type === "response.completed") {
-            const output = event.response?.output;
-            if (Array.isArray(output)) {
-              for (const item of output) {
-                if (item.type === "web_search_call" || item.type === "x_search_call") {
-                  const toolInfo = {
-                    type: item.type,
-                    query: item.query || item.search_query || "",
-                    citations: [],
-                  };
-                  if (item.results && Array.isArray(item.results)) {
-                    toolInfo.citations = item.results.map(function(r) {
-                      return { title: r.title, url: r.url };
-                    });
-                  }
-                  assistantMsg.tools.push(toolInfo);
-                }
-                if (item.type === "message" && Array.isArray(item.content)) {
-                  for (const part of item.content) {
-                    if (part.type === "output_text" && !assistantMsg.content) {
-                      assistantMsg.content = part.text;
-                    }
-                    if (part.annotations && Array.isArray(part.annotations)) {
-                      for (const ann of part.annotations) {
-                        if (ann.type === "url_citation") {
-                          const existing = assistantMsg.tools.find(function(t) { return t.type === "citations"; });
-                          if (existing) {
-                            existing.citations.push({ title: ann.title, url: ann.url });
-                          } else {
-                            assistantMsg.tools.push({
-                              type: "citations",
-                              query: "Citations",
-                              citations: [{ title: ann.title, url: ann.url }],
-                            });
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
+
+          } else if (event.type === "response.web_search_call.searching" || event.type === "response.x_search_call.searching") {
+            // Show "Searching..." indicator
+            let searchIndicator = bubble.querySelector(".search-indicator");
+            if (!searchIndicator) {
+              searchIndicator = document.createElement("div");
+              searchIndicator.className = "search-indicator";
+              searchIndicator.innerHTML = '<span class="tool-icon">🔍</span> Searching...';
+              bubble.appendChild(searchIndicator);
+              messagesEl.scrollTop = messagesEl.scrollHeight;
+            }
+
+          } else if (event.type === "response.output_item.done" && (event.item?.type === "web_search_call" || event.item?.type === "x_search_call")) {
+            // Search completed — extract query + sources
+            const item = event.item;
+            const toolInfo = {
+              type: item.type,
+              query: item.action?.query || "",
+              citations: [],
+            };
+            if (item.action?.sources && Array.isArray(item.action.sources)) {
+              toolInfo.citations = item.action.sources.map(function(s) {
+                return { title: s.title || s.url, url: s.url };
+              });
+            }
+            assistantMsg.tools.push(toolInfo);
+
+            // Remove search indicator, add tool result
+            const indicator = bubble.querySelector(".search-indicator");
+            if (indicator) indicator.remove();
+            bubble.appendChild(createToolEl(toolInfo));
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+
+          } else if (event.type === "response.output_text.annotation.added") {
+            // Real-time citation tracking
+            const ann = event.annotation;
+            if (ann?.type === "url_citation" && ann.url) {
+              const existing = assistantMsg.tools.find(function(t) { return t.type === "citations"; });
+              const cite = { title: ann.title || ann.url, url: ann.url };
+              if (existing) {
+                const isDup = existing.citations.some(function(c) { return c.url === cite.url; });
+                if (!isDup) existing.citations.push(cite);
+              } else {
+                assistantMsg.tools.push({ type: "citations", query: "Sources", citations: [cite] });
               }
             }
 
+          } else if (event.type === "response.reasoning_summary_text.delta") {
+            // Accumulate reasoning for optional display
+            if (!assistantMsg._reasoning) assistantMsg._reasoning = "";
+            assistantMsg._reasoning += event.delta || "";
+
+          } else if (event.type === "response.completed") {
+            // Final render with all annotations
             bubble.innerHTML = renderMarkdown(assistantMsg.content);
             highlightAll(bubble);
 
-            if (assistantMsg.tools.length > 0) {
-              for (const tool of assistantMsg.tools) {
-                bubble.appendChild(createToolEl(tool));
+            // Add citation panel if collected during streaming
+            const citeTool = assistantMsg.tools.find(function(t) { return t.type === "citations"; });
+            if (citeTool && citeTool.citations.length > 0) {
+              const existing = bubble.querySelector('.tool-result');
+              if (!existing) bubble.appendChild(createToolEl(citeTool));
+            }
+
+            // Render search tool panels (if not already rendered during streaming)
+            for (const tool of assistantMsg.tools) {
+              if (tool.type !== "citations") {
+                const alreadyRendered = bubble.querySelector('.tool-result[data-query="' + (tool.query || '') + '"]');
+                if (!alreadyRendered) bubble.appendChild(createToolEl(tool));
               }
             }
+
+            messagesEl.scrollTop = messagesEl.scrollHeight;
           }
         } catch (_e) { /* skip */ }
       }

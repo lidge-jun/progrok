@@ -312,6 +312,18 @@ main {
 
 .tool-citation:hover { text-decoration: underline; }
 
+.search-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--dim);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
 /* Spinner */
 .spinner-wrap {
   display: flex;
