@@ -114,16 +114,33 @@ response = client.chat.completions.create(
 
 ## Models
 
-| Model | Best For |
-|-------|---------|
-| `grok-4.3` (default) | General reasoning, chat |
-| `grok-4.20-0309-reasoning` | Deep analysis, complex coding |
-| `grok-4.20-0309-non-reasoning` | Fast responses, simple tasks |
-| `grok-4.20-multi-agent-0309` | Deep research (4 or 16 parallel agents) |
-| `grok-build-0.1` | Code generation |
-| `grok-imagine-image` | Fast image gen |
-| `grok-imagine-image-quality` | HQ image gen |
-| `grok-imagine-video` | Video gen (async) |
+### Text Models
+
+| Model | Best For | Input | Reasoning | Structured Output |
+|-------|---------|-------|-----------|:-:|
+| `grok-4.3` (default) | General reasoning, chat, search | text, image | none/low/medium/high (default: low) | ✅ |
+| `grok-4.20-0309-reasoning` | Deep analysis, complex coding | text, image | low/medium/high (default: low) | ✅ |
+| `grok-4.20-0309-non-reasoning` | Fast responses, no thinking | text, image | ❌ disabled | ✅ |
+| `grok-4.20-multi-agent-0309` | Deep research (parallel agents) | text, image | low/medium/high/xhigh → agent count | ✅ |
+| `grok-build-0.1` | Agentic coding | text, image | low/medium/high (default: low) | ❌ |
+
+### Media Models
+
+| Model | Type | Output |
+|-------|------|--------|
+| `grok-imagine-image` | Image gen | URL (sync) |
+| `grok-imagine-image-quality` | HQ image gen | URL (sync) |
+| `grok-imagine-video` | Video gen | URL (async, poll) |
+
+### Reasoning Effort Reference
+
+| Model | `none` | `low` | `medium` | `high` | `xhigh` | Effect |
+|-------|:---:|:---:|:---:|:---:|:---:|--------|
+| grok-4.3 | ✅ | ✅ default | ✅ | ✅ | ❌ | Thinking depth |
+| grok-4.20-reasoning | ❌ | ✅ default | ✅ | ✅ | ❌ | Thinking depth |
+| grok-4.20-non-reasoning | — | — | — | — | — | No reasoning |
+| grok-4.20-multi-agent | ❌ | ✅ 4 agents | ✅ 4 agents | ✅ 16 agents | ✅ 16 agents | Agent count |
+| grok-build-0.1 | ❌ | ✅ default | ✅ | ✅ | ❌ | Thinking depth |
 
 ## Multi-Agent Model
 
