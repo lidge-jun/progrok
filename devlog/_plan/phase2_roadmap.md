@@ -13,15 +13,22 @@ Phase 1 완료 (2026-05-30): OAuth login, proxy, chat UI (테스트용), tests, 
 - [x] npm publish workflow, GitHub repo
 - [x] ima2-gen 패턴 스킬 시스템: skills/progrok/SKILL.md + capabilities --json
 
-## Phase 2: cli-jaw 통합
+## Phase 2: Grok 검색 스킬
 
-### 2A. cli-jaw opencode 프로바이더
+네이티브 구현 — progrok login 한 사람은 OAuth 토큰 그대로 활용.
+
+- `grok-search` cli-jaw 스킬 생성
+- /v1/responses + web_search/x_search 도구로 검색
+- progrok OAuth 토큰 직접 사용 (프록시 불필요, 네이티브 API 호출)
+- 검색 결과: AI 요약 + citations URL 반환
+
+## Phase 3: cli-jaw opencode 프로바이더
+
 - `settings.json` perCli.grok에 progrok 프록시 주소 등록
 - `/cli opencode` + `/model grok-4.3` → 프록시 경유 Grok 추론
 
-## Phase 3: 배포
+## Phase 4: 배포
 
-### 3A. npm publish 자동화
 - `v*` 태그 → npm publish (이미 workflow 준비됨)
 - Homebrew formula 배포
 
