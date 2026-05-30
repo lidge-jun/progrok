@@ -8,6 +8,7 @@ export interface SearchOptions {
   x?: boolean;
   json?: boolean;
   model?: string;
+  reasoning?: string;
 }
 
 interface ResponsesTool {
@@ -99,8 +100,18 @@ export function searchCommand(): Command {
     .option("--x", "X (Twitter) search only")
     .option("--json", "output structured JSON")
     .option("--model <id>", "model to use", DEFAULT_MODEL)
+    .option(
+      "--reasoning <effort>",
+      "reasoning effort: none|low|medium|high|xhigh (xhigh = multi-agent 16)",
+    )
     .action(async (query: string, opts: SearchOptions) => {
       try {
+        const VALID_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh"]);
+        if (opts.reasoning && !VALID_EFFORTS.has(opts.reasoning)) {
+          throw new Error(
+            `invalid --reasoning '${opts.reasoning}'. use: none|low|medium|high|xhigh`,
+          );
+        }
         const tools = buildSearchTools(opts);
         const bearer = await getValidBearer();
 
@@ -115,6 +126,7 @@ export function searchCommand(): Command {
             input: query,
             tools,
             stream: false,
+            ...(opts.reasoning ? { reasoning: { effort: opts.reasoning } } : {}),
           }),
         });
 

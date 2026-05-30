@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildSearchTools, extractSearchResult } from "../src/commands/search.js";
+import { buildSearchTools, extractSearchResult, searchCommand } from "../src/commands/search.js";
 
 describe("buildSearchTools", () => {
   it("defaults to both web and x when no flags", () => {
@@ -104,5 +104,20 @@ describe("extractSearchResult", () => {
       ],
     });
     assert.equal(r.citations.length, 1);
+  });
+});
+
+describe("SearchOptions.reasoning validation", () => {
+  it("has --reasoning option registered", () => {
+    const cmd = searchCommand();
+    const opts = cmd.options.map((o: any) => o.long);
+    assert(opts.includes("--reasoning"), "missing --reasoning option");
+  });
+
+  it("--reasoning option description mentions effort", () => {
+    const cmd = searchCommand();
+    const opt = cmd.options.find((o: any) => o.long === "--reasoning");
+    assert(opt, "--reasoning option not found");
+    assert.match(opt.description, /effort/);
   });
 });
