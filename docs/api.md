@@ -1,8 +1,8 @@
 # progrok API Reference
 
-progrok runs a local proxy on `http://127.0.0.1:18645` that forwards requests to the xAI API (`https://api.x.ai/v1`), injecting your OAuth token automatically.
+progrok runs a local proxy that forwards all `/v1/*` requests to `https://api.x.ai/v1`, injecting your OAuth token automatically.
 
-**Key behavior:** The proxy strips any `Authorization` header you send and replaces it with the stored OAuth bearer token. You can pass any value (or omit it entirely) -- the proxy handles auth.
+**Key behavior:** The proxy strips any `Authorization` header you send and replaces it with the stored OAuth bearer token. You can pass any value — the proxy handles auth.
 
 ---
 
@@ -10,13 +10,11 @@ progrok runs a local proxy on `http://127.0.0.1:18645` that forwards requests to
 
 ### GET /health
 
-Health check. Returns proxy status.
+Health check.
 
 ```bash
 curl http://127.0.0.1:18645/health
 ```
-
-**Response:**
 
 ```json
 {"status": "ok", "upstream": "xAI Grok", "proxy": "progrok"}
@@ -26,234 +24,181 @@ curl http://127.0.0.1:18645/health
 
 ### POST /v1/responses
 
-xAI Responses API passthrough. Sends the request body directly to `https://api.x.ai/v1/responses`.
+xAI Responses API. Supports streaming, tools (web_search, x_search, code_interpreter, file_search), and function calling.
 
 ```bash
 curl http://127.0.0.1:18645/v1/responses \
   -H "Content-Type: application/json" \
   -d '{
     "model": "grok-4.3",
-    "input": "Explain OAuth PKCE in one sentence."
+    "input": [{"role": "user", "content": "What is happening on X today?"}],
+    "tools": [{"type": "web_search"}, {"type": "x_search"}],
+    "stream": true
   }'
 ```
-
-Supports streaming when the upstream response uses `text/event-stream`.
 
 ---
 
 ### POST /v1/chat/completions
 
-OpenAI-compatible chat completions. This is the primary endpoint for most clients (Cursor, Continue, aider, etc.).
+OpenAI-compatible chat completions.
 
 ```bash
 curl http://127.0.0.1:18645/v1/chat/completions \
-  -H "Authorization: Bearer anything" \
   -H "Content-Type: application/json" \
-  -d '{
-    "model": "grok-4.3",
-    "messages": [{"role": "user", "content": "Hello"}],
-    "stream": true
-  }'
-```
-
-The `Authorization` header value is ignored. The proxy injects the OAuth token.
-
----
-
-### POST /v1/completions
-
-Legacy completions endpoint.
-
-```bash
-curl http://127.0.0.1:18645/v1/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "grok-4.3",
-    "prompt": "The meaning of life is",
-    "max_tokens": 100
-  }'
-```
-
----
-
-### POST /v1/embeddings
-
-Text embeddings endpoint.
-
-```bash
-curl http://127.0.0.1:18645/v1/embeddings \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "v1",
-    "input": "progrok is an OAuth proxy for xAI"
-  }'
+  -d '{"model": "grok-4.3", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
 ---
 
 ### GET /v1/models
 
-List available models.
+List available models (minimal info).
 
 ```bash
 curl http://127.0.0.1:18645/v1/models
 ```
 
-Returns the model list from the xAI API.
+### GET /v1/language-models
 
----
+List models with full details: pricing, modalities, aliases.
 
-### Disallowed Paths
-
-Any `/v1/*` path not listed above returns `404`:
-
-```json
-{
-  "error": {
-    "message": "Path /v1/foo is not proxied. Allowed: /responses, /chat/completions, /completions, /embeddings, /models",
-    "type": "path_not_allowed"
-  }
-}
+```bash
+curl http://127.0.0.1:18645/v1/language-models
 ```
 
 ---
 
-### Error Responses
+### POST /v1/images/generations
 
-| Status | Type | Cause |
-|--------|------|-------|
-| 401 | `auth_error` | Not logged in or token expired and refresh failed |
-| 404 | `path_not_allowed` | Requested path is not in the allowed set |
-| 502 | `upstream_error` | xAI API unreachable or returned a network error |
+Generate images with Grok Imagine.
+
+```bash
+curl http://127.0.0.1:18645/v1/images/generations \
+  -H "Content-Type: application/json" \
+  -d '{"model": "grok-imagine-image", "prompt": "A serene Japanese garden", "n": 1}'
+```
+
+Models: `grok-imagine-image` (fast), `grok-imagine-image-quality` (high quality).
+
+---
+
+### POST /v1/videos/generations
+
+Generate videos (async — returns `request_id`).
+
+```bash
+# Start generation
+curl http://127.0.0.1:18645/v1/videos/generations \
+  -H "Content-Type: application/json" \
+  -d '{"model": "grok-imagine-video", "prompt": "A red ball bouncing"}'
+# Response: {"request_id": "abc-123"}
+```
+
+### GET /v1/videos/{request_id}
+
+Poll video generation progress. Returns HTTP 202 while pending, 200 when done.
+
+```bash
+curl http://127.0.0.1:18645/v1/videos/abc-123
+# Pending: {"status": "pending", "progress": 45}
+# Done:    {"status": "done", "video": {"url": "https://...", "duration": 8}, "progress": 100}
+```
+
+---
+
+### POST /v1/tts
+
+Text-to-speech. Returns raw audio bytes (MP3 by default).
+
+```bash
+curl http://127.0.0.1:18645/v1/tts \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Hello world", "voice_id": "eve", "language": "en"}' \
+  -o output.mp3
+```
+
+---
+
+### POST /v1/stt
+
+Speech-to-text. Accepts multipart/form-data with audio file.
+
+```bash
+curl http://127.0.0.1:18645/v1/stt \
+  -F "file=@recording.mp3" \
+  -F "language=en"
+```
+
+```json
+{"text": "Hello world", "language": "English", "duration": 1.5}
+```
+
+---
+
+### POST /v1/batch/completions
+
+Batch chat completions.
+
+---
+
+### All Other /v1/* Paths
+
+The proxy forwards **every** `/v1/*` request to xAI without filtering. Any new xAI endpoint is automatically supported.
 
 ---
 
 ## Authentication
 
-progrok uses xAI's OAuth 2.0 endpoints discovered via OIDC at `https://auth.x.ai/.well-known/openid-configuration`. Two flows are supported.
-
-### PKCE Flow (default)
-
-Used by `progrok login`. Requires a browser on the same machine.
+### PKCE Flow (Browser)
 
 ```
-  CLI                       Browser                   xAI Auth
-   |                           |                         |
-   |-- generate verifier+challenge (SHA-256/base64url) --|
-   |-- generate random state --|                         |
-   |                           |                         |
-   |-- open authorize URL ---->|                         |
-   |                           |---- user logs in ------>|
-   |                           |                         |
-   |<--- redirect to 127.0.0.1:56121/callback?code=...&state=... ---|
-   |                           |                         |
-   |-- POST token endpoint (code + verifier) ----------->|
-   |<-- access_token, refresh_token, id_token -----------|
-   |                           |                         |
-   |-- save to ~/.progrok/auth.json                      |
+progrok login
 ```
 
-Parameters sent to the authorization endpoint:
+1. Opens browser to `https://auth.x.ai/...` with PKCE challenge
+2. User logs in with xAI account (SuperGrok required)
+3. Callback on `127.0.0.1:56121/callback`
+4. Token exchange and save to `~/.progrok/auth.json`
 
-| Parameter | Value |
-|-----------|-------|
-| client_id | `b1a00492-073a-47ea-816f-4c329264a828` |
-| redirect_uri | `http://127.0.0.1:56121/callback` |
-| response_type | `code` |
-| scope | `openid profile email offline_access grok-cli:access api:access` |
-| code_challenge_method | `S256` |
+### Device Code Flow (SSH/Remote)
 
-The callback server listens on `127.0.0.1:56121` and times out after 5 minutes.
-
----
-
-### Device Code Flow
-
-Used by `progrok login --device-code`. For headless/SSH environments where a browser is not available locally.
-
-1. CLI requests a device code from the device authorization endpoint.
-2. CLI prints a verification URL and user code.
-3. User opens the URL on any device, enters the code, and authorizes.
-4. CLI polls the token endpoint every 5 seconds until authorized.
-5. Tokens are saved to `~/.progrok/auth.json`.
-
-```bash
+```
 progrok login --device-code
-# Output:
-# Open this URL in your browser:
-#   https://auth.x.ai/device?user_code=ABCD-EFGH
-#
-# Enter code: ABCD-EFGH
 ```
 
----
+1. Displays URL + code in terminal
+2. User opens URL in any browser, enters code
+3. CLI polls until authorized
 
-### Token Refresh
+### Token Storage
 
-The proxy automatically refreshes expired tokens before forwarding requests:
-
-- A token is considered expired when the current time is within **2 minutes** of `expiresAt`.
-- The proxy sends a `refresh_token` grant to the stored token endpoint.
-- The refreshed tokens are written back to `~/.progrok/auth.json`.
-- If refresh fails (no refresh token, endpoint unreachable, or grant rejected), the proxy returns `401` and the user must run `progrok login` again.
-
----
-
-## Configuration
-
-### ~/.progrok/auth.json
-
-Stored with mode `0600`. Written automatically by `progrok login`.
-
-```json
+```
+~/.progrok/auth.json
 {
-  "accessToken": "eyJhbG...",
-  "refreshToken": "dGhpcyBpcyBh...",
-  "expiresAt": 1717100000000,
+  "accessToken": "eyJ...",
+  "refreshToken": "J69...",
+  "expiresAt": 1780152218787,
   "tokenEndpoint": "https://auth.x.ai/oauth2/token",
-  "email": "user@example.com",
-  "idToken": "eyJhbG..."
+  "email": "user@example.com"
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| accessToken | string | Bearer token injected into upstream requests |
-| refreshToken | string? | Used to obtain a new access token when expired |
-| expiresAt | number? | Unix timestamp (ms) when the access token expires |
-| tokenEndpoint | string? | URL used for token exchange and refresh |
-| email | string? | Extracted from the id_token JWT payload |
-| idToken | string? | OIDC id_token from the authorization server |
+Token is auto-refreshed 2 minutes before expiry using the refresh token.
 
 ---
 
-### ~/.progrok/config.json
+## Available Models
 
-Stored with mode `0600`. Application preferences.
+| Model | Type | Input |
+|-------|------|-------|
+| `grok-4.3` (default) | Reasoning | text, image |
+| `grok-4.20-0309-reasoning` | Deep reasoning | text, image |
+| `grok-4.20-0309-non-reasoning` | Fast | text, image |
+| `grok-4.20-multi-agent-0309` | Multi-agent | text, image |
+| `grok-build-0.1` | Code | text, image |
+| `grok-imagine-image` | Image gen | text |
+| `grok-imagine-image-quality` | Image gen (HQ) | text |
+| `grok-imagine-video` | Video gen (async) | text |
 
-```json
-{
-  "onboarding": {
-    "starPrompted": true
-  }
-}
-```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| onboarding.starPrompted | boolean? | Whether the GitHub star prompt has been shown |
-
----
-
-### Environment Variables
-
-No environment variables are required. All configuration is file-based under `~/.progrok/`.
-
----
-
-### Proxy Options
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-p, --port <port>` | `18645` | Port for the proxy server |
-| `--host <host>` | `127.0.0.1` | Host/interface to bind |
+Use `progrok models --detail` for full pricing and alias info.
