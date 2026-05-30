@@ -37,5 +37,10 @@ program.addCommand(chatCommand());
 program.addCommand(modelsCommand());
 program.addCommand(statusCommand());
 
-await showStarPrompt();
+const REAL_COMMANDS = new Set(["login", "logout", "proxy", "chat", "models", "status"]);
+const subcommand = process.argv[2];
+if (subcommand && REAL_COMMANDS.has(subcommand)) {
+  await showStarPrompt();
+}
+
 program.parse();
