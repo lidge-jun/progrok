@@ -5,29 +5,43 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>progrok — Grok Chat</title>
   <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css" />
 </head>
 <body>
   <div id="app">
-    <header>
-      <h1>progrok</h1>
-      <div class="controls">
-        <select id="model-select">
-          <option value="grok-4.3" selected>Grok 4.3</option>
-          <option value="grok-4.20-beta-latest-reasoning">Grok 4.20 Reasoning</option>
-          <option value="grok-4.20-beta-latest-non-reasoning">Grok 4.20 Non-Reasoning</option>
-          <option value="grok-build-0.1">Grok Build 0.1</option>
-        </select>
-        <button id="clear-btn" title="New chat">&#x232b;</button>
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <h2>Sessions</h2>
+        <button id="new-chat-btn" title="New chat">+</button>
       </div>
-    </header>
-    <main id="messages"></main>
-    <footer>
-      <form id="chat-form">
-        <textarea id="input" placeholder="Message Grok..." rows="1" autofocus></textarea>
-        <button type="submit" id="send-btn">&rarr;</button>
-      </form>
-    </footer>
+      <div id="session-list" class="session-list"></div>
+    </aside>
+
+    <div class="main">
+      <header>
+        <button id="sidebar-toggle" class="hamburger" title="Toggle sidebar">&#9776;</button>
+        <h1>progrok</h1>
+        <div class="controls">
+          <select id="model-select"></select>
+        </div>
+      </header>
+
+      <main id="messages"></main>
+
+      <div id="spinner" class="spinner-wrap hidden">
+        <div class="spinner"></div>
+      </div>
+
+      <footer>
+        <form id="chat-form">
+          <textarea id="input" placeholder="Message Grok..." rows="1" autofocus></textarea>
+          <button type="submit" id="send-btn">&rarr;</button>
+        </form>
+      </footer>
+    </div>
   </div>
-  <script src="/app.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+  <script type="module" src="/app.js"></script>
 </body>
 </html>
