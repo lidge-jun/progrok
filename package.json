@@ -16,7 +16,8 @@
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && tsup && node scripts/copy-public.mjs",
     "dev": "tsup --watch",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test": "npx tsx --experimental-test-module-mocks --test tests/*.test.ts"
   },
   "keywords": [
     "grok",
@@ -44,6 +45,7 @@
     "typescript": "^5.7.0",
     "tsup": "^8.4.0",
     "@types/express": "^4.17.0",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0"
   }
 }
