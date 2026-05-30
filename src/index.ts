@@ -6,6 +6,7 @@ import { chatCommand } from "./commands/chat.js";
 import { modelsCommand } from "./commands/models.js";
 import { statusCommand } from "./commands/status.js";
 import { skillCommand } from "./commands/skill.js";
+import { capabilitiesCommand } from "./commands/capabilities.js";
 import { showStarPrompt } from "./utils/star-prompt.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -61,8 +62,9 @@ program.addCommand(chatCommand());
 program.addCommand(modelsCommand());
 program.addCommand(statusCommand());
 program.addCommand(skillCommand());
+program.addCommand(capabilitiesCommand());
 
-const REAL_COMMANDS = new Set(["login", "logout", "proxy", "chat", "models", "status", "skill"]);
+const REAL_COMMANDS = new Set(["login", "logout", "proxy", "chat", "models", "status", "skill", "capabilities"]);
 const subcommand = process.argv[2];
 if (subcommand && REAL_COMMANDS.has(subcommand)) {
   await showStarPrompt();

@@ -144,8 +144,17 @@ response = client.chat.completions.create(
 - OAuth callback: `127.0.0.1:56121`
 - Config: `~/.progrok/auth.json`
 
+## Dynamic Metadata
+
+For programmatic access to capabilities, models, and endpoints:
+
+```bash
+progrok capabilities          # human-readable
+progrok capabilities --json   # structured JSON for agents
+```
+
 ## Install
 
 ```bash
-cli-jaw skill install progrok  # from this repo's skills/ dir
+npm i -g progrok
 ```

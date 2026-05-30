@@ -8,6 +8,7 @@
   },
   "files": [
     "dist",
+    "skills",
     "LICENSE",
     "README.md",
     "THIRD_PARTY_NOTICES.md"
