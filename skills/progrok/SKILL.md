@@ -33,6 +33,23 @@ clients may send any placeholder bearer value.
 
 ## Usage Patterns
 
+### Pattern 0: Native search (no proxy needed)
+
+`progrok search` calls `/v1/responses` with the `web_search`/`x_search`
+server-side tools using your OAuth token directly — a fast (1–3s), free
+alternative to browser automation or paid search APIs.
+
+```bash
+progrok search "latest Node.js LTS version"      # web + X, AI summary + sources
+progrok search "Tesla earnings reaction" --web   # web only
+progrok search "what's trending in AI" --x        # X (Twitter) only
+progrok search "react 19 release notes" --json   # {answer, citations, queries, usage}
+progrok search "quantum news" --model grok-4.3    # pick the model
+```
+
+Output is an AI summary with inline `[[n]](url)` citations plus a deduplicated
+Sources list. Use `--json` for `{ answer, citations[], queries[], usage }`.
+
 ### Pattern 1: Direct proxy (recommended for agents)
 
 ```bash

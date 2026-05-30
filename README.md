@@ -55,6 +55,7 @@ export OPENAI_API_KEY=anything
 |---------|-------------|
 | `progrok login` | OAuth login via browser |
 | `progrok login --device-code` | Login via device code (SSH/remote) |
+| `progrok search <query> [--web\|--x] [--json]` | Web + X search via Grok — AI summary + citations (no proxy) |
 | `progrok proxy` | Start the OpenAI-compatible proxy (port 18645) |
 | `progrok chat` | Open the web chat UI (port 18646) |
 | `progrok models [--detail]` | List models (`--detail` adds pricing + aliases) |

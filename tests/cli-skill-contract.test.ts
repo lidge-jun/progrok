@@ -12,6 +12,7 @@ describe("CLI packaged skill contract", () => {
 
     assert.match(skill, /name:\s*progrok/);
     assert.match(skill, /progrok login/);
+    assert.match(skill, /progrok search/);
     assert.match(skill, /progrok proxy/);
     assert.match(skill, /progrok capabilities/);
     assert.match(skill, /\/v1\/responses/);
