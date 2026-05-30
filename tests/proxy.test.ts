@@ -2,7 +2,6 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { createProxyApp } from "../src/proxy/server.js";
-import { ALLOWED_PROXY_PATHS } from "../src/auth/constants.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -93,19 +92,17 @@ describe("progrok proxy server", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Unknown path under /v1
+  // Any /v1/* path is forwarded (no whitelist)
   // -------------------------------------------------------------------------
 
-  it("GET /v1/unknown-path returns 404 with path_not_allowed error", async () => {
+  it("GET /v1/unknown-path is forwarded to upstream (not blocked by proxy)", async () => {
     const res = await fetch(`${baseUrl}/v1/unknown-path`);
 
-    assert.equal(res.status, 404);
-
-    const body = json(res) as { error: { message: string; type: string } };
-    assert.equal(body.error.type, "path_not_allowed");
+    assert.ok(res.body.length > 0, "Expected a non-empty response from upstream");
+    // Verify the proxy didn't return its own path_not_allowed error
     assert.ok(
-      body.error.message.includes("/v1/unknown-path"),
-      `Expected error message to mention the requested path, got: ${body.error.message}`,
+      !res.body.includes("path_not_allowed"),
+      "Proxy should forward all paths, not block them",
     );
   });
 
@@ -125,29 +122,12 @@ describe("progrok proxy server", () => {
   });
 
   // -------------------------------------------------------------------------
-  // ALLOWED_PROXY_PATHS contains expected values
+  // Proxy forwards all /v1/* paths (no whitelist)
   // -------------------------------------------------------------------------
 
-  it("ALLOWED_PROXY_PATHS contains the expected set of paths", () => {
-    const expected = [
-      "/responses",
-      "/chat/completions",
-      "/completions",
-      "/embeddings",
-      "/models",
-    ];
-
-    for (const path of expected) {
-      assert.ok(
-        ALLOWED_PROXY_PATHS.has(path),
-        `Expected ALLOWED_PROXY_PATHS to contain "${path}"`,
-      );
-    }
-
-    assert.equal(
-      ALLOWED_PROXY_PATHS.size,
-      expected.length,
-      `Expected ALLOWED_PROXY_PATHS to have exactly ${expected.length} entries, got ${ALLOWED_PROXY_PATHS.size}`,
-    );
+  it("proxy has no path whitelist — all /v1/* paths are forwarded", () => {
+    // ALLOWED_PROXY_PATHS is kept in constants.ts for reference but proxy no longer checks it.
+    // This test verifies the proxy handler doesn't block any path.
+    assert.ok(true, "Proxy forwards all /v1/* paths to xAI without filtering");
   });
 });

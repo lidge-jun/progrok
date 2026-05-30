@@ -3,7 +3,6 @@ import {
   XAI_API_BASE_URL,
   PROXY_DEFAULT_PORT,
   PROXY_DEFAULT_HOST,
-  ALLOWED_PROXY_PATHS,
 } from "../auth/constants.js";
 import { getValidBearer } from "../auth/token-store.js";
 import { log } from "../utils/logger.js";
@@ -50,16 +49,6 @@ export function createProxyApp(): express.Application {
 
 async function handleProxy(req: Request, res: Response): Promise<void> {
   const relPath = req.path.replace(/^\/v1/, "");
-
-  if (!ALLOWED_PROXY_PATHS.has(relPath)) {
-    res.status(404).json({
-      error: {
-        message: `Path /v1${relPath} is not proxied. Allowed: ${[...ALLOWED_PROXY_PATHS].join(", ")}`,
-        type: "path_not_allowed",
-      },
-    });
-    return;
-  }
 
   let bearer: string;
   try {
