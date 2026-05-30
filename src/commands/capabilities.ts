@@ -23,6 +23,76 @@ function readPackageVersion(): string {
   }
 }
 
+// Endpoint surface mirrors the xAI REST API (https://docs.x.ai). Every HTTP
+// /v1/* path is forwarded by the proxy verbatim. WebSocket (wss) endpoints and
+// the management-api.x.ai host are NOT proxied — see `limitations`.
+const ENDPOINTS = [
+  // Chat & Responses
+  { category: "chat", method: "POST", path: "/v1/chat/completions", type: "streaming", description: "OpenAI-compatible chat + image understanding" },
+  { category: "chat", method: "POST", path: "/v1/responses", type: "streaming", description: "Responses API — tools, reasoning, citations, stateful" },
+  { category: "chat", method: "POST", path: "/v1/responses/compact", type: "sync", description: "Context compaction — shrink history for reuse" },
+  { category: "chat", method: "GET", path: "/v1/responses/{id}", type: "sync", description: "Retrieve a stored response (kept 30 days)" },
+  { category: "chat", method: "DELETE", path: "/v1/responses/{id}", type: "sync", description: "Delete a stored response" },
+  { category: "chat", method: "GET", path: "/v1/chat/deferred-completion/{id}", type: "poll", description: "Fetch a deferred completion (202 pending / 200 done)" },
+  // Images (Imagine API)
+  { category: "images", method: "POST", path: "/v1/images/generations", type: "sync", description: "Text-to-image — aspect_ratio, resolution 1k/2k, n, url|b64_json" },
+  { category: "images", method: "POST", path: "/v1/images/edits", type: "sync", description: "Edit / multi-image compose — image{} or images[] + prompt" },
+  // Videos (Imagine API, async)
+  { category: "videos", method: "POST", path: "/v1/videos/generations", type: "async", description: "T2V / I2V / R2V — duration 1-15s, resolution 480p/720p/1080p" },
+  { category: "videos", method: "POST", path: "/v1/videos/edits", type: "async", description: "Edit a source video by prompt" },
+  { category: "videos", method: "POST", path: "/v1/videos/extensions", type: "async", description: "Extend a video (1-10s continuation)" },
+  { category: "videos", method: "GET", path: "/v1/videos/{id}", type: "poll", description: "Poll generation: pending(progress) → done(video.url)" },
+  // Voice — HTTP
+  { category: "voice", method: "POST", path: "/v1/tts", type: "binary", description: "Text-to-speech — voice_id, output_format, speed, speech tags" },
+  { category: "voice", method: "GET", path: "/v1/tts/voices", type: "sync", description: "List built-in voices (ara, eve, leo, rex, sal)" },
+  { category: "voice", method: "GET", path: "/v1/tts/voices/{voice_id}", type: "sync", description: "Get one built-in voice" },
+  { category: "voice", method: "POST", path: "/v1/stt", type: "multipart", description: "Speech-to-text — diarize, multichannel, keyterm, word timestamps" },
+  { category: "voice", method: "POST", path: "/v1/realtime/client_secrets", type: "sync", description: "Mint ephemeral token for browser Realtime/Voice Agent" },
+  { category: "voice", method: "POST", path: "/v1/custom-voices", type: "multipart", description: "Clone a custom voice from reference audio (≤120s)" },
+  { category: "voice", method: "GET", path: "/v1/custom-voices", type: "sync", description: "List custom voices (paginated)" },
+  { category: "voice", method: "GET", path: "/v1/custom-voices/{voice_id}", type: "sync", description: "Get one custom voice" },
+  { category: "voice", method: "PATCH", path: "/v1/custom-voices/{voice_id}", type: "sync", description: "Update custom voice metadata" },
+  { category: "voice", method: "DELETE", path: "/v1/custom-voices/{voice_id}", type: "sync", description: "Delete a custom voice" },
+  { category: "voice", method: "GET", path: "/v1/custom-voices/{voice_id}/audio", type: "binary", description: "Download a custom voice's reference audio" },
+  // Models
+  { category: "models", method: "GET", path: "/v1/models", type: "sync", description: "List models (id + pricing)" },
+  { category: "models", method: "GET", path: "/v1/models/{model_id}", type: "sync", description: "Get one model" },
+  { category: "models", method: "GET", path: "/v1/language-models", type: "sync", description: "Chat models with modalities + aliases + pricing" },
+  { category: "models", method: "GET", path: "/v1/language-models/{model_id}", type: "sync", description: "Get one language model" },
+  { category: "models", method: "GET", path: "/v1/image-generation-models", type: "sync", description: "Image models with per-image pricing" },
+  { category: "models", method: "GET", path: "/v1/image-generation-models/{model_id}", type: "sync", description: "Get one image model" },
+  { category: "models", method: "GET", path: "/v1/video-generation-models", type: "sync", description: "Video models with modalities" },
+  { category: "models", method: "GET", path: "/v1/video-generation-models/{model_id}", type: "sync", description: "Get one video model" },
+  // Batches
+  { category: "batches", method: "POST", path: "/v1/batches", type: "sync", description: "Create a batch" },
+  { category: "batches", method: "GET", path: "/v1/batches", type: "sync", description: "List batches" },
+  { category: "batches", method: "GET", path: "/v1/batches/{id}", type: "sync", description: "Get batch state" },
+  { category: "batches", method: "GET", path: "/v1/batches/{id}/requests", type: "sync", description: "List requests in a batch" },
+  { category: "batches", method: "POST", path: "/v1/batches/{id}/requests", type: "sync", description: "Add requests to a batch" },
+  { category: "batches", method: "GET", path: "/v1/batches/{id}/results", type: "sync", description: "List batch results" },
+  { category: "batches", method: "POST", path: "/v1/batches/{id}:cancel", type: "sync", description: "Cancel all requests in a batch" },
+  // Files
+  { category: "files", method: "POST", path: "/v1/files", type: "multipart", description: "Upload a file (≤50MB) — referenced by file_id" },
+  { category: "files", method: "GET", path: "/v1/files", type: "sync", description: "List files (AIP-160 filter, paginated)" },
+  { category: "files", method: "GET", path: "/v1/files/{file_id}", type: "sync", description: "Get file metadata" },
+  { category: "files", method: "DELETE", path: "/v1/files/{file_id}", type: "sync", description: "Delete a file" },
+  // Collections (search only via api.x.ai; management is on management-api.x.ai)
+  { category: "collections", method: "POST", path: "/v1/documents/search", type: "sync", description: "Semantic search over collections (RAG)" },
+  // Other
+  { category: "other", method: "GET", path: "/v1/api-key", type: "sync", description: "Inspect the active API key / ACLs" },
+  { category: "other", method: "POST", path: "/v1/tokenize-text", type: "sync", description: "Tokenize text for a model" },
+  { category: "other", method: "POST", path: "/v1/embeddings", type: "sync", description: "Text embeddings" },
+  { category: "other", method: "*", path: "/v1/*", type: "passthrough", description: "Any other path forwarded to api.x.ai unchanged" },
+] as const;
+
+// WebSocket endpoints — documented for completeness but NOT proxied by progrok
+// (the proxy handles HTTP only; connect directly with an ephemeral token).
+const WEBSOCKET_ENDPOINTS = [
+  { url: "wss://api.x.ai/v1/realtime", description: "Voice Agent — realtime speech conversations + MCP tools" },
+  { url: "wss://api.x.ai/v1/tts", description: "Streaming text-to-speech (incremental text → audio)" },
+  { url: "wss://api.x.ai/v1/stt", description: "Streaming speech-to-text (binary audio → transcript)" },
+] as const;
+
 export function buildCapabilities() {
   return {
     ok: true,
@@ -44,7 +114,7 @@ export function buildCapabilities() {
       host: PROXY_DEFAULT_HOST,
       port: PROXY_DEFAULT_PORT,
       baseUrl: `http://${PROXY_DEFAULT_HOST}:${PROXY_DEFAULT_PORT}/v1`,
-      forwarding: "all /v1/* paths — no whitelist",
+      forwarding: "all HTTP /v1/* paths — no whitelist",
     },
     chat: {
       port: CHAT_DEFAULT_PORT,
@@ -53,206 +123,153 @@ export function buildCapabilities() {
     defaults: {
       model: DEFAULT_MODEL,
     },
-    endpoints: [
-      {
-        path: "/v1/responses",
-        method: "POST",
-        type: "streaming",
-        description: "Responses API — tools, reasoning, citations",
-      },
-      {
-        path: "/v1/chat/completions",
-        method: "POST",
-        type: "streaming",
-        description: "OpenAI-compatible chat",
-      },
-      {
-        path: "/v1/models",
-        method: "GET",
-        type: "sync",
-        description: "List models",
-      },
-      {
-        path: "/v1/language-models",
-        method: "GET",
-        type: "sync",
-        description: "Detailed models: pricing, aliases, modalities",
-      },
-      {
-        path: "/v1/images/generations",
-        method: "POST",
-        type: "sync",
-        description: "Image generation (returns URL)",
-      },
-      {
-        path: "/v1/videos/generations",
-        method: "POST",
-        type: "async",
-        description: "Video generation (returns request_id)",
-      },
-      {
-        path: "/v1/videos/{id}",
-        method: "GET",
-        type: "poll",
-        description: "Video status: pending → done",
-      },
-      {
-        path: "/v1/tts",
-        method: "POST",
-        type: "binary",
-        description: "Text-to-speech (MP3)",
-      },
-      {
-        path: "/v1/stt",
-        method: "POST",
-        type: "multipart",
-        description: "Speech-to-text",
-      },
-      {
-        path: "/v1/embeddings",
-        method: "POST",
-        type: "sync",
-        description: "Text embeddings",
-      },
-      {
-        path: "/v1/*",
-        method: "*",
-        type: "passthrough",
-        description: "All paths forwarded to api.x.ai",
-      },
-    ],
+    endpoints: ENDPOINTS,
+    websocketEndpoints: WEBSOCKET_ENDPOINTS,
     models: [
       {
         id: "grok-4.3",
         type: "reasoning",
-        use: "General chat, analysis, search",
+        use: "Flagship — chat, agentic tool calling, search, vision",
         input: ["text", "image"],
+        output: ["text"],
         context: "1M tokens",
-        reasoning: {
-          effort: ["none", "low", "medium", "high"],
-          default: "low",
-          note: "none disables reasoning entirely for instant responses",
-        },
+        pricing: { inputPer1M: 1.25, outputPer1M: 2.5, unit: "USD" },
+        reasoning: { configurable: true, nonReasoningMode: true, note: "Supports non-reasoning mode for instant replies" },
         structuredOutput: true,
         functionCalling: true,
-        tools: ["web_search", "x_search", "code_interpreter", "file_search"],
+        tools: ["web_search", "x_search", "code_interpreter", "collections_search", "mcp", "function"],
+        aliases: ["grok-4.3-latest", "grok-latest", "latest", "grok-4", "grok-4-latest", "grok-4-fast-reasoning", "grok-3", "grok-3-mini"],
       },
       {
         id: "grok-4.20-0309-reasoning",
         type: "deep-reasoning",
-        use: "Complex coding, planning",
+        use: "Deep analysis, complex coding (legacy 4.20 line)",
         input: ["text", "image"],
-        context: "128K standard, long-context above",
-        reasoning: {
-          effort: ["low", "medium", "high"],
-          default: "low",
-        },
+        output: ["text"],
+        context: "128K standard, long-context tier above",
+        pricing: { inputPer1M: 2.0, outputPer1M: 8.0, unit: "USD" },
+        reasoning: { effort: ["low", "high"], default: "low" },
         structuredOutput: true,
         functionCalling: true,
-        tools: ["web_search", "x_search"],
+        tools: ["web_search", "x_search", "code_interpreter", "collections_search", "mcp", "function"],
+        aliases: ["grok-4.20", "grok-4.20-reasoning", "grok-4.20-beta-latest"],
       },
       {
         id: "grok-4.20-0309-non-reasoning",
         type: "fast",
-        use: "Quick tasks, no thinking overhead",
+        use: "Fast responses, no thinking overhead (legacy 4.20 line)",
         input: ["text", "image"],
-        context: "128K standard, long-context above",
+        output: ["text"],
+        context: "128K standard, long-context tier above",
         reasoning: false,
         structuredOutput: true,
         functionCalling: true,
-        tools: ["web_search", "x_search"],
+        tools: ["web_search", "x_search", "code_interpreter", "collections_search", "mcp", "function"],
+        aliases: ["grok-4.20-non-reasoning", "grok-4.20-beta-latest-non-reasoning"],
       },
       {
         id: "grok-4.20-multi-agent-0309",
         type: "multi-agent",
-        use: "Deep research (4 or 16 parallel agents)",
+        use: "Deep research — 4 or 16 parallel agents (beta)",
         input: ["text", "image"],
+        output: ["text"],
         context: "128K standard",
-        reasoning: {
-          effort: ["low", "medium", "high", "xhigh"],
-          default: "medium",
-          note: "Controls agent count, not reasoning depth. low/medium=4 agents, high/xhigh=16 agents.",
-        },
+        reasoning: { effort: ["low", "medium", "high", "xhigh"], default: "low", note: "effort selects agent count: low/medium=4, high/xhigh=16" },
         structuredOutput: true,
-        functionCalling: true,
-        tools: ["web_search", "x_search"],
-        multiAgent: {
-          agentCount: [4, 16],
-          effortToAgents: { low: 4, medium: 4, high: 16, xhigh: 16 },
-          perAgentConfig: false,
-        },
+        functionCalling: false,
+        tools: ["web_search", "x_search", "code_interpreter", "collections_search", "mcp"],
+        notes: "Responses API / xAI SDK only — not Chat Completions. No client-side function calling. No max_tokens.",
+        aliases: ["grok-4.20-multi-agent", "grok-4.20-multi-agent-latest"],
       },
       {
         id: "grok-build-0.1",
         type: "code",
-        use: "Code generation, agentic coding",
+        use: "Fast agentic coding",
         input: ["text", "image"],
+        output: ["text"],
         context: "256K tokens",
-        reasoning: {
-          effort: ["low", "medium", "high"],
-          default: "low",
-        },
-        structuredOutput: false,
-        functionCalling: false,
-        tools: [],
+        pricing: { inputPer1M: 1.0, outputPer1M: 2.0, unit: "USD" },
+        reasoning: { effort: ["low", "high"], default: "low" },
+        structuredOutput: true,
+        functionCalling: true,
+        tools: ["web_search", "x_search", "code_interpreter", "function"],
+        aliases: ["grok-code-fast-1", "grok-code-fast"],
       },
       {
         id: "grok-imagine-image",
         type: "image",
-        use: "Fast image gen",
-        input: ["text"],
-        reasoning: false,
-        structuredOutput: false,
-        functionCalling: false,
-        tools: [],
+        use: "Fast image generation / editing",
+        input: ["text", "image"],
+        output: ["image"],
+        pricing: { perImage: 0.02, unit: "USD", note: "1k or 2k resolution" },
+        aliases: [],
       },
       {
         id: "grok-imagine-image-quality",
         type: "image-hq",
-        use: "High-quality image gen",
-        input: ["text"],
-        reasoning: false,
-        structuredOutput: false,
-        functionCalling: false,
-        tools: [],
+        use: "High-quality image generation / editing",
+        input: ["text", "image"],
+        output: ["image"],
+        pricing: { perImage: 0.02, unit: "USD", note: "1k or 2k resolution" },
+        aliases: [],
       },
       {
         id: "grok-imagine-video",
         type: "video",
-        use: "Video gen (async)",
-        input: ["text"],
-        reasoning: false,
-        structuredOutput: false,
-        functionCalling: false,
-        tools: [],
+        use: "Video generation / edit / extension (async)",
+        input: ["text", "image"],
+        output: ["video"],
+        pricing: { perSecond: 0.05, unit: "USD", note: "480p or 720p" },
+        aliases: [],
       },
     ],
+    voiceModels: [
+      { id: "grok-voice-latest", use: "Voice Agent / realtime — recommended" },
+      { id: "grok-voice-fast-1.0", use: "Lower-latency voice agent" },
+      { id: "grok-voice-think-fast-1.0", use: "Reasoning-capable voice agent" },
+    ],
+    voicePricing: {
+      agentPerHour: 3.0,
+      ttsPer1MChars: 15.0,
+      sttBatchPerHour: 0.1,
+      sttStreamingPerHour: 0.2,
+      unit: "USD",
+    },
     tools: [
-      { type: "web_search", description: "Web search with citations" },
+      { type: "web_search", description: "Web search + browse. Params: allowed_domains, excluded_domains, enable_image_understanding, enable_image_search" },
       { type: "x_search", description: "X (Twitter) search with citations" },
-      {
-        type: "code_interpreter",
-        description: "Server-side code execution",
-      },
-      {
-        type: "file_search",
-        description: "Vector store search (needs vector_store_ids)",
-      },
-      { type: "function", description: "Custom function calling" },
+      { type: "code_interpreter", description: "Server-side Python execution (a.k.a. Code Execution)" },
+      { type: "collections_search", description: "RAG over your uploaded collections" },
+      { type: "mcp", description: "Remote MCP server. Params: server_url, server_label, allowed_tools, authorization, headers" },
+      { type: "function", description: "Custom client-side function calling (max 128)" },
+    ],
+    searchParameters: {
+      mode: ["off", "on", "auto"],
+      sources: ["web", "x", "news", "rss"],
+      params: ["from_date", "to_date", "max_search_results", "return_citations"],
+    },
+    limitations: [
+      "WebSocket endpoints (wss /v1/realtime, /v1/tts, /v1/stt) are NOT proxied — connect directly with an ephemeral token from POST /v1/realtime/client_secrets.",
+      "Collection management lives on management-api.x.ai (Management API key) and is not reachable through this proxy; only POST /v1/documents/search is.",
+      "The multi-agent model requires the Responses API (not Chat Completions).",
     ],
     guidance: {
-      auth: "Run progrok login once. No API key needed — OAuth only.",
+      auth: "Run `progrok login` once. No API key needed — OAuth only.",
       proxy:
-        "progrok proxy forwards all /v1/* paths. Set OPENAI_BASE_URL=http://127.0.0.1:18645/v1 and OPENAI_API_KEY=anything.",
+        "`progrok proxy` forwards all HTTP /v1/* paths. Set OPENAI_BASE_URL=http://127.0.0.1:18645/v1 and OPENAI_API_KEY=anything.",
       streaming:
-        "Use stream:true for responses/chat. Proxy passes through SSE events verbatim.",
+        "Use stream:true for responses/chat. The proxy passes SSE through verbatim.",
       video:
-        "Video gen is async: POST /v1/videos/generations → poll GET /v1/videos/{id} until done.",
+        "Video gen is async: POST /v1/videos/generations → poll GET /v1/videos/{id} until status=done.",
+      models:
+        "Use the bare model name or `<model>-latest` to auto-track the newest version; `<model>-<date>` pins a specific release.",
     },
   };
 }
 
-function printText(cap: ReturnType<typeof buildCapabilities>): void {
+type Capabilities = ReturnType<typeof buildCapabilities>;
+
+function printText(cap: Capabilities): void {
   console.log(`progrok capabilities (${cap.source})`);
   console.log(`version: ${cap.version}`);
   console.log(`upstream: ${cap.upstream}`);
@@ -261,20 +278,35 @@ function printText(cap: ReturnType<typeof buildCapabilities>): void {
   console.log(`chat:  ${cap.chat.url}`);
   console.log(`model: ${cap.defaults.model}`);
   console.log("");
-  console.log("endpoints:");
+  console.log("endpoints (HTTP — proxied):");
+  let lastCategory = "";
   for (const ep of cap.endpoints) {
-    const label = `  ${ep.method.padEnd(5)} ${ep.path.padEnd(28)}`;
+    if (ep.category !== lastCategory) {
+      console.log(`  [${ep.category}]`);
+      lastCategory = ep.category;
+    }
+    const label = `    ${ep.method.padEnd(6)} ${ep.path.padEnd(38)}`;
     console.log(`${label} ${ep.description}`);
+  }
+  console.log("");
+  console.log("websocket (NOT proxied — connect directly):");
+  for (const ws of cap.websocketEndpoints) {
+    console.log(`    ${ws.url.padEnd(30)} ${ws.description}`);
   }
   console.log("");
   console.log("models:");
   for (const m of cap.models) {
-    console.log(`  ${m.id.padEnd(38)} ${m.use}`);
+    console.log(`  ${m.id.padEnd(30)} ${m.use}`);
   }
   console.log("");
   console.log("tools:");
   for (const t of cap.tools) {
     console.log(`  ${t.type.padEnd(20)} ${t.description}`);
+  }
+  console.log("");
+  console.log("limitations:");
+  for (const l of cap.limitations) {
+    console.log(`  - ${l}`);
   }
   console.log("");
   console.log(`commands: ${cap.commands.join(", ")}`);
