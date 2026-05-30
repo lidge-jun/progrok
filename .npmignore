@@ -1,0 +1,10 @@
+src/
+tsconfig.json
+tsup.config.ts
+scripts/
+.github/
+.gitignore
+tests/
+devlog/
+docs/
+AGENTS.md

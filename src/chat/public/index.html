@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>progrok — Grok Chat</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>progrok</h1>
+      <div class="controls">
+        <select id="model-select">
+          <option value="grok-4.3" selected>Grok 4.3</option>
+          <option value="grok-4.20-beta-latest-reasoning">Grok 4.20 Reasoning</option>
+          <option value="grok-4.20-beta-latest-non-reasoning">Grok 4.20 Non-Reasoning</option>
+          <option value="grok-build-0.1">Grok Build 0.1</option>
+        </select>
+        <button id="clear-btn" title="New chat">&#x232b;</button>
+      </div>
+    </header>
+    <main id="messages"></main>
+    <footer>
+      <form id="chat-form">
+        <textarea id="input" placeholder="Message Grok..." rows="1" autofocus></textarea>
+        <button type="submit" id="send-btn">&rarr;</button>
+      </form>
+    </footer>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

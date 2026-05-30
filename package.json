@@ -1,0 +1,49 @@
+{
+  "name": "progrok",
+  "version": "0.1.0",
+  "description": "Use Grok models for free via OAuth proxy. No API key needed.",
+  "type": "module",
+  "bin": {
+    "progrok": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && tsup && node scripts/copy-public.mjs",
+    "dev": "tsup --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "grok",
+    "xai",
+    "proxy",
+    "oauth",
+    "cli",
+    "openai-compatible"
+  ],
+  "author": "lidge-jun",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lidge-jun/progrok.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "commander": "^13.0.0",
+    "express": "^4.21.0",
+    "open": "^10.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsup": "^8.4.0",
+    "@types/express": "^4.17.0",
+    "@types/node": "^22.0.0"
+  }
+}
