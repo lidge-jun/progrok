@@ -152,11 +152,14 @@ Full request/response contracts: see `docs/api.md`. Live metadata:
 |-------|----------|---------|-----------------------|
 | `grok-4.3` (default) | Chat, agentic tools, search, vision | 1M | $1.25 / $2.50 |
 | `grok-build-0.1` | Fast agentic coding | 256K | $1.00 / $2.00 |
-| `grok-4.20-0309-reasoning` | Deep reasoning (legacy) | 128K+ | $2.00 / $8.00 |
-| `grok-4.20-0309-non-reasoning` | Fast, no thinking (legacy) | 128K+ | — |
-| `grok-4.20-multi-agent-0309` | Deep research (4/16 agents, beta) | 128K | — |
+| `grok-4.20-0309-reasoning` | Deep reasoning (legacy) | 200K+ | $1.25 / $2.50 |
+| `grok-4.20-0309-non-reasoning` | Fast, no thinking (legacy) | 200K+ | $1.25 / $2.50 |
+| `grok-4.20-multi-agent-0309` | Deep research (4/16 agents, beta) | 200K+ | $1.25 / $2.50 |
 
-Aliases: `grok-4.3` also answers to `latest`, `grok-latest`, `grok-4`,
+Cached input $0.20/1M. Above the 200K long-context threshold, chat rates double
+($2.50 / $5.00 in/out; cached $0.40). Live search $25 / 1K sources.
+
+Aliases: `grok-4.3` also answers to `grok-latest`, `grok-4`,
 `grok-4-fast-reasoning`, `grok-3`, `grok-3-mini`, … Use `<model>-latest` to
 auto-track the newest version, `<model>-<date>` to pin a release.
 
@@ -164,7 +167,8 @@ auto-track the newest version, `<model>-<date>` to pin a release.
 
 | Model | Type | Price |
 |-------|------|-------|
-| `grok-imagine-image` / `grok-imagine-image-quality` | Image gen/edit | $0.02 / image (1k/2k) |
+| `grok-imagine-image` | Image gen/edit | $0.02 / image (1k/2k) |
+| `grok-imagine-image-quality` | High-quality image gen/edit | $0.04 / image (1k/2k) |
 | `grok-imagine-video` | Video gen/edit/extend (async) | $0.05 / sec (480p/720p) |
 | `grok-voice-latest` / `-fast-1.0` / `-think-fast-1.0` | Voice Agent | $3/hr agent, $15/1M TTS chars |
 

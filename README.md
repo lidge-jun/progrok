@@ -87,13 +87,18 @@ run `progrok capabilities --json` for live metadata.
 |-------|----------|---------|-------------------------|
 | `grok-4.3` *(default)* | Chat, agentic tools, search, vision | 1M | $1.25 / $2.50 |
 | `grok-build-0.1` | Fast agentic coding | 256K | $1.00 / $2.00 |
-| `grok-4.20-0309-reasoning` | Deep reasoning (legacy) | 128K+ | $2.00 / $8.00 |
-| `grok-4.20-multi-agent-0309` | Deep research, 4/16 agents (beta) | 128K | — |
-| `grok-imagine-image[-quality]` | Image gen / edit | — | $0.02 / image |
+| `grok-4.20-0309-reasoning` | Deep reasoning (legacy) | 200K+ | $1.25 / $2.50 |
+| `grok-4.20-0309-non-reasoning` | Fast, no thinking (legacy) | 200K+ | $1.25 / $2.50 |
+| `grok-4.20-multi-agent-0309` | Deep research, 4/16 agents (beta) | 200K+ | $1.25 / $2.50 |
+| `grok-imagine-image` | Image gen / edit | — | $0.02 / image |
+| `grok-imagine-image-quality` | High-quality image gen / edit | — | $0.04 / image |
 | `grok-imagine-video` | Video gen / edit / extend | — | $0.05 / sec |
 
-`grok-4.3` also answers to `latest`, `grok-4`, `grok-3`, and many other aliases.
-Use `progrok models --detail` for the live list with pricing.
+> Cached input is $0.20/1M; above the 200K-token long-context threshold, chat
+> rates double. Live search costs $25 / 1K sources.
+
+`grok-4.3` also answers to `grok-latest`, `grok-4`, `grok-3`, and many other
+aliases. Use `progrok models --detail` for the live list with pricing.
 
 ## How It Works
 
