@@ -7,20 +7,21 @@ const title = 'progrok';
 
 <BaseLayout
   title={title}
-  description="Use your xAI Grok OAuth session from OpenAI-compatible clients, local CLI commands, web search, image generation, and video generation."
+  description="Activate your xAI Grok OAuth session as a local OpenAI-compatible proxy and CLI tool surface for SDKs, agents, Grok Build workflows, search, image, and video."
 >
   <section class="hero">
     <div>
-      <p class="eyebrow">xAI Grok OAuth proxy</p>
+      <p class="eyebrow">xAI OAuth tool activation</p>
       <h1>progrok</h1>
       <p>
-        Run a local OpenAI-compatible proxy backed by your xAI OAuth session.
-        Use Grok from existing SDKs, then call native CLI commands for search,
-        reasoning, image generation, and video generation.
+        Activate your xAI OAuth session as a local Grok API surface. progrok
+        turns the same account session pattern used by Hermes Agent, OpenClaw,
+        and Grok Build-style workflows into a localhost proxy plus direct CLI
+        commands for search, reasoning, image generation, and video generation.
       </p>
       <div class="hero-actions">
         <a class="button primary" href="/progrok/docs/quickstart">Start with the guide</a>
-        <a class="button" href="https://www.npmjs.com/package/progrok" target="_blank" rel="noreferrer">View on npm</a>
+        <a class="button" href="/progrok/docs/concepts/oauth-bridge">Read the OAuth model</a>
       </div>
     </div>
 
@@ -42,34 +43,34 @@ curl http://127.0.0.1:18645/v1/chat/completions \\
 
   <section class="section">
     <div class="section-header">
-      <p class="eyebrow">What it gives you</p>
-      <h2>One local surface for Grok.</h2>
+      <p class="eyebrow">What it activates</p>
+      <h2>One OAuth session, many Grok tool paths.</h2>
       <p>
-        progrok keeps authentication local, exposes an OpenAI-compatible proxy,
-        and adds direct CLI workflows for the xAI APIs that are awkward to call
-        by hand.
+        progrok is an activation layer, not a new account system. Login once,
+        keep the refreshable credential local, then let clients and tools use
+        Grok through interfaces they already understand.
       </p>
     </div>
     <div class="feature-grid">
       <article class="feature-card">
+        <code>OAuth</code>
+        <h3>Shared account authority</h3>
+        <p>Use the xAI OAuth client lineage documented by Hermes Agent and OpenClaw.</p>
+      </article>
+      <article class="feature-card">
         <code>/v1/*</code>
         <h3>OpenAI-compatible proxy</h3>
-        <p>Point existing clients at localhost and keep using familiar request shapes.</p>
+        <p>Point SDKs and agents at localhost while progrok injects the real bearer token.</p>
       </article>
       <article class="feature-card">
-        <code>OAuth</code>
-        <h3>No xAI API key</h3>
-        <p>Use the same account flow as the Grok web app. Tokens stay on your machine.</p>
-      </article>
-      <article class="feature-card">
-        <code>search</code>
-        <h3>Web and X search</h3>
-        <p>Ask Grok for current summaries with citations, JSON output, and reasoning effort.</p>
+        <code>grok-build</code>
+        <h3>Coding tool ready</h3>
+        <p>Expose Grok Build and general Grok models to tools that expect a base URL and key.</p>
       </article>
       <article class="feature-card">
         <code>media</code>
-        <h3>Image and video CLI</h3>
-        <p>Generate, edit, poll, and export Imagine outputs without writing request plumbing.</p>
+        <h3>Direct workflow commands</h3>
+        <p>Search, image, video, model, and capability commands use the same OAuth session.</p>
       </article>
     </div>
   </section>
@@ -77,12 +78,13 @@ curl http://127.0.0.1:18645/v1/chat/completions \\
   <section class="section split-section">
     <div>
       <p class="eyebrow">Use any client</p>
-      <h2>Drop it behind the SDK you already have.</h2>
+      <h2>Make OAuth look like a normal local API.</h2>
       <p>
         The proxy replaces placeholder bearer tokens with your refreshed xAI
         OAuth token before forwarding requests to api.x.ai. That means OpenAI
-        SDKs, curl scripts, and agent tools can call Grok through the same local
-        endpoint.
+        SDKs, curl scripts, coding agents, and Grok Build-style tools can call
+        Grok through the same local endpoint without each one learning the xAI
+        login flow.
       </p>
       <div class="section-actions">
         <a class="button primary" href="/progrok/docs/cli/proxy">Proxy docs</a>
@@ -113,7 +115,12 @@ print(result.choices[0].message.content)`}</code></pre>
   <section class="section">
     <div class="section-header">
       <p class="eyebrow">CLI commands</p>
-      <h2>Fast paths for common Grok work.</h2>
+      <h2>Direct commands for work a proxy cannot polish.</h2>
+      <p>
+        Some Grok APIs need source routing, output files, async polling, or
+        machine-readable discovery. progrok wraps those workflows directly while
+        still using the same OAuth credential.
+      </p>
     </div>
     <div class="command-grid">
       <CommandCard command="progrok login" title="Authenticate" description="Browser or device-code OAuth login for local token storage." />
@@ -130,12 +137,12 @@ print(result.choices[0].message.content)`}</code></pre>
   <section class="section split-section">
     <div>
       <p class="eyebrow">Operational truth</p>
-      <h2>Local by default, explicit about limits.</h2>
+      <h2>Local by default, account-bound by design.</h2>
       <p>
         progrok requires an active SuperGrok subscription. It stores refreshed
-        OAuth credentials in your home directory and does not proxy WebSocket
-        realtime endpoints. Collection management still requires xAI management
-        credentials.
+        OAuth credentials in your home directory, activates the tools your
+        account can access, and does not bypass product limits, quotas, or
+        pricing. Collection management still requires xAI management credentials.
       </p>
     </div>
     <div class="notice">

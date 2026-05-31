@@ -5,12 +5,23 @@
 [![docs](https://img.shields.io/badge/docs-GitHub%20Pages-4cc9a6.svg)](https://lidge-jun.github.io/progrok/)
 [![node](https://img.shields.io/badge/node-%3E%3D18-2d3748.svg)](./package.json)
 
-Use your xAI Grok OAuth session from OpenAI-compatible clients.
+Activate your xAI Grok OAuth session as a local API and tool surface.
 
-`progrok` signs in with your xAI account, stores a refreshable local OAuth
-session, and runs a local proxy that forwards `/v1/*` requests to `api.x.ai`.
-Point the OpenAI SDK, curl scripts, or agent tools at `127.0.0.1:18645` and call
-Grok without managing an xAI API key.
+`progrok` is an OAuth bridge for Grok. It signs in with your xAI account, stores
+a refreshable local OAuth session, and activates that session through two
+developer-facing surfaces:
+
+1. an OpenAI-compatible localhost proxy that forwards `/v1/*` requests to
+   `api.x.ai`, and
+2. direct CLI commands for Grok workflows that need source selection, JSON
+   output, async polling, local files, or machine-readable metadata.
+
+The point is not only "no API key." The point is that Hermes Agent, OpenClaw,
+and Grok Build-style coding workflows all rely on the same xAI OAuth credential
+lineage: the xAI account session is the authority, and local tools need a way to
+turn that session into a programmable endpoint. progrok is that activation tool.
+Point the OpenAI SDK, curl scripts, or agent tools at `127.0.0.1:18645` and let
+progrok inject the real xAI bearer token locally.
 
 > Requires an active SuperGrok subscription. progrok does not bypass xAI account
 > access, quotas, pricing, or product limits.
@@ -18,9 +29,46 @@ Grok without managing an xAI API key.
 ## Links
 
 - Live docs: [lidge-jun.github.io/progrok](https://lidge-jun.github.io/progrok/)
+- OAuth bridge: [lidge-jun.github.io/progrok/docs/concepts/oauth-bridge](https://lidge-jun.github.io/progrok/docs/concepts/oauth-bridge)
 - Quick start: [lidge-jun.github.io/progrok/docs/quickstart](https://lidge-jun.github.io/progrok/docs/quickstart)
 - npm: [npmjs.com/package/progrok](https://www.npmjs.com/package/progrok)
 - Repository: [github.com/lidge-jun/progrok](https://github.com/lidge-jun/progrok)
+
+## Why OAuth
+
+xAI account access is session-based in the tools that made this workflow
+useful. Hermes Agent and OpenClaw document the shared xAI OAuth client
+identifier used by progrok, and Grok Build-style coding workflows benefit from
+the same model: authenticate once with the xAI account, then expose Grok to
+developer tooling through a local API surface.
+
+That changes the shape of the problem:
+
+- the user account and subscription decide what models and tools are available;
+- the local machine holds the refreshable credential;
+- existing SDKs and agents expect a base URL plus an API key;
+- Grok media, search, and model discovery need more workflow glue than a raw
+  HTTP proxy provides.
+
+progrok handles that glue. It activates the OAuth credential as a proxy for
+OpenAI-compatible clients and as direct commands for search, images, video,
+models, and capability discovery.
+
+## What "activation tool" means
+
+After `progrok login`, the stored OAuth session powers every surface below:
+
+| Surface | Command or URL | What gets activated |
+| --- | --- | --- |
+| OpenAI-compatible API | `http://127.0.0.1:18645/v1/*` | Chat, Responses, reasoning, structured output, server-side tools, files, batches, and other HTTP xAI API paths your account can access. |
+| Current search | `progrok search` | Grok Responses with web search, X search, citations, JSON output, and optional reasoning effort. |
+| Image workflows | `progrok image` | Imagine generation and editing with local reference files and output handling. |
+| Video workflows | `progrok video` | Async video submission, polling, progress display, and download handling. |
+| Coding models | `grok-build-0.1` through the proxy | Grok Build-style coding work from clients that can point at a local OpenAI-compatible endpoint. |
+| Agent discovery | `progrok capabilities --json` | Machine-readable ports, commands, models, endpoints, and auth requirements. |
+
+The placeholder `OPENAI_API_KEY` or `Authorization` value is only there to
+satisfy client libraries. progrok replaces it before forwarding the request.
 
 ## Install
 
@@ -31,7 +79,7 @@ npm install -g progrok
 ## Quick Start
 
 ```bash
-# 1. Log in with your xAI account.
+# 1. Activate your xAI OAuth session.
 progrok login
 
 # SSH or remote machine:
@@ -50,6 +98,16 @@ curl http://127.0.0.1:18645/v1/chat/completions \
 The proxy replaces the placeholder `Authorization` value with your stored xAI
 OAuth bearer token before forwarding the request. The API key value in your
 client can be any non-empty placeholder.
+
+For direct tool activation, the proxy process is optional:
+
+```bash
+progrok search --x --json "Grok Build release discussion"
+progrok image "a precise product diagram of an OAuth bridge CLI" --output ./out
+progrok video "a local proxy turning on Grok tools" --duration 5
+progrok models --detail
+progrok capabilities --json
+```
 
 ## OpenAI SDK Example
 
@@ -102,7 +160,8 @@ export OPENAI_API_KEY=anything
 ## Native Search
 
 `progrok search` calls xAI's Responses API directly with `web_search` and
-`x_search` tools. It does not require the proxy process to be running.
+`x_search` tools. It does not require the proxy process to be running because it
+loads the same OAuth session directly.
 
 ```bash
 progrok search "latest Astro release"
@@ -137,7 +196,7 @@ jobs until completion.
 
 ## Proxy Coverage
 
-The proxy forwards every HTTP `/v1/*` path to `api.x.ai`, so it can cover the
+The proxy forwards every HTTP `/v1/*` path to `api.x.ai`, so it can activate the
 xAI API surface available to your account:
 
 - Chat Completions and Responses
@@ -155,7 +214,7 @@ secret through the HTTP proxy and connect directly to xAI's WebSocket endpoint.
 | Model | Best for | Context | Notes |
 | --- | --- | --- | --- |
 | `grok-4.3` | Default chat, tools, search, vision | 1M | Also available through common Grok aliases. |
-| `grok-build-0.1` | Fast agentic coding | 256K | Good default for coding tools. |
+| `grok-build-0.1` | Fast agentic coding | 256K | Good default for Grok Build-style coding tools through the OAuth proxy. |
 | `grok-4.20-0309-reasoning` | Deep reasoning | 200K+ | Legacy reasoning model. |
 | `grok-4.20-0309-non-reasoning` | Lower-latency text | 200K+ | Legacy non-reasoning model. |
 | `grok-4.20-multi-agent-0309` | Deep research | 200K+ | Supports high and xhigh effort. |
@@ -174,14 +233,42 @@ progrok capabilities --json
 ## How It Works
 
 ```text
-OpenAI client
+OpenAI client, coding agent, curl script, or local tool
   -> http://127.0.0.1:18645/v1/*
-  -> progrok proxy injects refreshed OAuth bearer token
+  -> progrok loads ~/.progrok/auth.json
+  -> progrok refreshes the token if needed
+  -> progrok injects the xAI OAuth bearer token
   -> https://api.x.ai/v1/*
 ```
 
 Credentials are stored locally at `~/.progrok/auth.json` and refreshed before
 expiry. Treat that file like any other account credential.
+
+The direct command path is similar but skips the proxy server:
+
+```text
+progrok search / image / video / models / capabilities
+  -> load the same local OAuth session
+  -> call the relevant xAI endpoint
+  -> add CLI-specific behavior such as polling, files, or JSON output
+```
+
+## Relationship to Hermes Agent, OpenClaw, and Grok Build
+
+progrok's OAuth client attribution comes from Hermes Agent and OpenClaw under
+their MIT licenses. Those projects demonstrated the important part: Grok can be
+made useful to local developer tools through xAI OAuth rather than through a
+manually provisioned API key.
+
+progrok takes that pattern and packages it as a focused bridge:
+
+- Hermes Agent and OpenClaw establish the shared OAuth client lineage.
+- Grok Build-style workflows need a coding model reachable from agent tools.
+- progrok provides the localhost OpenAI-compatible endpoint and direct commands
+  that let those tools use the same authenticated account session.
+
+This is why the documentation describes progrok as an activation tool. Login is
+the authorization step; the proxy and CLI commands are the activated surfaces.
 
 ## Security Notes
 
@@ -193,6 +280,8 @@ expiry. Treat that file like any other account credential.
 - `progrok logout` removes the local credential file.
 - Requests are forwarded to xAI. Sensitive prompt data should be handled under
   the same policy you use for direct xAI API usage.
+- The OAuth file enables account-backed access. Do not commit it, sync it to
+  untrusted machines, or share it between users.
 
 ## Troubleshooting
 

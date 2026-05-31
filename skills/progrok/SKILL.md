@@ -1,6 +1,6 @@
 ---
 name: progrok
-description: "Free Grok API via OAuth proxy. Use when you need xAI Grok models (chat, reasoning, search, images, video, voice, RAG) without an API key. Requires a SuperGrok subscription + `progrok login` once."
+description: "Activate an xAI OAuth session as a local Grok proxy and CLI tool surface. Use when you need Grok models (chat, reasoning, search, images, video, voice, RAG) from OpenAI-compatible clients or agent tools. Requires a SuperGrok subscription + `progrok login` once."
 metadata:
   {
     "triggers": ["grok", "xai", "progrok", "grok-4", "grok-4.3", "x search", "grok search", "grok image", "grok video", "grok tts", "grok stt", "grok voice", "imagine api"],
@@ -8,16 +8,21 @@ metadata:
   }
 ---
 
-# progrok — Free Grok API via OAuth Proxy
+# progrok — OAuth-Activated Grok Proxy and Tool Surface
 
 `progrok` authenticates with xAI via OAuth (the same flow as the Grok web app)
-and runs a local proxy that injects your token into requests. Any
-OpenAI-compatible client connects to the proxy — no `XAI_API_KEY` needed.
+and activates that session as a local proxy plus direct CLI workflows. Any
+OpenAI-compatible client connects to the proxy with a placeholder key while
+progrok injects the real xAI OAuth bearer token locally.
+
+This is an activation tool, not a bypass. Hermes Agent and OpenClaw document the
+same shared xAI OAuth client lineage, and Grok Build-style coding workflows can
+use the same account-backed session through progrok's localhost API surface.
 
 ## When to Use
 
 - Call xAI Grok models (chat, reasoning, vision, search, images, video, voice)
-- No `XAI_API_KEY` available — use OAuth instead
+- No `XAI_API_KEY` available — activate the xAI OAuth session instead
 - Real-time X/web search, image/video generation, TTS/STT, or RAG over your docs
 
 ## Prerequisites
@@ -36,8 +41,9 @@ clients may send any placeholder bearer value.
 ### Pattern 0: Native search (no proxy needed)
 
 `progrok search` calls `/v1/responses` with the `web_search`/`x_search`
-server-side tools using your OAuth token directly — a fast (1–3s), free
-alternative to browser automation or paid search APIs.
+server-side tools using your OAuth token directly. It is a fast (1–3s) terminal
+path for current research, but upstream account access, quota, and billing still
+belong to xAI.
 
 ```bash
 progrok search "latest Node.js LTS version"      # web + X, AI summary + sources

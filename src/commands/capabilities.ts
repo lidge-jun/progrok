@@ -267,7 +267,7 @@ export function buildCapabilities() {
       "The multi-agent model requires the Responses API (not Chat Completions).",
     ],
     guidance: {
-      auth: "Run `progrok login` once. No API key needed — OAuth only.",
+      auth: "Run `progrok login` once. progrok activates the local xAI OAuth session for clients and commands.",
       proxy:
         "`progrok proxy` forwards all HTTP /v1/* paths. Set OPENAI_BASE_URL=http://127.0.0.1:18645/v1 and OPENAI_API_KEY=anything.",
       streaming:

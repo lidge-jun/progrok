@@ -1,15 +1,26 @@
 # progrok API Reference
 
-progrok runs a local proxy that forwards every **HTTP** `/v1/*` request to
-`https://api.x.ai/v1`, injecting your OAuth token automatically. This document
-mirrors the official xAI REST API (<https://docs.x.ai>) for the endpoints
-reachable through the proxy.
+progrok activates your xAI OAuth session as a local API surface. It runs a
+localhost proxy that forwards every **HTTP** `/v1/*` request to
+`https://api.x.ai/v1`, injecting your refreshed OAuth token automatically. This
+document mirrors the official xAI REST API (<https://docs.x.ai>) for the
+endpoints reachable through the proxy.
+
+The design follows the same OAuth credential lineage documented by Hermes Agent
+and OpenClaw and is useful for Grok Build-style coding tools: authenticate the
+xAI account once, then let OpenAI-compatible clients, coding agents, and scripts
+use a stable local endpoint.
 
 **Key behavior:** the proxy strips any `Authorization` header you send and
 replaces it with the stored OAuth bearer token. Send any placeholder value —
 the proxy handles auth.
 
 **Base URL:** `http://127.0.0.1:18645` (proxy) → `https://api.x.ai` (upstream)
+
+**Activation model:** `progrok login` stores `~/.progrok/auth.json`;
+`progrok proxy` turns it into an OpenAI-compatible endpoint; direct commands
+such as `progrok search`, `progrok image`, and `progrok video` use the same
+credential without requiring the proxy process.
 
 > **Not proxied:** WebSocket endpoints (`wss://api.x.ai/v1/realtime`,
 > `/v1/tts`, `/v1/stt`) and Collection *management* (`management-api.x.ai`).

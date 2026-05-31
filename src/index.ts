@@ -33,7 +33,7 @@ const program = new Command();
 program
   .name("progrok")
   .description(
-    `Use Grok models for free via OAuth proxy. No API key needed.
+    `Activate your xAI OAuth session as a local Grok API proxy and CLI tool surface.
 
   SuperGrok OAuth → local proxy → OpenAI-compatible API for any client.
   All xAI endpoints forwarded: responses, chat, images, video, tts, stt.

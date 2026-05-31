@@ -5,10 +5,56 @@ const title = 'progrok proxy';
 
 <DocsLayout title={title}>
 <h1>progrok proxy</h1>
-<p>Start a local OpenAI-compatible proxy that injects your OAuth token into every request.</p>
-<pre><code>{`progrok proxy -p 18645`}</code></pre>
-<h2>Options</h2>
-<p><code>-p, --port</code> — Port to listen on (default: 18645).<br/><code>--host</code> — Bind address (default: 127.0.0.1).</p>
-<h2>How it works</h2>
-<p>The proxy intercepts outgoing requests and replaces any bearer token in the <code>Authorization</code> header with your current OAuth token, so existing OpenAI-compatible clients work without configuration changes.</p>
+<p>
+<code>progrok proxy</code> turns the stored OAuth session into an
+OpenAI-compatible local endpoint. It is the bridge for clients that already know
+how to call OpenAI-shaped APIs but do not know how to perform xAI OAuth.
+</p>
+
+<h2>Start the server</h2>
+<pre><code>{`progrok proxy --host 127.0.0.1 --port 18645`}</code></pre>
+<p>
+The default bind address is <code>127.0.0.1</code> and the default port is
+<code>18645</code>. Keep it on localhost unless you are deliberately placing
+your own authentication and network controls in front of it.
+</p>
+
+<h2>Client configuration</h2>
+<pre><code>{`export OPENAI_BASE_URL=http://127.0.0.1:18645/v1
+export OPENAI_API_KEY=anything`}</code></pre>
+<p>
+The placeholder API key only satisfies client libraries that require a value.
+progrok discards that bearer token and injects the refreshed xAI OAuth token
+before the upstream request leaves your machine.
+</p>
+
+<h2>Proxy behavior</h2>
+<pre><code>{`POST http://127.0.0.1:18645/v1/chat/completions
+Authorization: Bearer anything
+
+progrok:
+  1. loads ~/.progrok/auth.json
+  2. refreshes the token if needed
+  3. replaces Authorization with the xAI OAuth bearer
+  4. forwards to https://api.x.ai/v1/chat/completions`}</code></pre>
+
+<h2>What paths are covered</h2>
+<p>
+The proxy forwards HTTP <code>/v1/*</code> paths, so the same local endpoint can
+be used for chat, Responses, reasoning, structured output, tool calls, files,
+batches, tokenizer requests, model listing, images, videos, voice endpoints, and
+collection search when your account has access.
+</p>
+
+<h2>When not to use the proxy</h2>
+<p>
+Use direct commands when progrok provides a richer workflow than a generic HTTP
+forwarder:
+</p>
+<ul>
+<li><code>progrok search</code> for web/X source selection, JSON output, and reasoning effort.</li>
+<li><code>progrok image</code> for local reference files and output handling.</li>
+<li><code>progrok video</code> for async job polling and downloads.</li>
+<li><code>progrok capabilities --json</code> for agent-readable metadata.</li>
+</ul>
 </DocsLayout>

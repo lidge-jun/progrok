@@ -5,16 +5,51 @@ const title = 'Models';
 
 <DocsLayout title={title}>
 <h1>Models</h1>
-<p>Available models through the progrok proxy.</p>
+<p>
+progrok exposes the Grok models available to your xAI account through the local
+OAuth bridge. Model availability can change, so treat this page as orientation
+and run <code>progrok models --detail</code> before wiring a long-running
+automation.
+</p>
+
+<h2>Core text and coding models</h2>
 <table>
-<thead><tr><th>Model</th><th>Type</th><th>Best For</th><th>Price</th></tr></thead>
+<thead><tr><th>Model</th><th>Type</th><th>Best for</th><th>Notes</th></tr></thead>
 <tbody>
-<tr><td>grok-4.3</td><td>Chat</td><td>General conversation &amp; reasoning</td><td>$1.25 / $2.50 per 1M tokens</td></tr>
-<tr><td>grok-build-0.1</td><td>Coding</td><td>Code generation &amp; debugging</td><td>$1 / $2 per 1M tokens</td></tr>
-<tr><td>grok-imagine-image</td><td>Image</td><td>Image generation</td><td>$0.02 / image</td></tr>
-<tr><td>grok-imagine-image-quality</td><td>Image</td><td>High-quality image generation</td><td>$0.04 / image</td></tr>
-<tr><td>grok-imagine-video</td><td>Video</td><td>Video generation</td><td>$0.05 / sec</td></tr>
-<tr><td>grok-imagine-video-1.5-preview</td><td>Video</td><td>Video generation v1.5</td><td>$0.05 / sec</td></tr>
+<tr><td><code>grok-4.3</code></td><td>General</td><td>Default chat, tool calls, search, vision, and most automation.</td><td>Good default for OpenAI-compatible clients pointed at the proxy.</td></tr>
+<tr><td><code>grok-build-0.1</code></td><td>Coding</td><td>Fast coding, debugging, and agentic development loops.</td><td>Important for Grok Build-style workflows because it can use the same OAuth-activated surface.</td></tr>
+<tr><td><code>grok-4.20-0309-reasoning</code></td><td>Reasoning</td><td>Deeper reasoning when latency is less important.</td><td>Use explicit reasoning settings where supported.</td></tr>
+<tr><td><code>grok-4.20-0309-non-reasoning</code></td><td>Text</td><td>Lower-latency text generation.</td><td>Useful when you want Grok output without extended reasoning.</td></tr>
+<tr><td><code>grok-4.20-multi-agent-0309</code></td><td>Research</td><td>Deep research, synthesis, and high-effort search workflows.</td><td>Pair with <code>--reasoning high</code> or <code>--reasoning xhigh</code> for expensive investigations.</td></tr>
 </tbody>
 </table>
+
+<h2>Media models</h2>
+<table>
+<thead><tr><th>Model</th><th>Type</th><th>Best for</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>grok-imagine-image</code></td><td>Image</td><td>Image generation and reference-based editing.</td><td>Use through <code>progrok image</code> for file handling and output directories.</td></tr>
+<tr><td><code>grok-imagine-image-quality</code></td><td>Image</td><td>Higher-quality still image output.</td><td>Use when quality matters more than latency or cost.</td></tr>
+<tr><td><code>grok-imagine-video</code></td><td>Video</td><td>Text-to-video and image-to-video jobs.</td><td>Use through <code>progrok video</code> so polling and downloads are handled for you.</td></tr>
+<tr><td><code>grok-imagine-video-1.5-preview</code></td><td>Video</td><td>Preview video generation behavior.</td><td>Availability and request behavior may change because it is a preview model.</td></tr>
+</tbody>
+</table>
+
+<h2>Why Grok Build matters here</h2>
+<p>
+The point of progrok is not only “chat with Grok.” It is to make Grok usable by
+developer tools. <code>grok-build-0.1</code> represents the coding side of that
+surface: an agent or coding CLI can target a local OpenAI-compatible endpoint,
+send a placeholder key, and let progrok attach the same xAI OAuth session used
+by related tools such as Hermes Agent and OpenClaw.
+</p>
+
+<h2>Live model inspection</h2>
+<pre><code>{`progrok models --detail
+progrok capabilities --json`}</code></pre>
+<p>
+Use these commands before automation. The first is human-readable; the second
+is intended for scripts and agents that need stable metadata about commands,
+ports, models, direct endpoints, and auth requirements.
+</p>
 </DocsLayout>

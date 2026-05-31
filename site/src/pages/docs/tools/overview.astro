@@ -5,14 +5,61 @@ const title = 'Tools Overview';
 
 <DocsLayout title={title}>
 <h1>Tools Overview</h1>
-<p>Server-side tools extend model capabilities without client-side implementation. Include them in the <code>tools</code> array of your chat completion request.</p>
+<p>
+progrok activates two kinds of tool surfaces with the same xAI OAuth session:
+upstream server-side Grok tools that are passed through the proxy, and local CLI
+commands that wrap common Grok workflows with better ergonomics.
+</p>
+
+<h2>Proxy tools</h2>
+<p>
+When a client calls <code>http://127.0.0.1:18645/v1/*</code>, progrok forwards
+the request to xAI with your OAuth bearer token. The client can use OpenAI-style
+request shapes while xAI decides which tools and models your account can use.
+</p>
 <table>
-<tr><th>Tool</th><th>Description</th></tr>
-<tr><td>web_search</td><td>Search the web for current information</td></tr>
-<tr><td>x_search</td><td>Search posts on X (Twitter)</td></tr>
-<tr><td>code_interpreter</td><td>Execute code in a sandboxed environment</td></tr>
-<tr><td>collections_search</td><td>Search uploaded file collections</td></tr>
-<tr><td>Remote MCP</td><td>Connect to external MCP tool servers</td></tr>
-<tr><td>Function calling</td><td>Define custom functions the model can invoke</td></tr>
+<thead><tr><th>Tool</th><th>Purpose</th><th>How progrok helps</th></tr></thead>
+<tbody>
+<tr><td><code>web_search</code></td><td>Search current web sources.</td><td>OAuth injection lets OpenAI-compatible clients request Grok search tools without xAI OAuth plumbing.</td></tr>
+<tr><td><code>x_search</code></td><td>Search public X posts and conversations.</td><td>Useful for current market, release, and community research through the same local endpoint.</td></tr>
+<tr><td><code>code_interpreter</code></td><td>Run code in an upstream sandbox where available.</td><td>Client code keeps the same proxy base URL and placeholder key.</td></tr>
+<tr><td><code>collections_search</code></td><td>Search uploaded file collections.</td><td>Uses account-level xAI access; management credentials may still be needed for collection administration.</td></tr>
+<tr><td>Function calling</td><td>Let the model call functions you define.</td><td>progrok handles auth only; your client still owns function definitions and execution.</td></tr>
+<tr><td>Remote MCP</td><td>Connect model workflows to external MCP servers where supported.</td><td>The proxy keeps the auth boundary local while the client owns the tool topology.</td></tr>
+</tbody>
 </table>
+
+<h2>Local commands</h2>
+<p>
+Direct commands exist where raw HTTP is not the best user experience. They use
+the same stored OAuth credential but add source flags, JSON output, polling,
+download handling, and machine-readable metadata.
+</p>
+<table>
+<thead><tr><th>Command</th><th>Activated capability</th><th>Typical use</th></tr></thead>
+<tbody>
+<tr><td><code>progrok search</code></td><td>Grok Responses + web/X tools</td><td>Research with citations, JSON output, and optional reasoning effort.</td></tr>
+<tr><td><code>progrok image</code></td><td>Imagine image generation/editing</td><td>Generate from text or edit with one or more reference files.</td></tr>
+<tr><td><code>progrok video</code></td><td>Imagine video generation/editing</td><td>Submit async jobs, poll progress, and save completed videos.</td></tr>
+<tr><td><code>progrok models</code></td><td>Model catalog</td><td>Inspect available text, coding, reasoning, image, and video models.</td></tr>
+<tr><td><code>progrok capabilities --json</code></td><td>Agent-readable metadata</td><td>Let other tools discover ports, commands, models, and direct endpoints.</td></tr>
+</tbody>
+</table>
+
+<h2>Tool activation pattern</h2>
+<pre><code>{`progrok login
+  -> stores local OAuth session
+
+progrok proxy
+  -> activates OpenAI-compatible /v1/* surface
+
+progrok search / image / video / models / capabilities
+  -> activate task-specific Grok workflows directly`}</code></pre>
+
+<h2>Choosing a path</h2>
+<ul>
+<li>Use the proxy when another app already speaks OpenAI-compatible HTTP.</li>
+<li>Use direct commands when you want a terminal workflow with files, polling, or JSON output.</li>
+<li>Use <code>capabilities --json</code> when another agent or script needs to decide what progrok can do.</li>
+</ul>
 </DocsLayout>

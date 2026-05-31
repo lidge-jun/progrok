@@ -1,0 +1,112 @@
+---
+import DocsLayout from '../../../layouts/DocsLayout.astro';
+const title = 'OAuth Bridge';
+---
+
+<DocsLayout title={title}>
+<h1>OAuth Bridge</h1>
+<p>
+progrok is built around one idea: your xAI OAuth session is already the account
+authority for Grok. progrok activates that session as a local tool surface so
+SDKs, CLI workflows, and agent tools can call Grok without each integration
+having to implement OAuth, token refresh, model routing, and media polling on
+its own.
+</p>
+
+<div class="callout strong">
+  <strong>Positioning</strong>
+  <p>
+    progrok is not a separate model host, an API-key reseller, or a bypass. It
+    is a local OAuth bridge. It signs in with your xAI account, stores the
+    refreshable token locally, and uses that token to enable Grok access through
+    familiar developer surfaces.
+  </p>
+</div>
+
+<h2>Why OAuth first</h2>
+<p>
+The practical problem is not just calling one endpoint. A real developer setup
+needs chat, Responses, reasoning, web search, X search, coding models, image
+jobs, video jobs, model discovery, status checks, and scriptable metadata. API
+keys are convenient for servers, but many Grok workflows are tied to the same
+xAI account session used by Grok web and related developer tools. progrok keeps
+that account session local and turns it into a stable operating surface.
+</p>
+
+<div class="definition-grid">
+  <article>
+    <h3>Account authority</h3>
+    <p>Your xAI account and subscription decide what you can access.</p>
+  </article>
+  <article>
+    <h3>Local credential</h3>
+    <p>The refreshable OAuth session is stored at <code>~/.progrok/auth.json</code>.</p>
+  </article>
+  <article>
+    <h3>Tool activation</h3>
+    <p>progrok exposes proxy, search, media, model, and capability commands.</p>
+  </article>
+  <article>
+    <h3>Client compatibility</h3>
+    <p>OpenAI-compatible clients keep using <code>base_url</code> and a placeholder key.</p>
+  </article>
+</div>
+
+<h2>Shared token lineage</h2>
+<p>
+progrok uses the shared xAI OAuth client identifier documented by Hermes Agent
+and OpenClaw. The same OAuth lineage matters because Hermes, OpenClaw, and
+Grok Build-style coding workflows are all trying to solve the same operational
+problem: unlock Grok through an authenticated xAI account session, then make it
+usable from tools that expect a normal programmable endpoint.
+</p>
+<p>
+That is why progrok is intentionally small and local. It does not ask every
+client to understand xAI browser login. It performs the login once, refreshes
+the bearer token when needed, and injects that credential at the boundary where
+OpenAI-compatible clients send requests.
+</p>
+
+<h2>Request path</h2>
+<pre><code>{`OpenAI SDK / agent tool / curl
+  -> http://127.0.0.1:18645/v1/*
+  -> progrok loads or refreshes ~/.progrok/auth.json
+  -> progrok replaces the placeholder Authorization header
+  -> https://api.x.ai/v1/*
+  -> response returns to the original client`}</code></pre>
+
+<h2>Direct command path</h2>
+<p>
+Some tasks are awkward through a generic proxy because they need polling,
+output files, source selection, or model-specific request shapes. progrok also
+ships direct commands that use the same OAuth credential without requiring the
+proxy process to be running.
+</p>
+<table>
+<thead><tr><th>Command</th><th>What it activates</th><th>Why it exists</th></tr></thead>
+<tbody>
+<tr><td><code>progrok search</code></td><td>Responses with web and X tools</td><td>One command for current research, citations, JSON, and reasoning effort.</td></tr>
+<tr><td><code>progrok image</code></td><td>Imagine image generation/editing</td><td>Handles reference files, output folders, and result extraction.</td></tr>
+<tr><td><code>progrok video</code></td><td>Imagine video jobs</td><td>Submits async jobs, polls status, and downloads completed files.</td></tr>
+<tr><td><code>progrok models</code></td><td>Live model catalog</td><td>Shows aliases, model purpose, context, and cost assumptions before automation.</td></tr>
+<tr><td><code>progrok capabilities</code></td><td>Machine-readable metadata</td><td>Lets agents discover ports, commands, models, and supported workflows.</td></tr>
+</tbody>
+</table>
+
+<h2>What it does not do</h2>
+<ul>
+<li>It does not bypass xAI access, quotas, subscriptions, pricing, or product limits.</li>
+<li>It does not make remote callers safe automatically; the proxy binds to localhost by default for a reason.</li>
+<li>It does not turn OAuth into a permanent API key. Tokens expire and are refreshed through the stored session.</li>
+<li>It does not proxy WebSocket realtime streams directly; use HTTP client-secret minting where available.</li>
+</ul>
+
+<h2>When to use progrok</h2>
+<p>
+Use progrok when you want Grok available inside an existing developer workflow:
+an OpenAI-compatible SDK, a local agent runner, a coding CLI, a research script,
+or an automation pipeline that can point at a local base URL. Login once,
+activate the local tool surface, and then let the rest of your stack talk to
+Grok through standard HTTP shapes.
+</p>
+</DocsLayout>

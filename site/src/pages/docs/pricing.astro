@@ -5,7 +5,12 @@ const title = 'Pricing';
 
 <DocsLayout title={title}>
 <h1>Pricing</h1>
-<p>progrok proxies xAI's API — these are the upstream costs (free through OAuth).</p>
+<p>
+progrok does not set xAI prices or bypass account limits. OAuth activates your
+account-backed access locally; upstream pricing, quotas, and product gates still
+belong to xAI and can change. Use this page as orientation and check live xAI
+model data before production automation.
+</p>
 
 <h2>Text Models</h2>
 <table>
@@ -34,4 +39,12 @@ const title = 'Pricing';
 <tr><td>Speech to Text</td><td>$0.003 / min</td></tr>
 </tbody>
 </table>
+
+<h2>OAuth and cost boundaries</h2>
+<ul>
+<li>OAuth login replaces manual API-key handling; it does not make upstream usage free.</li>
+<li>Your xAI account, subscription, and quota decide which models and tools work.</li>
+<li>Media jobs may bill per image or per second, depending on the upstream model.</li>
+<li>For scripts and agents, run <code>progrok models --detail</code> before assuming a model is available.</li>
+</ul>
 </DocsLayout>

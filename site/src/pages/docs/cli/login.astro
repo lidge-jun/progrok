@@ -5,9 +5,53 @@ const title = 'progrok login';
 
 <DocsLayout title={title}>
 <h1>progrok login</h1>
-<p>Authenticate with progrok using an OAuth browser flow. Running <code>progrok login</code> opens your default browser to complete authorization.</p>
-<h2>Device Code</h2>
-<p>For SSH sessions or headless environments, use the device-code flow:</p>
+<p>
+<code>progrok login</code> is the activation step. It authorizes progrok through
+xAI OAuth, stores a refreshable local session, and makes the rest of the CLI
+and proxy commands usable without an <code>XAI_API_KEY</code>.
+</p>
+
+<h2>Browser flow</h2>
+<pre><code>{`progrok login`}</code></pre>
+<p>
+The CLI opens your default browser, completes PKCE authorization with xAI, and
+waits on a localhost callback. When authorization succeeds, the token response
+is written to <code>~/.progrok/auth.json</code> with restrictive file
+permissions.
+</p>
+
+<h2>Device-code flow</h2>
 <pre><code>{`progrok login --device-code`}</code></pre>
-<p>Tokens are stored in <code>~/.progrok/auth.json</code>.</p>
+<p>
+Use device-code login for SSH sessions, remote machines, headless terminals, or
+automation boxes where the default browser flow cannot complete. You approve
+the code in a browser elsewhere, then the CLI polls xAI until the device flow is
+authorized.
+</p>
+
+<h2>Shared OAuth client lineage</h2>
+<p>
+progrok uses the shared xAI OAuth client identifier documented by Hermes Agent
+and OpenClaw. That lineage is important because these tools, plus Grok
+Build-style coding workflows, are built around the same operational assumption:
+the xAI account session is the source of authority, and local developer tools
+need a practical way to activate that session.
+</p>
+
+<h2>Stored credential</h2>
+<table>
+<tbody>
+<tr><th>Path</th><td><code>~/.progrok/auth.json</code></td></tr>
+<tr><th>Contains</th><td>Access token, optional refresh token, expiry, token endpoint, optional account email.</td></tr>
+<tr><th>Used by</th><td>Proxy, search, image, video, status, model, and capability commands.</td></tr>
+<tr><th>Remove with</th><td><code>progrok logout</code></td></tr>
+</tbody>
+</table>
+
+<h2>Verification</h2>
+<pre><code>{`progrok status`}</code></pre>
+<p>
+Run status after login. A healthy setup can load the token file and either show
+an active bearer token or refresh it when the command path requires one.
+</p>
 </DocsLayout>

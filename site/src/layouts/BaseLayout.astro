@@ -11,11 +11,11 @@ interface Props {
 
 const {
   title,
-  description = 'progrok is a local OAuth proxy and CLI for using xAI Grok models from OpenAI-compatible clients.',
+  description = 'progrok activates an xAI OAuth session as a local Grok proxy and CLI tool surface for OpenAI-compatible clients.',
   bodyClass = '',
 } = Astro.props;
 
-const pageTitle = title === 'progrok' ? 'progrok - xAI Grok OAuth proxy' : `${title} - progrok`;
+const pageTitle = title === 'progrok' ? 'progrok - xAI OAuth Grok tool activation' : `${title} - progrok`;
 const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url.origin);
 ---
 

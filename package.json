@@ -1,7 +1,7 @@
 {
   "name": "progrok",
   "version": "0.1.0",
-  "description": "Use Grok models for free via OAuth proxy. No API key needed.",
+  "description": "Activate your xAI OAuth session as a local Grok API proxy and CLI tool surface.",
   "type": "module",
   "bin": {
     "progrok": "./dist/index.js"

@@ -5,13 +5,50 @@ const title = 'Documentation';
 
 <DocsLayout title={title}>
 <h1>Documentation</h1>
-<p>Complete reference for the progrok CLI and xAI Grok API proxy.</p>
+<p>
+progrok documents one operating model: activate your xAI OAuth session once,
+then use that session through a local OpenAI-compatible proxy and direct Grok
+tool commands. The docs are organized around that bridge, not around API keys.
+</p>
+
+<div class="callout strong">
+  <strong>Read this first</strong>
+  <p>
+    If you are evaluating progrok, start with the OAuth bridge page. It explains
+    why Hermes Agent, OpenClaw, Grok Build-style workflows, and progrok all care
+    about the same OAuth session pattern.
+  </p>
+</div>
+
+<h2>Core path</h2>
+<table>
+<thead><tr><th>Step</th><th>Page</th><th>What it answers</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><a href="/progrok/docs/concepts/oauth-bridge">OAuth bridge</a></td><td>What progrok is, why OAuth matters, and what “tool activation” means.</td></tr>
+<tr><td>2</td><td><a href="/progrok/docs/quickstart">Quick Start</a></td><td>How to install, login, run the proxy, and call Grok from a client.</td></tr>
+<tr><td>3</td><td><a href="/progrok/docs/cli/login">Login</a></td><td>Browser login, device-code login, stored credential path, and validation.</td></tr>
+<tr><td>4</td><td><a href="/progrok/docs/cli/proxy">Proxy</a></td><td>How placeholder keys become OAuth-backed upstream requests.</td></tr>
+<tr><td>5</td><td><a href="/progrok/docs/tools/overview">Tools overview</a></td><td>Which proxy tools and direct CLI commands are activated by the session.</td></tr>
+</tbody>
+</table>
 
 <h2>Getting Started</h2>
 <ul>
+<li><a href="/progrok/docs/concepts/oauth-bridge">OAuth Bridge</a></li>
 <li><a href="/progrok/docs/quickstart">Quick Start</a></li>
 <li><a href="/progrok/docs/models">Models</a></li>
 <li><a href="/progrok/docs/pricing">Pricing</a></li>
+</ul>
+
+<h2>CLI</h2>
+<ul>
+<li><a href="/progrok/docs/cli/login">Login</a></li>
+<li><a href="/progrok/docs/cli/proxy">Proxy</a></li>
+<li><a href="/progrok/docs/cli/search">Search</a></li>
+<li><a href="/progrok/docs/cli/video">Video</a></li>
+<li><a href="/progrok/docs/cli/image">Image</a></li>
+<li><a href="/progrok/docs/cli/chat">Chat</a></li>
+<li><a href="/progrok/docs/cli/models">Models</a></li>
 </ul>
 
 <h2>Text</h2>
@@ -55,17 +92,6 @@ const title = 'Documentation';
 <li><a href="/progrok/docs/tools/x-search">X Search</a></li>
 <li><a href="/progrok/docs/tools/code-execution">Code Execution</a></li>
 <li><a href="/progrok/docs/tools/collections-search">Collections Search</a></li>
-</ul>
-
-<h2>CLI</h2>
-<ul>
-<li><a href="/progrok/docs/cli/login">Login</a></li>
-<li><a href="/progrok/docs/cli/proxy">Proxy</a></li>
-<li><a href="/progrok/docs/cli/search">Search</a></li>
-<li><a href="/progrok/docs/cli/video">Video</a></li>
-<li><a href="/progrok/docs/cli/image">Image</a></li>
-<li><a href="/progrok/docs/cli/chat">Chat</a></li>
-<li><a href="/progrok/docs/cli/models">Models</a></li>
 </ul>
 
 <h2>Advanced</h2>

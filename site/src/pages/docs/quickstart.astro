@@ -5,20 +5,77 @@ const title = 'Quick Start';
 
 <DocsLayout title={title}>
 <h1>Quick Start</h1>
+<p>
+This guide turns an xAI account session into a local Grok tool surface. After
+login, progrok can either run an OpenAI-compatible proxy for existing clients or
+call xAI endpoints directly through purpose-built CLI commands.
+</p>
+
+<div class="callout strong">
+  <strong>What you are activating</strong>
+  <p>
+    You are not creating a new API key. You are authorizing progrok to hold a
+    refreshable xAI OAuth session locally, then using that session to power SDKs,
+    agent tools, search commands, image jobs, video jobs, and model discovery.
+  </p>
+</div>
 
 <h2>1. Install</h2>
 <pre><code>{`npm install -g progrok`}</code></pre>
+<p>Node 18 or newer is required. The CLI is ESM-only and runs locally.</p>
 
-<h2>2. Login</h2>
+<h2>2. Login with xAI OAuth</h2>
 <pre><code>{`progrok login`}</code></pre>
-<p>Opens your browser to authenticate with xAI via OAuth.</p>
+<p>
+The browser flow signs in with your xAI account and stores the refreshed session
+at <code>~/.progrok/auth.json</code>. On SSH boxes, remote shells, or machines
+without a browser, use the device-code flow:
+</p>
+<pre><code>{`progrok login --device-code`}</code></pre>
 
-<h2>3. Start the proxy</h2>
+<h2>3. Confirm the session</h2>
+<pre><code>{`progrok status`}</code></pre>
+<p>
+This confirms whether progrok can load a bearer token, whether the session has
+an expiry, and which account email is present when xAI returns one.
+</p>
+
+<h2>4. Start the proxy</h2>
 <pre><code>{`progrok proxy`}</code></pre>
-<p>Starts a local OpenAI-compatible API server on port 18645.</p>
+<p>
+The proxy listens on <code>127.0.0.1:18645</code> by default and forwards
+<code>/v1/*</code> requests to <code>https://api.x.ai/v1/*</code>. Any bearer
+token sent by the client is treated as a placeholder and replaced with the
+stored xAI OAuth token.
+</p>
 
-<h2>4. Make a request</h2>
-<pre><code>{`curl http://localhost:18645/v1/chat/completions \\
+<h2>5. Point a client at localhost</h2>
+<pre><code>{`curl http://127.0.0.1:18645/v1/chat/completions \\
+  -H "Authorization: Bearer anything" \\
   -H "Content-Type: application/json" \\
-  -d '{"model": "grok-4.3", "messages": [{"role": "user", "content": "Hello!"}]}'`}</code></pre>
+  -d '{"model":"grok-4.3","messages":[{"role":"user","content":"Hello from progrok"}]}'`}</code></pre>
+<p>
+Most OpenAI-compatible SDKs need only two settings:
+<code>base_url=http://127.0.0.1:18645/v1</code> and a non-empty placeholder
+API key.
+</p>
+
+<h2>6. Use direct tool commands</h2>
+<p>
+The proxy is not required for commands that progrok owns directly. These
+commands load the same OAuth session and call xAI with task-specific handling.
+</p>
+<pre><code>{`progrok search --x --json "Grok Build release discussion"
+progrok image "terminal product shot for an OAuth bridge CLI" --output ./out
+progrok video "short animation of a local proxy activating Grok tools" --duration 5
+progrok models --detail
+progrok capabilities --json`}</code></pre>
+
+<h2>7. Understand the boundary</h2>
+<ul>
+<li>Your xAI account and subscription still control access.</li>
+<li>progrok does not bypass quotas, billing, product gates, or model availability.</li>
+<li>The local credential should be protected like any other account credential.</li>
+<li>The proxy is local by default; do not bind it publicly without your own access controls.</li>
+</ul>
 </DocsLayout>
