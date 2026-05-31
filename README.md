@@ -56,6 +56,9 @@ export OPENAI_API_KEY=anything
 | `progrok login` | OAuth login via browser |
 | `progrok login --device-code` | Login via device code (SSH/remote) |
 | `progrok search <query> [--web\|--x] [--json]` | Web + X search via Grok — AI summary + citations (no proxy) |
+| `progrok search <query> --reasoning <effort>` | Search with reasoning effort (none/low/medium/high/xhigh) |
+| `progrok image <prompt> [--ref img] [--json]` | Generate or edit images (no proxy) |
+| `progrok video <prompt> [--image src] [--json]` | Generate video — T2V or I2V with polling (no proxy) |
 | `progrok proxy` | Start the OpenAI-compatible proxy (port 18645) |
 | `progrok chat` | Open the web chat UI (port 18646) |
 | `progrok models [--detail]` | List models (`--detail` adds pricing + aliases) |
@@ -82,6 +85,8 @@ API surface is available:
 See **[docs/api.md](./docs/api.md)** for the full request/response contracts, or
 run `progrok capabilities --json` for live metadata.
 
+📖 **Full documentation:** [lidge-jun.github.io/progrok](https://lidge-jun.github.io/progrok/)
+
 ## Models
 
 | Model | Best for | Context | Price (in / out per 1M) |
@@ -94,6 +99,7 @@ run `progrok capabilities --json` for live metadata.
 | `grok-imagine-image` | Image gen / edit | — | $0.02 / image |
 | `grok-imagine-image-quality` | High-quality image gen / edit | — | $0.04 / image |
 | `grok-imagine-video` | Video gen / edit / extend | — | $0.05 / sec |
+| `grok-imagine-video-1.5-preview` | Video v1.5 (improved I2V, T2V via workaround) | — | $0.05 / sec |
 
 > Cached input is $0.20/1M; above the 200K-token long-context threshold, chat
 > rates double. Live search costs $25 / 1K sources.
