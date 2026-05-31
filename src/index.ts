@@ -29,6 +29,7 @@ function getVersion(): string {
 }
 
 const program = new Command();
+program.enablePositionalOptions();
 
 program
   .name("progrok")

@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { Command } from "commander";
 import { videoCommand } from "../src/commands/video.js";
 
 describe("videoCommand", () => {
@@ -92,6 +93,23 @@ describe("videoCommand", () => {
     assert.equal(parsed.prompt, "continue");
     assert.equal(parsed.opts.video, "file_id:file-123");
     assert.equal(parsed.opts.duration, "2");
+    assert.equal(parsed.opts.json, true);
+  });
+
+  it("keeps subcommand options local under the top-level program", () => {
+    const program = new Command();
+    program.enablePositionalOptions();
+    const cmd = videoCommand();
+    program.addCommand(cmd);
+    const edit = cmd.commands.find((c) => c.name() === "edit");
+    assert(edit, "missing edit subcommand");
+
+    let parsed: any;
+    edit.action((prompt, opts) => { parsed = { prompt, opts }; });
+    program.parse(["node", "progrok", "video", "edit", "touch up", "--video", "file_id:file-123", "--json"]);
+
+    assert.equal(parsed.prompt, "touch up");
+    assert.equal(parsed.opts.video, "file_id:file-123");
     assert.equal(parsed.opts.json, true);
   });
 });
