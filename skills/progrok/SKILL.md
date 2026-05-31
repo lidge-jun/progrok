@@ -95,19 +95,48 @@ curl http://127.0.0.1:18645/v1/images/edits \
 ### Pattern 4: Video generation (async — poll)
 
 ```bash
-# Start: text-to-video, image-to-video (image), or reference-to-video (reference_images)
+# Text-to-video
+progrok video "Ocean waves crashing on rocks" --duration 8 --resolution 720p
+
+# Image-to-video
+progrok video "Animate this scene" --image photo.jpg --duration 10
+
+# Video editing (real V2V — modify existing video, keep motion)
+progrok video edit "Make the water glow neon blue" --video https://vidgen.x.ai/.../clip.mp4
+
+# Video extension (continue from last frame)
+progrok video extend "Camera slowly pulls back" --video https://vidgen.x.ai/.../clip.mp4 --duration 5
+```
+
+**API endpoints** (via proxy at 127.0.0.1:18645):
+```bash
+# Generate: POST /v1/videos/generations
 curl -s http://127.0.0.1:18645/v1/videos/generations \
   -H "Content-Type: application/json" \
   -d '{"model": "grok-imagine-video", "prompt": "Ocean waves", "duration": 8, "resolution": "720p"}'
 # → {"request_id": "abc-123"}
 
-# Poll until done
+# Edit (V2V): POST /v1/videos/edits — grok-imagine-video only
+curl -s http://127.0.0.1:18645/v1/videos/edits \
+  -H "Content-Type: application/json" \
+  -d '{"model": "grok-imagine-video", "prompt": "Add sunset colors", "video": {"url": "https://..."}}'
+
+# Extend: POST /v1/videos/extensions — grok-imagine-video only, 2-10s
+curl -s http://127.0.0.1:18645/v1/videos/extensions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "grok-imagine-video", "prompt": "Continue scene", "duration": 5, "video": {"url": "https://..."}}'
+
+# Poll: GET /v1/videos/{request_id}
 curl http://127.0.0.1:18645/v1/videos/abc-123
-# → {"status": "pending", "progress": 45}
 # → {"status": "done", "video": {"url": "https://...", "duration": 8}}
 ```
 
-Also: `POST /v1/videos/edits` (edit a clip), `POST /v1/videos/extensions` (extend 1-10s).
+**Model constraints:**
+- `grok-imagine-video`: T2V, I2V, Ref2V, Edit, Extend — all modes
+- `grok-imagine-video-1.5-preview`: I2V, Ref2V only (no T2V, no Edit, no Extend)
+- Edit/Extend input: mp4, H.264/H.265/AV1, max 8.7s (edit) / 2-15s (extend)
+- Edit output inherits input duration/aspect/resolution (max 720p)
+- Extend duration: 2-10s added to original
 
 ### Pattern 5: Voice — TTS / STT (HTTP)
 
