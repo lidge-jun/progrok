@@ -226,6 +226,15 @@ export function buildCapabilities() {
         pricing: { perSecond: 0.05, unit: "USD", note: "480p or 720p" },
         aliases: [],
       },
+      {
+        id: "grok-imagine-video-1.5-preview",
+        type: "video",
+        use: "Video v1.5 (preview) — improved I2V, T2V via white-canvas workaround",
+        input: ["text", "image"],
+        output: ["video"],
+        pricing: { perSecond: 0.05, unit: "USD", note: "480p or 720p, T2V needs image injection" },
+        aliases: [],
+      },
     ],
     voiceModels: [
       { id: "grok-voice-latest", use: "Voice Agent / realtime — recommended" },

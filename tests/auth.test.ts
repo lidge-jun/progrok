@@ -67,22 +67,6 @@ describe("auth/constants", () => {
     assert.equal(constants.DEFAULT_MODEL, "grok-4.3");
   });
 
-  it("ALLOWED_PROXY_PATHS contains /responses", () => {
-    assert.ok(constants.ALLOWED_PROXY_PATHS.has("/responses"));
-  });
-
-  it("ALLOWED_PROXY_PATHS contains /chat/completions", () => {
-    assert.ok(constants.ALLOWED_PROXY_PATHS.has("/chat/completions"));
-  });
-
-  it("ALLOWED_PROXY_PATHS contains /models", () => {
-    assert.ok(constants.ALLOWED_PROXY_PATHS.has("/models"));
-  });
-
-  it("ALLOWED_PROXY_PATHS is a Set with exactly 5 entries", () => {
-    assert.equal(constants.ALLOWED_PROXY_PATHS.size, 5);
-  });
-
   it("XAI_OAUTH_REDIRECT_URI is composed correctly", () => {
     assert.equal(
       constants.XAI_OAUTH_REDIRECT_URI,

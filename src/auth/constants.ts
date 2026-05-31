@@ -39,15 +39,6 @@ export const CONFIG_DIR = join(homedir(), ".progrok");
 export const AUTH_FILE = join(CONFIG_DIR, "auth.json");
 export const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 
-// Proxy allowed paths
-export const ALLOWED_PROXY_PATHS = new Set([
-  "/responses",
-  "/chat/completions",
-  "/completions",
-  "/embeddings",
-  "/models",
-]);
-
 // GitHub
 export const GITHUB_REPO = "lidge-jun/progrok";
 export const GITHUB_URL = `https://github.com/${GITHUB_REPO}`;
