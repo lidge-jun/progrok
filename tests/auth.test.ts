@@ -43,7 +43,7 @@ mock.module("../src/utils/logger.js", {
 // ---------------------------------------------------------------------------
 // 1. src/auth/constants.ts
 // ---------------------------------------------------------------------------
-describe("auth/constants", () => {
+describe("auth/constants", { concurrency: false }, () => {
   it("XAI_OAUTH_CLIENT_ID has the expected value", () => {
     assert.equal(
       constants.XAI_OAUTH_CLIENT_ID,
@@ -92,7 +92,7 @@ describe("auth/constants", () => {
 // ---------------------------------------------------------------------------
 // 2. src/auth/token-store.ts
 // ---------------------------------------------------------------------------
-describe("auth/token-store", () => {
+describe("auth/token-store", { concurrency: false }, () => {
   // Lazy-load so the mock is in effect
   let saveTokens: typeof import("../src/auth/token-store.js").saveTokens;
   let loadTokens: typeof import("../src/auth/token-store.js").loadTokens;
@@ -231,7 +231,7 @@ describe("auth/token-store", () => {
 // ---------------------------------------------------------------------------
 // 3. src/utils/config.ts
 // ---------------------------------------------------------------------------
-describe("utils/config", () => {
+describe("utils/config", { concurrency: false }, () => {
   let readConfig: typeof import("../src/utils/config.js").readConfig;
   let writeConfig: typeof import("../src/utils/config.js").writeConfig;
 
@@ -287,7 +287,7 @@ describe("utils/config", () => {
 // ---------------------------------------------------------------------------
 // 4. src/utils/star-prompt.ts
 // ---------------------------------------------------------------------------
-describe("utils/star-prompt", () => {
+describe("utils/star-prompt", { concurrency: false }, () => {
   let readConfig: typeof import("../src/utils/config.js").readConfig;
   let writeConfig: typeof import("../src/utils/config.js").writeConfig;
   let showStarPrompt: typeof import("../src/utils/star-prompt.js").showStarPrompt;
