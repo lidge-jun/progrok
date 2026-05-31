@@ -7,6 +7,7 @@ import {
 } from "./constants.js";
 import { fetchOIDCDiscovery } from "./discovery.js";
 import { startCallbackServer } from "./callback-server.js";
+import { readManualAuthorizationCode } from "./manual-code.js";
 import { saveTokens } from "./token-store.js";
 import { openUrl } from "../utils/open-url.js";
 import { log } from "../utils/logger.js";
@@ -19,7 +20,9 @@ function generatePKCE(): { verifier: string; challenge: string } {
   return { verifier, challenge };
 }
 
-export async function loginWithPKCE(): Promise<void> {
+export async function loginWithPKCE(
+  options: { manualCode?: boolean } = {},
+): Promise<void> {
   const discovery = await fetchOIDCDiscovery();
   const pkce = generatePKCE();
   const state = randomBytes(16).toString("hex");
@@ -33,15 +36,26 @@ export async function loginWithPKCE(): Promise<void> {
   authorizeUrl.searchParams.set("code_challenge", pkce.challenge);
   authorizeUrl.searchParams.set("code_challenge_method", "S256");
 
-  log.info("Opening browser for xAI login...");
+  log.info(
+    options.manualCode
+      ? "Manual xAI login for headless/remote environments..."
+      : "Opening browser for xAI login...",
+  );
   log.dim(
     `If the browser doesn't open, visit:\n${authorizeUrl.toString()}`,
   );
 
-  const callbackPromise = startCallbackServer(state);
-  await openUrl(authorizeUrl.toString());
-
-  const { code } = await callbackPromise;
+  let code: string;
+  if (options.manualCode) {
+    log.info(
+      `\nOpen the URL above on your local machine. After login, your browser may fail to\nload 127.0.0.1; copy that full address-bar URL back here.\n`,
+    );
+    code = await readManualAuthorizationCode(state);
+  } else {
+    const callbackPromise = startCallbackServer(state);
+    await openUrl(authorizeUrl.toString());
+    ({ code } = await callbackPromise);
+  }
 
   log.info("Exchanging authorization code...");
 
