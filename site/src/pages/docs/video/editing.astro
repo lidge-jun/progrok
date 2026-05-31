@@ -5,12 +5,19 @@ const title = 'Video Editing';
 
 <DocsLayout title={title}>
 <h1>Video Editing</h1>
-<p>Edit an existing video with a text prompt using <code>POST /v1/videos/edits</code>. Supply the source video in the <code>video</code> field. The operation is asynchronous — poll the returned task ID for completion, same as video generation.</p>
+<p>Edit an existing video with a text prompt using <code>POST /v1/videos/edits</code>. Supply the source as <code>video: &#123;url | file_id&#125;</code>. The operation is asynchronous and polls the same <code>GET /v1/videos/&#123;request_id&#125;</code> endpoint.</p>
+<h2>CLI</h2>
+<pre><code>{`progrok video edit "make the background a sunset sky" --video ./clip.mp4
+progrok video edit "add cinematic color grading" --video file_id:file-abc123`}</code></pre>
+<h2>API</h2>
 <pre><code>{`curl -X POST http://localhost:18645/v1/videos/edits \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "video": "https://example.com/source.mp4",
+    "model": "grok-imagine-video",
+    "video": {"url": "https://example.com/source.mp4"},
     "prompt": "Add cinematic color grading"
   }'`}</code></pre>
+<h2>Limits</h2>
+<p>The source must be an MP4-compatible video and is capped at 8.7 seconds. Editing does not support custom <code>duration</code>, <code>aspect_ratio</code>, or <code>resolution</code>; output keeps the input duration/aspect and is capped at 720p.</p>
 </DocsLayout>

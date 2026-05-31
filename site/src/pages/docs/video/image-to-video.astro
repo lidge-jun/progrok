@@ -5,15 +5,19 @@ const title = 'Image to Video';
 
 <DocsLayout title={title}>
 <h1>Image to Video</h1>
-<p>Animate a static image into a video by providing an image URL alongside a motion prompt.</p>
+<p>Animate a still image by sending <code>image: &#123;url | file_id&#125;</code> with a motion prompt. In the CLI, the image input may be a local file, HTTPS URL, data URI, or <code>file_id:&lt;id&gt;</code>.</p>
 <h2>CLI</h2>
-<pre><code>{`progrok video --image photo.png "slow zoom out with parallax"`}</code></pre>
+<pre><code>{`progrok video "slow zoom out with parallax" --image photo.png
+progrok video "animate this uploaded file" --image file_id:file-abc123`}</code></pre>
 <h2>API</h2>
 <pre><code>{`curl -X POST http://localhost:18645/v1/videos/generations \
   -H 'Authorization: Bearer anything' \
   -H 'Content-Type: application/json' \
   -d '{
+  "model": "grok-imagine-video",
   "prompt": "slow zoom out with parallax",
   "image": {"url": "https://example.com/photo.png"}
 }'`}</code></pre>
+<h2>Notes</h2>
+<p>Use either <code>image</code> or <code>reference_images</code>, never both. Image-to-video uses the source image as the starting frame; reference-to-video uses images as loose visual references.</p>
 </DocsLayout>

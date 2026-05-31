@@ -5,16 +5,23 @@ const title = 'Reference to Video';
 
 <DocsLayout title={title}>
 <h1>Reference to Video</h1>
-<p>Generate videos guided by reference images. Supply up to 7 images via the <code>reference_images</code> array. Each generated video has a maximum duration of 10 seconds.</p>
+<p>Generate videos guided by reference images. Supply up to 7 inputs through <code>reference_images</code>; each input is <code>&#123;url | file_id&#125;</code>. The generated video is capped at 10 seconds for this mode.</p>
+<h2>CLI</h2>
+<pre><code>{`progrok video "put this character in a quiet terminal workspace" \
+  --ref character.png --ref workspace.png --duration 6`}</code></pre>
+<h2>API</h2>
 <pre><code>{`curl -X POST http://localhost:18645/v1/videos/generations \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
+    "model": "grok-imagine-video",
     "prompt": "A cat walking through a garden",
     "reference_images": [
       {"url": "https://example.com/ref1.png"},
-      {"url": "https://example.com/ref2.png"}
+      {"file_id": "file-abc123"}
     ],
     "duration": 10
   }'`}</code></pre>
+<h2>Mode Boundary</h2>
+<p>Reference-to-video is not image-to-video. Do not send <code>image</code> with <code>reference_images</code>; use one mode per request. Vercel AI SDK names this with <code>providerOptions.xai.mode = "reference-to-video"</code>, but REST selects the mode from the fields you send.</p>
 </DocsLayout>

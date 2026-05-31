@@ -42,6 +42,18 @@ describe("videoCommand", () => {
     assert(opt, "missing --image option");
   });
 
+  it("has --ref option for reference-to-video", () => {
+    const cmd = videoCommand();
+    const opt = cmd.options.find((o: any) => o.long === "--ref");
+    assert(opt, "missing --ref option");
+  });
+
+  it("has --seconds alias and --upload-url options", () => {
+    const cmd = videoCommand();
+    assert(cmd.options.find((o: any) => o.long === "--seconds"), "missing --seconds");
+    assert(cmd.options.find((o: any) => o.long === "--upload-url"), "missing --upload-url");
+  });
+
   it("has --timeout option with default 600", () => {
     const cmd = videoCommand();
     const opt = cmd.options.find((o: any) => o.long === "--timeout");
@@ -53,5 +65,18 @@ describe("videoCommand", () => {
     const cmd = videoCommand();
     assert(cmd.options.find((o: any) => o.long === "--json"), "missing --json");
     assert(cmd.options.find((o: any) => o.long === "--output"), "missing --output");
+  });
+
+  it("edit and extend accept video input plus upload-url", () => {
+    const cmd = videoCommand();
+    const edit = cmd.commands.find((c) => c.name() === "edit");
+    const extend = cmd.commands.find((c) => c.name() === "extend");
+
+    assert(edit, "missing edit subcommand");
+    assert(extend, "missing extend subcommand");
+    assert(edit.options.find((o: any) => o.long === "--video"), "edit missing --video");
+    assert(edit.options.find((o: any) => o.long === "--upload-url"), "edit missing --upload-url");
+    assert(extend.options.find((o: any) => o.long === "--video"), "extend missing --video");
+    assert(extend.options.find((o: any) => o.long === "--upload-url"), "extend missing --upload-url");
   });
 });

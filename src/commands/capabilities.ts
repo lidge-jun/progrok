@@ -38,9 +38,9 @@ const ENDPOINTS = [
   { category: "images", method: "POST", path: "/v1/images/generations", type: "sync", description: "Text-to-image — aspect_ratio, resolution 1k/2k, n, url|b64_json" },
   { category: "images", method: "POST", path: "/v1/images/edits", type: "sync", description: "Edit / multi-image compose — image{} or images[] + prompt" },
   // Videos (Imagine API, async)
-  { category: "videos", method: "POST", path: "/v1/videos/generations", type: "async", description: "T2V / I2V / R2V — duration 1-15s, resolution 480p/720p/1080p" },
-  { category: "videos", method: "POST", path: "/v1/videos/edits", type: "async", description: "Edit a source video by prompt" },
-  { category: "videos", method: "POST", path: "/v1/videos/extensions", type: "async", description: "Extend a video (2-10s continuation, grok-imagine-video only)" },
+  { category: "videos", method: "POST", path: "/v1/videos/generations", type: "async", description: "T2V / I2V / R2V — duration 1-15s; R2V max 7 refs and 10s; output 480p/720p confirmed" },
+  { category: "videos", method: "POST", path: "/v1/videos/edits", type: "async", description: "Edit a source video by prompt; no duration/aspect/resolution controls" },
+  { category: "videos", method: "POST", path: "/v1/videos/extensions", type: "async", description: "Extend a video (2-10s continuation); no aspect/resolution controls" },
   { category: "videos", method: "GET", path: "/v1/videos/{id}", type: "poll", description: "Poll generation: pending(progress) → done(video.url)" },
   // Voice — HTTP
   { category: "voice", method: "POST", path: "/v1/tts", type: "binary", description: "Text-to-speech — voice_id, output_format, speed, speech tags" },
@@ -93,6 +93,65 @@ const WEBSOCKET_ENDPOINTS = [
   { url: "wss://api.x.ai/v1/stt", description: "Streaming speech-to-text (binary audio → transcript)" },
 ] as const;
 
+const VIDEO_SURFACES = [
+  {
+    id: "text-to-video",
+    endpoint: "POST /v1/videos/generations",
+    cli: "progrok video <prompt>",
+    restShape: { prompt: "string", duration: "1-15", aspect_ratio: "string", resolution: "480p|720p" },
+    status: "supported",
+    smoke: "required-live",
+  },
+  {
+    id: "image-to-video",
+    endpoint: "POST /v1/videos/generations",
+    cli: "progrok video <prompt> --image <file|url|data|file_id:id>",
+    restShape: { image: "{ url | file_id }" },
+    status: "supported",
+    smoke: "required-live",
+  },
+  {
+    id: "reference-to-video",
+    endpoint: "POST /v1/videos/generations",
+    cli: "progrok video <prompt> --ref <input> [--ref <input>...]",
+    restShape: { reference_images: "[{ url | file_id }]", maxImages: 7, maxDurationSeconds: 10 },
+    status: "supported",
+    smoke: "required-live",
+  },
+  {
+    id: "edit-video",
+    endpoint: "POST /v1/videos/edits",
+    cli: "progrok video edit <prompt> --video <file|url|data|file_id:id>",
+    restShape: { video: "{ url | file_id }" },
+    unsupported: ["duration", "aspect_ratio", "resolution"],
+    status: "supported-grok-imagine-video-only",
+    smoke: "required-live",
+  },
+  {
+    id: "extend-video",
+    endpoint: "POST /v1/videos/extensions",
+    cli: "progrok video extend <prompt> --video <file|url|data|file_id:id> --duration <2-10>",
+    restShape: { video: "{ url | file_id }", duration: "2-10" },
+    unsupported: ["aspect_ratio", "resolution"],
+    status: "supported-grok-imagine-video-only",
+    smoke: "required-live",
+  },
+  {
+    id: "conflicting-1080p",
+    endpoint: "POST /v1/videos/generations",
+    cli: "progrok video <prompt> --resolution 1080p",
+    status: "conflicting-docs-treat-unsupported-until-smoked",
+    smoke: "required-negative-or-positive",
+  },
+  {
+    id: "sdk-mode-field",
+    endpoint: "n/a",
+    status: "not-rest-field",
+    note: "Vercel AI SDK mode values edit-video/extend-video/reference-to-video are provider options, not direct REST body fields.",
+    smoke: "not-applicable",
+  },
+] as const;
+
 export function buildCapabilities() {
   return {
     ok: true,
@@ -109,6 +168,9 @@ export function buildCapabilities() {
       "status",
       "skill",
       "capabilities",
+      "search",
+      "image",
+      "video",
     ],
     proxy: {
       host: PROXY_DEFAULT_HOST,
@@ -125,6 +187,7 @@ export function buildCapabilities() {
     },
     endpoints: ENDPOINTS,
     websocketEndpoints: WEBSOCKET_ENDPOINTS,
+    videoSurfaces: VIDEO_SURFACES,
     models: [
       {
         id: "grok-4.3",
@@ -221,7 +284,7 @@ export function buildCapabilities() {
         id: "grok-imagine-video",
         type: "video",
         use: "Video generation / edit / extension (async)",
-        input: ["text", "image"],
+        input: ["text", "image", "video"],
         output: ["video"],
         pricing: { perSecond: 0.05, unit: "USD", note: "480p or 720p" },
         aliases: [],
@@ -229,11 +292,12 @@ export function buildCapabilities() {
       {
         id: "grok-imagine-video-1.5-preview",
         type: "video",
-        use: "Video v1.5 (preview) — improved I2V, T2V via white-canvas workaround",
+        use: "Video v1.5 preview — official text/image → video; edit/extend not confirmed",
         input: ["text", "image"],
         output: ["video"],
-        pricing: { perSecond: 0.05, unit: "USD", note: "480p or 720p, T2V needs image injection" },
-        aliases: [],
+        pricing: { perSecond: 0.08, unit: "USD", note: "480p confirmed; 720p pricing appears separately in public announcements/docs" },
+        aliases: ["grok-imagine-video-1.5-2026-05-30"],
+        limitations: ["No confirmed video input/edit/extend support until smoke-tested."],
       },
     ],
     voiceModels: [
@@ -273,7 +337,7 @@ export function buildCapabilities() {
       streaming:
         "Use stream:true for responses/chat. The proxy passes SSE through verbatim.",
       video:
-        "Video gen is async: POST /v1/videos/generations → poll GET /v1/videos/{id} until status=done.",
+        "Video is async. Generation supports T2V/I2V/R2V; edit and extend use separate endpoints. REST canonical media shape is {url|file_id}; SDK video_url/mode fields are convenience wrappers.",
       models:
         "Use the bare model name or `<model>-latest` to auto-track the newest version; `<model>-<date>` pins a specific release.",
     },

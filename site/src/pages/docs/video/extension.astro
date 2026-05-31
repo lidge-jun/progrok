@@ -5,13 +5,20 @@ const title = 'Video Extension';
 
 <DocsLayout title={title}>
 <h1>Video Extension</h1>
-<p>Extend an existing video using <code>POST /v1/videos/extensions</code>. The <code>duration</code> parameter specifies the extension length only (not total video length).</p>
+<p>Extend an existing video using <code>POST /v1/videos/extensions</code>. The source is <code>video: &#123;url | file_id&#125;</code>. The <code>duration</code> parameter specifies the generated extension length only, not total video length.</p>
+<h2>CLI</h2>
+<pre><code>{`progrok video extend "camera slowly pulls back" --video ./clip.mp4 --duration 5
+progrok video extend "continue the motion" --video file_id:file-abc123 --duration 2`}</code></pre>
+<h2>API</h2>
 <pre><code>{`curl -X POST http://localhost:18645/v1/videos/extensions \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "video": "https://example.com/source.mp4",
+    "model": "grok-imagine-video",
+    "video": {"url": "https://example.com/source.mp4"},
     "prompt": "Continue the scene smoothly",
     "duration": 5
   }'`}</code></pre>
+<h2>Limits</h2>
+<p>The source video must be 2-15 seconds. The extension duration range is 2-10 seconds, default 6. Extension does not support custom <code>aspect_ratio</code> or <code>resolution</code>; output follows the input and is capped at 720p.</p>
 </DocsLayout>

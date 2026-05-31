@@ -194,12 +194,16 @@ progrok video "a terminal command expanding into a network diagram"
 # Image-to-video (animate a still image)
 progrok video "turn this interface into a smooth product demo" --image ./screen.png
 
+# Reference-to-video (guide the scene with up to 7 images, max 10s)
+progrok video "put this character in a quiet terminal workspace" \
+  --ref ./character.png --ref ./workspace.png --duration 6
+
 # Video editing — modify existing video, keep motion (grok-imagine-video only)
-progrok video edit "Make the background a sunset sky" --video https://vidgen.x.ai/.../clip.mp4
+progrok video edit "Make the background a sunset sky" --video ./clip.mp4
 
 # Video extension — continue from last frame (grok-imagine-video only)
 progrok video extend "Camera slowly pulls back revealing the full scene" \
-  --video https://vidgen.x.ai/.../clip.mp4 --duration 5
+  --video file_id:file-abc123 --duration 5
 ```
 
 ### Model constraints
@@ -207,17 +211,42 @@ progrok video extend "Camera slowly pulls back revealing the full scene" \
 | Model | T2V | I2V | Ref2V | Edit | Extend |
 |-------|:---:|:---:|:-----:|:----:|:------:|
 | `grok-imagine-video` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `grok-imagine-video-1.5-preview` | ⚠️¹ | ✅ | ✅ | ❌ | ❌ |
+| `grok-imagine-video-1.5-preview` | ✅ | ✅ | ⚠️ | ❌ | ❌ |
 
-¹ T2V not natively supported; progrok injects a white canvas as workaround.
+`grok-imagine-video-1.5-preview` is documented by xAI as text+image input to
+video output. Ref2V is exposed in public/API-adjacent surfaces and kept
+available in the CLI, but edit/extend video input is blocked until live smoke
+proves the 1.5 model accepts it.
+
+### Video API surface map
+
+| Surface | CLI | REST canonical shape | Status |
+| --- | --- | --- | --- |
+| Text-to-video | `progrok video "<prompt>"` | `prompt` only on `/v1/videos/generations` | Supported |
+| Image-to-video | `--image <file|url|data|file_id:id>` | `image: {url | file_id}` | Supported |
+| Reference-to-video | `--ref <input>` repeatable | `reference_images: [{url | file_id}]` | Supported, max 7 refs, max 10s |
+| Edit video | `progrok video edit ... --video <input>` | `video: {url | file_id}` on `/v1/videos/edits` | Supported on base model |
+| Extend video | `progrok video extend ... --video <input>` | `video: {url | file_id}` on `/v1/videos/extensions` | Supported on base model |
+| Duration alias | `--seconds <s>` | `seconds` instead of `duration` | OpenAI-compat alias |
+| Signed output target | `--upload-url <url>` | `output: {upload_url}` | Exposed for signed PUT destinations |
+
+`mode: "edit-video"` / `"extend-video"` / `"reference-to-video"` is a Vercel
+AI SDK provider option, not a direct REST body field. progrok uses the REST
+endpoint/field combination directly.
 
 ### Video editing/extension constraints
 
 - **Input**: `.mp4` (H.264/H.265/AV1), max 8.7s (edit) or 2–15s (extend)
-- **`--video`**: Must be an HTTPS URL (local file paths not supported yet)
+- **`--image`, `--ref`, `--video`**: local file, HTTPS URL, data URI, or
+  `file_id:<id>`
+- **Mutual exclusion**: `--image` and `--ref` cannot be combined; xAI returns
+  `400 Bad Request`
 - **Edit output**: Same duration/aspect/resolution as input (max 720p)
 - **Extend duration**: 2–10s (default 6s), added to original
 - **Model**: `grok-imagine-video` only — 1.5-preview returns "not supported"
+- **Unsupported knobs**: edit ignores/rejects duration/aspect/resolution;
+  extend ignores/rejects aspect/resolution; 1080p appears in one REST schema
+  but current model/docs/pricing pages only confirm 480p/720p
 
 Media commands call xAI endpoints directly with your OAuth session and poll async
 jobs until completion.
@@ -249,7 +278,7 @@ secret through the HTTP proxy and connect directly to xAI's WebSocket endpoint.
 | `grok-imagine-image` | Image generation and editing | - | Billed per image. |
 | `grok-imagine-image-quality` | Higher-quality image output | - | Billed per image. |
 | `grok-imagine-video` | Video: T2V, I2V, Ref2V, Edit, Extend | - | $0.05/sec (480p), $0.07/sec (720p). |
-| `grok-imagine-video-1.5-preview` | Video: I2V, Ref2V only (no Edit/Extend) | - | $0.08/sec (480p), $0.14/sec (720p). |
+| `grok-imagine-video-1.5-preview` | Video: T2V/I2V officially; Ref2V exposed but preview; no Edit/Extend | - | $0.08/sec (480p), $0.14/sec (720p). |
 
 Run the live metadata command before relying on a model in automation:
 

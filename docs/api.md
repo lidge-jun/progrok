@@ -168,10 +168,15 @@ curl http://127.0.0.1:18645/v1/videos/generations \
 | `prompt` | string | required for T2V/R2V; optional for I2V |
 | `model` | string | `grok-imagine-video` |
 | `duration` | integer | seconds, range `[1, 15]`, default `8` |
+| `seconds` | integer | OpenAI-compatible alias for `duration` |
 | `aspect_ratio` | enum | `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `3:2`, `2:3` |
-| `resolution` | enum | `480p` \| `720p` \| `1080p` |
+| `resolution` | enum | `480p` \| `720p`; `1080p` appears in one schema but is not model-page confirmed |
 | `image` | object | `{file_id \| url}` for image-to-video |
-| `reference_images[]` | array | style/content references for R2V |
+| `reference_images[]` | array | `{file_id \| url}` references for R2V; max 7 refs, max 10s |
+| `output.upload_url` | string | Optional signed PUT destination for the result |
+
+`image` and `reference_images` are mutually exclusive. SDK `mode` values such
+as `reference-to-video` are provider options, not REST body fields.
 
 ### POST /v1/videos/edits
 
@@ -180,7 +185,7 @@ H.264/H.265/AV1) and `prompt`.
 
 ### POST /v1/videos/extensions
 
-Generate a continuation. `video`, `prompt`, optional `duration` (1-10s,
+Generate a continuation. `video`, `prompt`, optional `duration` (2-10s,
 default 6).
 
 ### GET /v1/videos/{request_id}
@@ -445,7 +450,11 @@ progrok video "A cat playing piano" --duration 10 --resolution 720p
 # Image-to-video
 progrok video "Animate this photo" --image photo.jpg
 
-# Video 1.5 (preview, improved quality)
+# Reference-to-video (repeat --ref up to 7 times)
+progrok video "Put this character in a quiet terminal workspace" \
+  --ref character.png --ref workspace.png --duration 6
+
+# Video 1.5 (preview, official text/image input)
 progrok video "Epic scene" --model grok-imagine-video-1.5-preview
 
 # Save to specific path
@@ -460,33 +469,26 @@ Options:
 - `--duration <s>` — 1-15 seconds (default: 5)
 - `--aspect <ratio>` — 16:9 (default), 9:16, 1:1, 4:3, 3:4, 3:2, 2:3
 - `--resolution <r>` — 480p (default) or 720p
-- `--image <path>` — source image for image-to-video
+- `--image <input>` — source image for image-to-video; file, URL, data URI, or `file_id:<id>`
+- `--ref <input>` — reference image for R2V; repeatable, max 7, mutually exclusive with `--image`
+- `--seconds <s>` — send OpenAI-compatible `seconds` instead of `duration`
+- `--upload-url <url>` — send `output.upload_url`
 - `--output <path>` — output file path
 - `--timeout <s>` — polling timeout (default: 600)
 - `--json` — structured JSON output
 
-Note: Video 1.5 does not support T2V natively. The CLI automatically injects a
-white canvas workaround when using 1.5 without --image.
+Video edit/extend subcommands accept `--video <file|url|data|file_id:id>`.
+They intentionally block `grok-imagine-video-1.5-preview` until live API smoke
+confirms that preview model accepts video input.
 
 ### progrok image
-
-Generate or edit images directly.
 
 ```bash
 # Text-to-image
 progrok image "A sunset over mountains"
 
-# High quality
-progrok image "prompt" --model grok-imagine-image-quality --resolution 2k
-
 # Edit with reference image
 progrok image "Make it winter" --ref photo.jpg
-
-# Multiple references (max 3)
-progrok image "Combine these styles" --ref a.jpg --ref b.jpg
-
-# Multiple images
-progrok image "prompt" --n 4
 ```
 
 Options:
@@ -495,5 +497,4 @@ Options:
 - `--resolution <r>` — 1k (default) or 2k
 - `--ref <path>` — reference image for editing (repeatable, max 3)
 - `--output <path>` — output file path
-- `--n <count>` — number of images (default: 1)
 - `--json` — structured JSON output

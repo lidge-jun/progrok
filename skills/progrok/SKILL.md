@@ -101,11 +101,14 @@ progrok video "Ocean waves crashing on rocks" --duration 8 --resolution 720p
 # Image-to-video
 progrok video "Animate this scene" --image photo.jpg --duration 10
 
+# Reference-to-video (repeat --ref up to 7 times; max 10s)
+progrok video "Use this character and outfit" --ref character.png --ref outfit.png --duration 6
+
 # Video editing (real V2V — modify existing video, keep motion)
-progrok video edit "Make the water glow neon blue" --video https://vidgen.x.ai/.../clip.mp4
+progrok video edit "Make the water glow neon blue" --video ./clip.mp4
 
 # Video extension (continue from last frame)
-progrok video extend "Camera slowly pulls back" --video https://vidgen.x.ai/.../clip.mp4 --duration 5
+progrok video extend "Camera slowly pulls back" --video file_id:file-abc123 --duration 5
 ```
 
 **API endpoints** (via proxy at 127.0.0.1:18645):
@@ -115,6 +118,11 @@ curl -s http://127.0.0.1:18645/v1/videos/generations \
   -H "Content-Type: application/json" \
   -d '{"model": "grok-imagine-video", "prompt": "Ocean waves", "duration": 8, "resolution": "720p"}'
 # → {"request_id": "abc-123"}
+
+# R2V: REST selects mode from reference_images; do not send a mode field
+curl -s http://127.0.0.1:18645/v1/videos/generations \
+  -H "Content-Type: application/json" \
+  -d '{"model": "grok-imagine-video", "prompt": "Runway shot", "reference_images": [{"file_id": "file-abc123"}], "duration": 6}'
 
 # Edit (V2V): POST /v1/videos/edits — grok-imagine-video only
 curl -s http://127.0.0.1:18645/v1/videos/edits \
@@ -133,7 +141,10 @@ curl http://127.0.0.1:18645/v1/videos/abc-123
 
 **Model constraints:**
 - `grok-imagine-video`: T2V, I2V, Ref2V, Edit, Extend — all modes
-- `grok-imagine-video-1.5-preview`: I2V, Ref2V only (no T2V, no Edit, no Extend)
+- `grok-imagine-video-1.5-preview`: official T2V/I2V preview; Ref2V exposed in public/API-adjacent surfaces; no Edit/Extend until smoke proves video input
+- Media refs: `url`, `file_id`, data URI, or local file through the CLI
+- REST has no `mode` field; SDK mode strings are provider options only
+- `image` + `reference_images` is invalid
 - Edit/Extend input: mp4, H.264/H.265/AV1, max 8.7s (edit) / 2-15s (extend)
 - Edit output inherits input duration/aspect/resolution (max 720p)
 - Extend duration: 2-10s added to original

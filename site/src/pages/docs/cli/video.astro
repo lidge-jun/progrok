@@ -5,16 +5,26 @@ const title = 'progrok video';
 
 <DocsLayout title={title}>
 <h1>progrok video</h1>
-<p>Generate videos from text or images.</p>
+<p>Generate, edit, or extend Grok Imagine videos through the same OAuth session used by the proxy. The command hides async polling and accepts local files, URLs, data URIs, or <code>file_id:&lt;id&gt;</code> media references.</p>
 <pre><code>{`progrok video "A cat walking on the moon"
-progrok video --image ./photo.png "Animate this scene"
-progrok video --model 1.5-preview "Cinematic drone shot of a city"`}</code></pre>
+progrok video "Animate this scene" --image ./photo.png
+progrok video "Use these references" --ref ./person.png --ref ./outfit.png --duration 6
+progrok video "Cinematic drone shot of a city" --model grok-imagine-video-1.5-preview
+progrok video edit "make the light warmer" --video ./clip.mp4
+progrok video extend "camera pulls back" --video file_id:file-abc123 --duration 5`}</code></pre>
 <h2>Options</h2>
 <table>
 <tr><th>Flag</th><th>Description</th></tr>
-<tr><td><code>--image</code></td><td>Source image for image-to-video (I2V)</td></tr>
-<tr><td><code>--model</code></td><td>Model version (default: latest, or <code>1.5-preview</code>)</td></tr>
-<tr><td><code>--output, -o</code></td><td>Output file path</td></tr>
-<tr><td><code>--duration</code></td><td>Video duration in seconds</td></tr>
+<tr><td><code>--image</code></td><td>Source image for image-to-video. File, URL, data URI, or <code>file_id:&lt;id&gt;</code>.</td></tr>
+<tr><td><code>--ref</code></td><td>Reference image for reference-to-video. Repeatable up to 7 times; cannot be combined with <code>--image</code>.</td></tr>
+<tr><td><code>--video</code></td><td>Source video for edit/extend. File, URL, data URI, or <code>file_id:&lt;id&gt;</code>.</td></tr>
+<tr><td><code>--model</code></td><td><code>grok-imagine-video</code> by default; <code>grok-imagine-video-1.5-preview</code> for T2V/I2V preview generation.</td></tr>
+<tr><td><code>--output</code></td><td>Output file path for downloaded MP4.</td></tr>
+<tr><td><code>--duration</code></td><td>Generation duration 1-15s; reference-to-video max 10s; extension duration 2-10s.</td></tr>
+<tr><td><code>--seconds</code></td><td>Send the OpenAI-compatible <code>seconds</code> alias instead of <code>duration</code>.</td></tr>
+<tr><td><code>--upload-url</code></td><td>Send <code>output.upload_url</code> when you have a signed destination URL.</td></tr>
+<tr><td><code>--json</code></td><td>Print the final xAI response instead of downloading the MP4.</td></tr>
 </table>
+<h2>REST vs SDK Names</h2>
+<p>REST does not use a <code>mode</code> field. Vercel AI SDK mode strings such as <code>edit-video</code>, <code>extend-video</code>, and <code>reference-to-video</code> map to different endpoints or fields in REST. progrok exposes the REST-native shape.</p>
 </DocsLayout>
