@@ -9,21 +9,17 @@ import { after, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 
-import * as constants from "../src/auth/constants.js";
-
-const tempBase = mkdtempSync(join(tmpdir(), "progrok-test-"));
+const tempBase = mkdtempSync(join(os.tmpdir(), "progrok-test-"));
 const configDir = join(tempBase, ".progrok");
 const authFile = join(configDir, "auth.json");
 const configFile = join(configDir, "config.json");
 
-mock.module("../src/auth/constants.js", {
+mock.module("node:os", {
   namedExports: {
-    ...constants,
-    CONFIG_DIR: configDir,
-    AUTH_FILE: authFile,
-    CONFIG_FILE: configFile,
+    ...os,
+    homedir: () => tempBase,
   },
 });
 
@@ -57,6 +53,8 @@ function makeJwt(payloadData: Record<string, unknown>): string {
 }
 
 it("validates auth constants and stateful auth utilities sequentially", async () => {
+  const constants = await import("../src/auth/constants.js");
+
   assert.equal(
     constants.XAI_OAUTH_CLIENT_ID,
     "b1a00492-073a-47ea-816f-4c329264a828",
