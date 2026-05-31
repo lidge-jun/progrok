@@ -143,6 +143,16 @@
   .docs-sidebar {
     position: relative;
     top: auto;
-    max-height: none;
+    max-height: 320px;
+  }
+}
+
+@media (max-width: 560px) {
+  .docs-shell {
+    padding-top: 1rem;
+  }
+
+  .docs-sidebar {
+    max-height: 280px;
   }
 }
