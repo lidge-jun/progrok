@@ -140,8 +140,31 @@ const VIDEO_SURFACES = [
     id: "conflicting-1080p",
     endpoint: "POST /v1/videos/generations",
     cli: "progrok video <prompt> --resolution 1080p",
-    status: "conflicting-docs-treat-unsupported-until-smoked",
-    smoke: "required-negative-or-positive",
+    status: "live-smoke-failed-for-current-team",
+    error: "1080p video resolution is not available for your team.",
+    smoke: "failed-negative-confirmed",
+  },
+  {
+    id: "image_url-alias",
+    endpoint: "POST /v1/videos/generations",
+    status: "live-smoke-passed",
+    note: "REST accepted image_url and completed I2V; progrok CLI still emits canonical image: {url|file_id}.",
+    smoke: "passed",
+  },
+  {
+    id: "video_url-alias",
+    endpoint: "POST /v1/videos/edits",
+    status: "live-smoke-failed",
+    note: "REST returned 422 missing field video; use canonical video: {url|file_id}.",
+    smoke: "failed-negative-confirmed",
+  },
+  {
+    id: "output.upload_url",
+    endpoint: "POST /v1/videos/generations",
+    cli: "progrok video <prompt> --upload-url <signed-put-url>",
+    status: "live-smoke-passed",
+    note: "Result video.url echoed the provided upload URL.",
+    smoke: "passed",
   },
   {
     id: "video-1.5-preview",
@@ -154,9 +177,9 @@ const VIDEO_SURFACES = [
   {
     id: "sdk-mode-field",
     endpoint: "n/a",
-    status: "not-rest-field",
-    note: "Vercel AI SDK mode values edit-video/extend-video/reference-to-video are provider options, not direct REST body fields.",
-    smoke: "not-applicable",
+    status: "not-rest-selector",
+    note: "REST accepted a stray mode field but ignored it; Vercel AI SDK mode values are provider options that map to endpoints/fields.",
+    smoke: "passed-as-ignored-field",
   },
 ] as const;
 

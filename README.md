@@ -231,8 +231,22 @@ progrok video extend "Camera slowly pulls back revealing the full scene" \
 | Signed output target | `--upload-url <url>` | `output: {upload_url}` | Exposed for signed PUT destinations |
 
 `mode: "edit-video"` / `"extend-video"` / `"reference-to-video"` is a Vercel
-AI SDK provider option, not a direct REST body field. progrok uses the REST
-endpoint/field combination directly.
+AI SDK provider option, not a direct REST selector. Live REST smoke accepted a
+stray `mode` field but treated the request as ordinary T2V.
+
+### Live smoke verdicts
+
+| Probe | Result |
+| --- | --- |
+| T2V, I2V, R2V on `grok-imagine-video` | Passed, `status: done` |
+| Edit/extend by source URL | Passed, `status: done` |
+| `file_id` image/video input | Passed for I2V, R2V, edit, and extend |
+| `seconds` alias | Passed |
+| `image_url` REST alias | Passed |
+| `output.upload_url` | Passed with a public PUT endpoint; result `video.url` equals the upload URL |
+| `video_url` REST alias | Failed with `422 missing field video`; use `video: {url}` |
+| `1080p` | Failed for this team: `1080p video resolution is not available for your team` |
+| `grok-imagine-video-1.5-preview` | I2V passed; prompt-only T2V and Ref2V failed |
 
 ### Video editing/extension constraints
 

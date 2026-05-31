@@ -1,0 +1,30 @@
+---
+import DocsLayout from '../../../layouts/DocsLayout.astro';
+const title = 'Video Smoke Matrix';
+---
+
+<DocsLayout title={title}>
+<h1>Video Smoke Matrix</h1>
+<p>This page records the live OAuth API verdicts progrok uses for the underdocumented Grok Imagine video surface. The canonical REST shape is preferred even when SDKs expose convenience fields.</p>
+
+<table>
+<thead><tr><th>Surface</th><th>Verdict</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>T2V</td><td>Passed</td><td><code>grok-imagine-video</code> prompt-only generation returned <code>status: done</code>.</td></tr>
+<tr><td>I2V URL/data/local file</td><td>Passed</td><td>CLI local files are encoded as data URIs and sent as <code>image: &#123;url&#125;</code>.</td></tr>
+<tr><td>R2V URL/data/local file</td><td>Passed</td><td><code>reference_images</code> works on the base model; max 7 refs, max 10s.</td></tr>
+<tr><td>Image <code>file_id</code></td><td>Passed</td><td>Uploaded image IDs worked for I2V and R2V.</td></tr>
+<tr><td>Video <code>file_id</code></td><td>Passed</td><td>Uploaded MP4 IDs worked for edit and extend.</td></tr>
+<tr><td>Edit by URL</td><td>Passed</td><td><code>video: &#123;url&#125;</code> on <code>/v1/videos/edits</code>.</td></tr>
+<tr><td>Extend by URL</td><td>Passed</td><td><code>video: &#123;url&#125;</code> on <code>/v1/videos/extensions</code>.</td></tr>
+<tr><td><code>seconds</code></td><td>Passed</td><td>OpenAI-compatible duration alias completed.</td></tr>
+<tr><td><code>image_url</code></td><td>Passed</td><td>REST accepted the alias, but progrok emits canonical <code>image: &#123;url | file_id&#125;</code>.</td></tr>
+<tr><td><code>video_url</code></td><td>Failed</td><td>REST edit returned <code>422 missing field video</code>; use <code>video: &#123;url | file_id&#125;</code>.</td></tr>
+<tr><td><code>output.upload_url</code></td><td>Passed</td><td>A public PUT endpoint completed and the result <code>video.url</code> equaled the supplied upload URL.</td></tr>
+<tr><td><code>mode</code> body field</td><td>Ignored</td><td>REST accepted a stray <code>mode</code> field and treated the request as ordinary T2V.</td></tr>
+<tr><td>1080p</td><td>Failed</td><td>xAI returned <code>1080p video resolution is not available for your team</code>.</td></tr>
+<tr><td>1.5 preview I2V</td><td>Passed</td><td><code>grok-imagine-video-1.5-preview</code> works with <code>--image</code>.</td></tr>
+<tr><td>1.5 preview T2V / R2V</td><td>Failed</td><td>Prompt-only T2V and <code>reference_images</code> returned xAI 400 errors.</td></tr>
+</tbody>
+</table>
+</DocsLayout>
