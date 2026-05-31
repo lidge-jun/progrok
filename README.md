@@ -1,12 +1,26 @@
 # progrok
 
-Use xAI **Grok** models for free via an OAuth proxy — no API key required.
+[![npm version](https://img.shields.io/npm/v/progrok.svg)](https://www.npmjs.com/package/progrok)
+[![license: MIT](https://img.shields.io/badge/license-MIT-16a085.svg)](./LICENSE)
+[![docs](https://img.shields.io/badge/docs-GitHub%20Pages-4cc9a6.svg)](https://lidge-jun.github.io/progrok/)
+[![node](https://img.shields.io/badge/node-%3E%3D18-2d3748.svg)](./package.json)
 
-`progrok` logs in with your xAI account (the same OAuth flow as the Grok web
-app) and runs a local, OpenAI-compatible proxy that injects your token into
-every request. Point any OpenAI SDK or client at it and call Grok directly.
+Use your xAI Grok OAuth session from OpenAI-compatible clients.
 
-> Requires an active **SuperGrok** subscription.
+`progrok` signs in with your xAI account, stores a refreshable local OAuth
+session, and runs a local proxy that forwards `/v1/*` requests to `api.x.ai`.
+Point the OpenAI SDK, curl scripts, or agent tools at `127.0.0.1:18645` and call
+Grok without managing an xAI API key.
+
+> Requires an active SuperGrok subscription. progrok does not bypass xAI account
+> access, quotas, pricing, or product limits.
+
+## Links
+
+- Live docs: [lidge-jun.github.io/progrok](https://lidge-jun.github.io/progrok/)
+- Quick start: [lidge-jun.github.io/progrok/docs/quickstart](https://lidge-jun.github.io/progrok/docs/quickstart)
+- npm: [npmjs.com/package/progrok](https://www.npmjs.com/package/progrok)
+- Repository: [github.com/lidge-jun/progrok](https://github.com/lidge-jun/progrok)
 
 ## Install
 
@@ -17,32 +31,46 @@ npm install -g progrok
 ## Quick Start
 
 ```bash
-# 1. Log in with your xAI account (one time)
-progrok login                  # or: progrok login --device-code  (SSH/remote)
+# 1. Log in with your xAI account.
+progrok login
 
-# 2. Start the proxy (127.0.0.1:18645)
+# SSH or remote machine:
+progrok login --device-code
+
+# 2. Start the OpenAI-compatible local proxy.
 progrok proxy
 
-# 3. Use from any OpenAI-compatible client
+# 3. Call Grok through localhost.
 curl http://127.0.0.1:18645/v1/chat/completions \
   -H "Authorization: Bearer anything" \
   -H "Content-Type: application/json" \
-  -d '{"model": "grok-4.3", "messages": [{"role": "user", "content": "Hello"}]}'
+  -d '{"model":"grok-4.3","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-The proxy replaces whatever `Authorization` header you send with your stored
-OAuth token, so the bearer value can be any placeholder.
+The proxy replaces the placeholder `Authorization` value with your stored xAI
+OAuth bearer token before forwarding the request. The API key value in your
+client can be any non-empty placeholder.
 
-### With the OpenAI SDK
+## OpenAI SDK Example
 
 ```python
 from openai import OpenAI
-client = OpenAI(base_url="http://127.0.0.1:18645/v1", api_key="anything")
-print(client.chat.completions.create(
+
+client = OpenAI(
+    base_url="http://127.0.0.1:18645/v1",
+    api_key="anything",
+)
+
+result = client.chat.completions.create(
     model="grok-4.3",
-    messages=[{"role": "user", "content": "Hello"}],
-).choices[0].message.content)
+    messages=[{"role": "user", "content": "Explain MCP in 5 bullets"}],
+)
+
+print(result.choices[0].message.content)
 ```
+
+Shell configuration for tools that respect OpenAI-compatible environment
+variables:
 
 ```bash
 export OPENAI_BASE_URL=http://127.0.0.1:18645/v1
@@ -51,82 +79,164 @@ export OPENAI_API_KEY=anything
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `progrok login` | OAuth login via browser |
-| `progrok login --device-code` | Login via device code (SSH/remote) |
-| `progrok search <query> [--web\|--x] [--json]` | Web + X search via Grok — AI summary + citations (no proxy) |
-| `progrok search <query> --reasoning <effort>` | Search with reasoning effort (none/low/medium/high/xhigh) |
-| `progrok image <prompt> [--ref img] [--json]` | Generate or edit images (no proxy) |
-| `progrok video <prompt> [--image src] [--json]` | Generate video — T2V or I2V with polling (no proxy) |
-| `progrok proxy` | Start the OpenAI-compatible proxy (port 18645) |
-| `progrok chat` | Open the web chat UI (port 18646) |
-| `progrok models [--detail]` | List models (`--detail` adds pricing + aliases) |
-| `progrok capabilities [--json]` | Print the full capability surface |
-| `progrok status` | Show auth status |
-| `progrok logout` | Remove stored credentials |
+| Command | Use it for |
+| --- | --- |
+| `progrok login` | Browser OAuth login with your xAI account. |
+| `progrok login --device-code` | OAuth login for SSH, CI shells, or remote machines. |
+| `progrok logout` | Remove stored local credentials. |
+| `progrok status` | Check whether a local OAuth session exists. |
+| `progrok proxy` | Start the local OpenAI-compatible proxy on `127.0.0.1:18645`. |
+| `progrok chat` | Open the local browser chat UI on `127.0.0.1:18646`. |
+| `progrok models --detail` | List model aliases, pricing, context windows, and media models. |
+| `progrok search <query>` | Search web and X sources through Grok Responses tools. |
+| `progrok search <query> --web` | Restrict search to web sources. |
+| `progrok search <query> --x` | Restrict search to X sources. |
+| `progrok search <query> --reasoning high` | Add reasoning effort to a search request. |
+| `progrok image <prompt>` | Generate an Imagine image. |
+| `progrok image <prompt> --ref ./input.png` | Edit or compose from a reference image. |
+| `progrok video <prompt>` | Submit a text-to-video job and poll until completion. |
+| `progrok video <prompt> --image ./input.png` | Submit an image-to-video job. |
+| `progrok capabilities --json` | Print machine-readable command, model, and endpoint metadata. |
+| `progrok skill` | Print an agent-oriented usage guide. |
 
-## What You Can Call
+## Native Search
 
-The proxy forwards **every** HTTP `/v1/*` path to `api.x.ai`, so the entire xAI
-API surface is available:
+`progrok search` calls xAI's Responses API directly with `web_search` and
+`x_search` tools. It does not require the proxy process to be running.
 
-- **Chat & Responses** — `/v1/chat/completions`, `/v1/responses` (tools,
-  reasoning, citations, structured output, stateful conversations), context
-  compaction, deferred completions
-- **Images (Imagine)** — generation + editing / multi-image compose
-- **Videos (Imagine)** — text/image/reference-to-video, edit, extend (async)
-- **Voice** — text-to-speech, speech-to-text, custom voice cloning, ephemeral
-  Realtime tokens
-- **Tools** — `web_search`, `x_search`, `code_interpreter`,
-  `collections_search` (RAG), remote `mcp`, custom `function` calling
-- **Batches, Files, Collections search, Models, Tokenizer**
+```bash
+progrok search "latest Astro release"
+progrok search --web "Node.js 22 features"
+progrok search --x "grok API launch"
+progrok search --json "rust async traits"
+progrok search --model grok-4.20-multi-agent-0309 --reasoning xhigh \
+  "compare current open-source browser automation tools"
+```
 
-See **[docs/api.md](./docs/api.md)** for the full request/response contracts, or
-run `progrok capabilities --json` for live metadata.
+Reasoning effort values: `none`, `low`, `medium`, `high`, `xhigh`.
 
-📖 **Full documentation:** [lidge-jun.github.io/progrok](https://lidge-jun.github.io/progrok/)
+## Image and Video
+
+Image generation:
+
+```bash
+progrok image "a crisp terminal UI product shot for a CLI called progrok"
+progrok image "make this diagram cleaner" --ref ./diagram.png --output ./out
+```
+
+Video generation:
+
+```bash
+progrok video "a terminal command expanding into a network diagram"
+progrok video "turn this interface into a smooth product demo" --image ./screen.png
+progrok video "short launch animation" --model grok-imagine-video-1.5-preview
+```
+
+Media commands call xAI endpoints directly with your OAuth session and poll async
+jobs until completion.
+
+## Proxy Coverage
+
+The proxy forwards every HTTP `/v1/*` path to `api.x.ai`, so it can cover the
+xAI API surface available to your account:
+
+- Chat Completions and Responses
+- reasoning, citations, structured output, and tool calls
+- image generation and editing
+- video generation, editing, extension, and polling
+- text-to-speech, speech-to-text, and realtime client-secret minting
+- files, batches, tokenizer, models, and collection search
+
+WebSocket endpoints are not proxied. For realtime voice streams, mint a client
+secret through the HTTP proxy and connect directly to xAI's WebSocket endpoint.
 
 ## Models
 
-| Model | Best for | Context | Price (in / out per 1M) |
-|-------|----------|---------|-------------------------|
-| `grok-4.3` *(default)* | Chat, agentic tools, search, vision | 1M | $1.25 / $2.50 |
-| `grok-build-0.1` | Fast agentic coding | 256K | $1.00 / $2.00 |
-| `grok-4.20-0309-reasoning` | Deep reasoning (legacy) | 200K+ | $1.25 / $2.50 |
-| `grok-4.20-0309-non-reasoning` | Fast, no thinking (legacy) | 200K+ | $1.25 / $2.50 |
-| `grok-4.20-multi-agent-0309` | Deep research, 4/16 agents (beta) | 200K+ | $1.25 / $2.50 |
-| `grok-imagine-image` | Image gen / edit | — | $0.02 / image |
-| `grok-imagine-image-quality` | High-quality image gen / edit | — | $0.04 / image |
-| `grok-imagine-video` | Video gen / edit / extend | — | $0.05 / sec |
-| `grok-imagine-video-1.5-preview` | Video v1.5 (improved I2V, T2V via workaround) | — | $0.05 / sec |
+| Model | Best for | Context | Notes |
+| --- | --- | --- | --- |
+| `grok-4.3` | Default chat, tools, search, vision | 1M | Also available through common Grok aliases. |
+| `grok-build-0.1` | Fast agentic coding | 256K | Good default for coding tools. |
+| `grok-4.20-0309-reasoning` | Deep reasoning | 200K+ | Legacy reasoning model. |
+| `grok-4.20-0309-non-reasoning` | Lower-latency text | 200K+ | Legacy non-reasoning model. |
+| `grok-4.20-multi-agent-0309` | Deep research | 200K+ | Supports high and xhigh effort. |
+| `grok-imagine-image` | Image generation and editing | - | Billed per image. |
+| `grok-imagine-image-quality` | Higher-quality image output | - | Billed per image. |
+| `grok-imagine-video` | Video generation and editing | - | Billed per second. |
+| `grok-imagine-video-1.5-preview` | Video v1.5 preview | - | Improved image-to-video behavior. |
 
-> Cached input is $0.20/1M; above the 200K-token long-context threshold, chat
-> rates double. Live search costs $25 / 1K sources.
+Run the live metadata command before relying on a model in automation:
 
-`grok-4.3` also answers to `grok-latest`, `grok-4`, `grok-3`, and many other
-aliases. Use `progrok models --detail` for the live list with pricing.
+```bash
+progrok models --detail
+progrok capabilities --json
+```
 
 ## How It Works
 
+```text
+OpenAI client
+  -> http://127.0.0.1:18645/v1/*
+  -> progrok proxy injects refreshed OAuth bearer token
+  -> https://api.x.ai/v1/*
 ```
-OpenAI client ──HTTP──▶ progrok proxy (127.0.0.1:18645) ──HTTPS+OAuth──▶ api.x.ai
-                          └─ injects your refreshed OAuth bearer token
+
+Credentials are stored locally at `~/.progrok/auth.json` and refreshed before
+expiry. Treat that file like any other account credential.
+
+## Security Notes
+
+- The proxy binds to localhost by default.
+- Do not expose the proxy port to a public network without adding your own access
+  controls.
+- The placeholder API key sent by OpenAI-compatible clients is ignored by the
+  proxy and replaced with your xAI OAuth token.
+- `progrok logout` removes the local credential file.
+- Requests are forwarded to xAI. Sensitive prompt data should be handled under
+  the same policy you use for direct xAI API usage.
+
+## Troubleshooting
+
+### `progrok status` says no session
+
+Run `progrok login` again. On remote machines, use `progrok login --device-code`.
+
+### The proxy starts but clients fail
+
+Check that the client points to:
+
+```bash
+http://127.0.0.1:18645/v1
 ```
 
-Tokens are stored in `~/.progrok/auth.json` and auto-refreshed ~2 minutes before
-expiry.
+Also check that the client sends a non-empty API key placeholder.
 
-## Limitations
+### Port 18645 is already in use
 
-- **WebSocket endpoints are not proxied** — the Realtime Voice Agent and
-  streaming TTS/STT (`wss://api.x.ai/v1/...`) need a direct connection. Mint a
-  token with `POST /v1/realtime/client_secrets` (proxied) and connect from the
-  browser.
-- **Collection management** (`management-api.x.ai`) requires a Management API key
-  and is not routed through the proxy; collection *search* is.
+Stop the existing process or start the proxy on another port if your version
+supports a port flag. Then update `OPENAI_BASE_URL` accordingly.
+
+### A model returns 404 or 400
+
+Run:
+
+```bash
+progrok models --detail
+```
+
+Model aliases and preview names can change. Use the live list before scripting a
+long-running workflow.
+
+### Search, image, or video commands fail
+
+These commands call xAI directly with OAuth and may be subject to product access,
+rate limits, quota, and account capability. Start with:
+
+```bash
+progrok status
+progrok capabilities --json
+```
 
 ## License
 
-MIT — see [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for OAuth client
+MIT. See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for OAuth client
 attribution.
