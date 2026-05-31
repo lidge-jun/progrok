@@ -144,6 +144,14 @@ const VIDEO_SURFACES = [
     smoke: "required-negative-or-positive",
   },
   {
+    id: "video-1.5-preview",
+    endpoint: "POST /v1/videos/generations",
+    cli: "progrok video <prompt> --model grok-imagine-video-1.5-preview --image <input>",
+    status: "live-smoked-i2v-only",
+    unsupported: ["prompt-only T2V", "reference_images", "video edit", "video extend"],
+    smoke: "passed-i2v-failed-native-t2v-and-r2v",
+  },
+  {
     id: "sdk-mode-field",
     endpoint: "n/a",
     status: "not-rest-field",
@@ -292,12 +300,12 @@ export function buildCapabilities() {
       {
         id: "grok-imagine-video-1.5-preview",
         type: "video",
-        use: "Video v1.5 preview — official text/image → video; edit/extend not confirmed",
+        use: "Video v1.5 preview — live-smoked I2V only",
         input: ["text", "image"],
         output: ["video"],
         pricing: { perSecond: 0.08, unit: "USD", note: "480p confirmed; 720p pricing appears separately in public announcements/docs" },
         aliases: ["grok-imagine-video-1.5-2026-05-30"],
-        limitations: ["No confirmed video input/edit/extend support until smoke-tested."],
+        limitations: ["Prompt-only T2V and reference_images returned xAI 400 in live smoke.", "No confirmed video input/edit/extend support."],
       },
     ],
     voiceModels: [

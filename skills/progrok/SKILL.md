@@ -141,7 +141,7 @@ curl http://127.0.0.1:18645/v1/videos/abc-123
 
 **Model constraints:**
 - `grok-imagine-video`: T2V, I2V, Ref2V, Edit, Extend — all modes
-- `grok-imagine-video-1.5-preview`: official T2V/I2V preview; Ref2V exposed in public/API-adjacent surfaces; no Edit/Extend until smoke proves video input
+- `grok-imagine-video-1.5-preview`: live-smoked I2V only; prompt-only T2V and Ref2V return xAI 400 errors
 - Media refs: `url`, `file_id`, data URI, or local file through the CLI
 - REST has no `mode` field; SDK mode strings are provider options only
 - `image` + `reference_images` is invalid

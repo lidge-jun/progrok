@@ -454,8 +454,8 @@ progrok video "Animate this photo" --image photo.jpg
 progrok video "Put this character in a quiet terminal workspace" \
   --ref character.png --ref workspace.png --duration 6
 
-# Video 1.5 (preview, official text/image input)
-progrok video "Epic scene" --model grok-imagine-video-1.5-preview
+# Video 1.5 preview (live-smoked I2V only)
+progrok video "Animate this scene" --model grok-imagine-video-1.5-preview --image photo.jpg
 
 # Save to specific path
 progrok video "prompt" --output my-video.mp4
@@ -477,9 +477,9 @@ Options:
 - `--timeout <s>` — polling timeout (default: 600)
 - `--json` — structured JSON output
 
-Video edit/extend subcommands accept `--video <file|url|data|file_id:id>`.
-They intentionally block `grok-imagine-video-1.5-preview` until live API smoke
-confirms that preview model accepts video input.
+Video 1.5 live smoke passes I2V, but prompt-only T2V and `reference_images`
+return upstream 400 errors. Edit/extend also block 1.5 until xAI exposes video
+input for that preview model.
 
 ### progrok image
 

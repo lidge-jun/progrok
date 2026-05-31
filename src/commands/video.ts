@@ -207,6 +207,9 @@ async function generateAction(prompt: string, opts: VideoOptions): Promise<void>
     if (duration < 1 || duration > 15) {
       throw new Error("Video generation duration must be 1-15 seconds.");
     }
+    if (opts.model?.includes("1.5") && !opts.image) {
+      throw new Error("grok-imagine-video-1.5-preview live-smoke supports image-to-video only; prompt-only T2V and reference_images are rejected by xAI.");
+    }
 
     const body: Record<string, unknown> = {
       model: opts.model ?? DEFAULT_VIDEO_MODEL,

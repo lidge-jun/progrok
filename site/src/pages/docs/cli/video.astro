@@ -9,7 +9,7 @@ const title = 'progrok video';
 <pre><code>{`progrok video "A cat walking on the moon"
 progrok video "Animate this scene" --image ./photo.png
 progrok video "Use these references" --ref ./person.png --ref ./outfit.png --duration 6
-progrok video "Cinematic drone shot of a city" --model grok-imagine-video-1.5-preview
+progrok video "animate this scene" --model grok-imagine-video-1.5-preview --image ./photo.png
 progrok video edit "make the light warmer" --video ./clip.mp4
 progrok video extend "camera pulls back" --video file_id:file-abc123 --duration 5`}</code></pre>
 <h2>Options</h2>
@@ -18,7 +18,7 @@ progrok video extend "camera pulls back" --video file_id:file-abc123 --duration 
 <tr><td><code>--image</code></td><td>Source image for image-to-video. File, URL, data URI, or <code>file_id:&lt;id&gt;</code>.</td></tr>
 <tr><td><code>--ref</code></td><td>Reference image for reference-to-video. Repeatable up to 7 times; cannot be combined with <code>--image</code>.</td></tr>
 <tr><td><code>--video</code></td><td>Source video for edit/extend. File, URL, data URI, or <code>file_id:&lt;id&gt;</code>.</td></tr>
-<tr><td><code>--model</code></td><td><code>grok-imagine-video</code> by default; <code>grok-imagine-video-1.5-preview</code> for T2V/I2V preview generation.</td></tr>
+<tr><td><code>--model</code></td><td><code>grok-imagine-video</code> by default; <code>grok-imagine-video-1.5-preview</code> is live-smoked as I2V only.</td></tr>
 <tr><td><code>--output</code></td><td>Output file path for downloaded MP4.</td></tr>
 <tr><td><code>--duration</code></td><td>Generation duration 1-15s; reference-to-video max 10s; extension duration 2-10s.</td></tr>
 <tr><td><code>--seconds</code></td><td>Send the OpenAI-compatible <code>seconds</code> alias instead of <code>duration</code>.</td></tr>

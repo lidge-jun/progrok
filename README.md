@@ -211,12 +211,12 @@ progrok video extend "Camera slowly pulls back revealing the full scene" \
 | Model | T2V | I2V | Ref2V | Edit | Extend |
 |-------|:---:|:---:|:-----:|:----:|:------:|
 | `grok-imagine-video` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `grok-imagine-video-1.5-preview` | ✅ | ✅ | ⚠️ | ❌ | ❌ |
+| `grok-imagine-video-1.5-preview` | ❌¹ | ✅ | ❌¹ | ❌ | ❌ |
 
-`grok-imagine-video-1.5-preview` is documented by xAI as text+image input to
-video output. Ref2V is exposed in public/API-adjacent surfaces and kept
-available in the CLI, but edit/extend video input is blocked until live smoke
-proves the 1.5 model accepts it.
+¹ xAI's model page describes text+image input, but live OAuth smoke returned
+`Text-to-video is not supported for this model` for prompt-only T2V and
+``reference_images` is not supported for this model` for Ref2V. progrok treats
+1.5-preview as I2V-only until the API changes.
 
 ### Video API surface map
 
@@ -278,7 +278,7 @@ secret through the HTTP proxy and connect directly to xAI's WebSocket endpoint.
 | `grok-imagine-image` | Image generation and editing | - | Billed per image. |
 | `grok-imagine-image-quality` | Higher-quality image output | - | Billed per image. |
 | `grok-imagine-video` | Video: T2V, I2V, Ref2V, Edit, Extend | - | $0.05/sec (480p), $0.07/sec (720p). |
-| `grok-imagine-video-1.5-preview` | Video: T2V/I2V officially; Ref2V exposed but preview; no Edit/Extend | - | $0.08/sec (480p), $0.14/sec (720p). |
+| `grok-imagine-video-1.5-preview` | Video: I2V only in live smoke; no native T2V/Ref2V/Edit/Extend | - | $0.08/sec (480p), $0.14/sec (720p). |
 
 Run the live metadata command before relying on a model in automation:
 

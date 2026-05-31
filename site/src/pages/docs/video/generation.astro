@@ -8,7 +8,7 @@ const title = 'Video Generation';
 <p>Generate videos from text prompts, a starting image, or reference images. The REST API is asynchronous: submit the job, then poll <code>GET /v1/videos/&#123;request_id&#125;</code> until it is done.</p>
 <h2>CLI</h2>
 <pre><code>{`progrok video "a drone flying over mountains at sunrise" --duration 5 --resolution 480p
-progrok video "cinematic logo reveal" --model grok-imagine-video-1.5-preview
+progrok video "animate this night sky" --model grok-imagine-video-1.5-preview --image sky.png
 progrok video "openai-compatible duration alias" --seconds 5`}</code></pre>
 <h2>API</h2>
 <pre><code>{`# Submit generation request
@@ -36,6 +36,7 @@ curl http://localhost:18645/v1/videos/vg_abc123 \
 </table>
 <h2>Mode Rules</h2>
 <p>REST has no <code>mode</code> body field. Text-to-video is <code>prompt</code> only, image-to-video adds <code>image</code>, and reference-to-video adds <code>reference_images</code>. Do not combine <code>image</code> and <code>reference_images</code>; xAI returns <code>400 Bad Request</code>.</p>
+<p><code>grok-imagine-video-1.5-preview</code> is live-smoked as image-to-video only. Prompt-only T2V and <code>reference_images</code> currently return xAI 400 errors for that preview model.</p>
 <h2>Status Values</h2>
 <p><code>pending</code> — Generation in progress.</p>
 <p><code>done</code> — Video ready for download.</p>
