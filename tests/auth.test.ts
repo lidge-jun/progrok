@@ -40,6 +40,8 @@ mock.module("../src/utils/logger.js", {
   },
 });
 
+describe("auth and utility modules", { concurrency: false }, () => {
+
 // ---------------------------------------------------------------------------
 // 1. src/auth/constants.ts
 // ---------------------------------------------------------------------------
@@ -346,6 +348,7 @@ describe("utils/star-prompt", { concurrency: false }, () => {
     const config = readConfig();
     assert.equal(config.onboarding?.starPrompted, true);
   });
+});
 });
 
 // ---------------------------------------------------------------------------
