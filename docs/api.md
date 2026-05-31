@@ -418,3 +418,71 @@ The token is auto-refreshed ~2 minutes before expiry.
   is not reachable through this proxy. Only `POST /v1/documents/search` is.
 - **Multi-agent** (`grok-4.20-multi-agent`) requires the Responses API, not Chat
   Completions, and does not support client-side function calling or `max_tokens`.
+
+---
+
+## CLI Commands — Direct Generation
+
+### progrok video
+
+Generate video directly (no proxy needed — uses OAuth token directly).
+
+```bash
+# Text-to-video
+progrok video "A cat playing piano" --duration 10 --resolution 720p
+
+# Image-to-video
+progrok video "Animate this photo" --image photo.jpg
+
+# Video 1.5 (preview, improved quality)
+progrok video "Epic scene" --model grok-imagine-video-1.5-preview
+
+# Save to specific path
+progrok video "prompt" --output my-video.mp4
+
+# JSON output
+progrok video "prompt" --json
+```
+
+Options:
+- `--model <id>` — `grok-imagine-video` (default) or `grok-imagine-video-1.5-preview`
+- `--duration <s>` — 1-15 seconds (default: 5)
+- `--aspect <ratio>` — 16:9 (default), 9:16, 1:1, 4:3, 3:4, 3:2, 2:3
+- `--resolution <r>` — 480p (default) or 720p
+- `--image <path>` — source image for image-to-video
+- `--output <path>` — output file path
+- `--timeout <s>` — polling timeout (default: 600)
+- `--json` — structured JSON output
+
+Note: Video 1.5 does not support T2V natively. The CLI automatically injects a
+white canvas workaround when using 1.5 without --image.
+
+### progrok image
+
+Generate or edit images directly.
+
+```bash
+# Text-to-image
+progrok image "A sunset over mountains"
+
+# High quality
+progrok image "prompt" --model grok-imagine-image-quality --resolution 2k
+
+# Edit with reference image
+progrok image "Make it winter" --ref photo.jpg
+
+# Multiple references (max 3)
+progrok image "Combine these styles" --ref a.jpg --ref b.jpg
+
+# Multiple images
+progrok image "prompt" --n 4
+```
+
+Options:
+- `--model <id>` — `grok-imagine-image` (default) or `grok-imagine-image-quality`
+- `--aspect <ratio>` — 1:1 (default), 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, auto
+- `--resolution <r>` — 1k (default) or 2k
+- `--ref <path>` — reference image for editing (repeatable, max 3)
+- `--output <path>` — output file path
+- `--n <count>` — number of images (default: 1)
+- `--json` — structured JSON output
