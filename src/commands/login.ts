@@ -9,18 +9,23 @@ export function loginCommand(): Command {
       `Log in to xAI via OAuth (SuperGrok subscription required).
   Default: PKCE flow — opens browser, callback on 127.0.0.1:56121.
   Remote:  --device-code — displays URL + code for manual entry.
+  Remote fallback: --manual-code — paste the localhost callback URL/code manually.
   Tokens saved to ~/.progrok/auth.json, auto-refreshed before expiry.`,
     )
     .option(
       "--device-code",
       "Use device code flow (for SSH/remote environments)",
     )
-    .action(async (opts: { deviceCode?: boolean }) => {
+    .option(
+      "--manual-code",
+      "Print login URL and prompt for the localhost callback URL/code",
+    )
+    .action(async (opts: { deviceCode?: boolean; manualCode?: boolean }) => {
       try {
         if (opts.deviceCode) {
           await loginWithDeviceCode();
         } else {
-          await loginWithPKCE();
+          await loginWithPKCE({ manualCode: Boolean(opts.manualCode) });
         }
       } catch (err) {
         log.error((err as Error).message);
