@@ -289,10 +289,10 @@ secret through the HTTP proxy and connect directly to xAI's WebSocket endpoint.
 | `grok-4.20-0309-reasoning` | Deep reasoning | 200K+ | Legacy reasoning model. |
 | `grok-4.20-0309-non-reasoning` | Lower-latency text | 200K+ | Legacy non-reasoning model. |
 | `grok-4.20-multi-agent-0309` | Deep research | 200K+ | Supports high and xhigh effort. |
-| `grok-imagine-image` | Image generation and editing | - | Billed per image. |
-| `grok-imagine-image-quality` | Higher-quality image output | - | Billed per image. |
-| `grok-imagine-video` | Video: T2V, I2V, Ref2V, Edit, Extend | - | $0.05/sec (480p), $0.07/sec (720p). |
-| `grok-imagine-video-1.5-preview` | Video: I2V only in live smoke; no native T2V/Ref2V/Edit/Extend | - | $0.08/sec (480p), $0.14/sec (720p). |
+| `grok-imagine-image` | Image generation and editing | - | $0.002/input image; $0.02/output image. |
+| `grok-imagine-image-quality` | Higher-quality image output | - | $0.01/input image; $0.05 (1K) or $0.07 (2K) output image. |
+| `grok-imagine-video` | Video: T2V, I2V, Ref2V, Edit, Extend | - | $0.002/input image, $0.01/input video sec; $0.05/sec (480p), $0.07/sec (720p). |
+| `grok-imagine-video-1.5-preview` | Video: I2V only in live smoke; no native T2V/Ref2V/Edit/Extend | - | $0.01/input image; $0.08/sec (480p), $0.14/sec (720p). |
 
 Run the live metadata command before relying on a model in automation:
 

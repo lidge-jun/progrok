@@ -22,12 +22,22 @@ request shapes while xAI decides which tools and models your account can use.
 <tbody>
 <tr><td><code>web_search</code></td><td>Search current web sources.</td><td>OAuth injection lets OpenAI-compatible clients request Grok search tools without xAI OAuth plumbing.</td></tr>
 <tr><td><code>x_search</code></td><td>Search public X posts and conversations.</td><td>Useful for current market, release, and community research through the same local endpoint.</td></tr>
-<tr><td><code>code_interpreter</code></td><td>Run code in an upstream sandbox where available.</td><td>Client code keeps the same proxy base URL and placeholder key.</td></tr>
-<tr><td><code>collections_search</code></td><td>Search uploaded file collections.</td><td>Uses account-level xAI access; management credentials may still be needed for collection administration.</td></tr>
+<tr><td><code>code_execution</code> / <code>code_interpreter</code></td><td>Run Python code in an upstream sandbox where available.</td><td>Responses API and SDKs may use different aliases; the proxy forwards either shape.</td></tr>
+<tr><td><code>collections_search</code> / <code>file_search</code></td><td>Search uploaded file collections.</td><td>Uses account-level xAI access; management credentials may still be needed for collection administration.</td></tr>
+<tr><td><code>attachment_search</code></td><td>Search files attached to a message.</td><td>Activated by uploaded file attachments and billed as a separate tool invocation class.</td></tr>
+<tr><td><code>view_image</code></td><td>Analyze images discovered during Web Search or X Search.</td><td>Useful when search results include screenshots, charts, or product images.</td></tr>
+<tr><td><code>view_x_video</code></td><td>Analyze videos discovered during X Search.</td><td>Useful for release demos, clips, and public product videos.</td></tr>
 <tr><td>Function calling</td><td>Let the model call functions you define.</td><td>progrok handles auth only; your client still owns function definitions and execution.</td></tr>
 <tr><td>Remote MCP</td><td>Connect model workflows to external MCP servers where supported.</td><td>The proxy keeps the auth boundary local while the client owns the tool topology.</td></tr>
 </tbody>
 </table>
+
+<h2>Compatibility caveats</h2>
+<ul>
+<li>OpenAI Responses MCP fields such as <code>require_approval</code> and <code>connector_id</code> are not part of xAI's current Remote MCP surface.</li>
+<li>gRPC paths do not accept every REST alias. In particular, <code>code_interpreter</code> and <code>file_search</code> aliases are REST/SDK conveniences, while canonical xAI names are <code>code_execution</code> and <code>collections_search</code>.</li>
+<li>Tool requests bill both model tokens and tool invocations. Web, X, and code tools are priced per 1K calls; attachment and collection search have their own rates.</li>
+</ul>
 
 <h2>Local commands</h2>
 <p>

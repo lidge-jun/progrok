@@ -5,16 +5,22 @@ const title = 'Speech to Text';
 
 <DocsLayout title={title}>
 <h1>Speech to Text</h1>
-<p>Transcribe audio files using <code>POST /v1/stt</code> with multipart form data.</p>
+<p>Transcribe audio using <code>POST /v1/stt</code> for REST jobs or <code>wss://api.x.ai/v1/stt</code> for streaming. REST accepts either a multipart <code>file</code> or an audio <code>url</code>.</p>
 <pre><code>{`curl -X POST http://localhost:18645/v1/stt \
   -H "Authorization: Bearer $API_KEY" \
-  -F "file=@recording.mp3" \
   -F "language=en" \
-  -F "diarize=true"`}</code></pre>
+  -F "diarize=true" \
+  -F "file=@recording.mp3"`}</code></pre>
 <table>
 <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
-<tr><td>file</td><td>file</td><td>Audio file to transcribe (multipart upload)</td></tr>
-<tr><td>language</td><td>string</td><td>Language code (e.g. en, ko, ja)</td></tr>
-<tr><td>diarize</td><td>boolean</td><td>Enable speaker diarization</td></tr>
+<tr><td>file / url</td><td>file or string</td><td>One audio source is required. Multipart <code>file</code> must be the last form field.</td></tr>
+<tr><td>language</td><td>string</td><td>Language code such as <code>en</code>, <code>ko</code>, or <code>ja</code>. xAI documents 25 supported languages.</td></tr>
+<tr><td>diarize</td><td>boolean</td><td>Add per-word speaker indices.</td></tr>
+<tr><td>multichannel / channels</td><td>boolean / integer</td><td>Transcribe separate audio channels when available.</td></tr>
+<tr><td>keyterm</td><td>string[]</td><td>Bias terms; max 100 entries and 50 characters each.</td></tr>
+<tr><td>audio_format</td><td>string</td><td>Only needed for raw <code>pcm</code>, <code>mulaw</code>, or <code>alaw</code> input.</td></tr>
+<tr><td>sample_rate</td><td>integer</td><td>Required for raw formats.</td></tr>
+<tr><td>filler_words</td><td>boolean</td><td>Include filler words such as "um" and "uh".</td></tr>
 </table>
+<p>REST STT supports files up to 500 MB. Streaming STT is billed separately and is not proxied by progrok because it uses WebSocket transport.</p>
 </DocsLayout>

@@ -72,7 +72,7 @@ const ENDPOINTS = [
   { category: "batches", method: "GET", path: "/v1/batches/{id}/results", type: "sync", description: "List batch results" },
   { category: "batches", method: "POST", path: "/v1/batches/{id}:cancel", type: "sync", description: "Cancel all requests in a batch" },
   // Files
-  { category: "files", method: "POST", path: "/v1/files", type: "multipart", description: "Upload a file (≤50MB) — referenced by file_id" },
+  { category: "files", method: "POST", path: "/v1/files", type: "multipart", description: "Upload a file (use ≤48MB conservative limit; official pages also mention 50MB) — referenced by file_id" },
   { category: "files", method: "GET", path: "/v1/files", type: "sync", description: "List files (AIP-160 filter, paginated)" },
   { category: "files", method: "GET", path: "/v1/files/{file_id}", type: "sync", description: "Get file metadata" },
   { category: "files", method: "DELETE", path: "/v1/files/{file_id}", type: "sync", description: "Delete a file" },
@@ -298,7 +298,7 @@ export function buildCapabilities() {
         input: ["text", "image"],
         output: ["image"],
         maxPromptLength: 8000,
-        pricing: { perImage: 0.02, unit: "USD", note: "1k or 2k resolution" },
+        pricing: { inputPerImage: 0.002, outputPerImage: 0.02, unit: "USD", note: "1k or 2k resolution" },
         aliases: ["grok-imagine-image-2026-03-02"],
       },
       {
@@ -308,7 +308,7 @@ export function buildCapabilities() {
         input: ["text", "image"],
         output: ["image"],
         maxPromptLength: 8000,
-        pricing: { perImage: 0.04, unit: "USD", note: "1k or 2k resolution" },
+        pricing: { inputPerImage: 0.01, outputPerImage1k: 0.05, outputPerImage2k: 0.07, unit: "USD" },
         aliases: ["grok-imagine-image-quality-latest", "grok-imagine-image-pro"],
       },
       {
@@ -317,7 +317,7 @@ export function buildCapabilities() {
         use: "Video generation / edit / extension (async)",
         input: ["text", "image", "video"],
         output: ["video"],
-        pricing: { perSecond: 0.05, unit: "USD", note: "480p or 720p" },
+        pricing: { inputPerImage: 0.002, inputPerVideoSecond: 0.01, outputPerSecond480p: 0.05, outputPerSecond720p: 0.07, unit: "USD" },
         aliases: [],
       },
       {
@@ -326,7 +326,7 @@ export function buildCapabilities() {
         use: "Video v1.5 preview — live-smoked I2V only",
         input: ["text", "image"],
         output: ["video"],
-        pricing: { perSecond: 0.08, unit: "USD", note: "480p confirmed; 720p pricing appears separately in public announcements/docs" },
+        pricing: { inputPerImage: 0.01, outputPerSecond480p: 0.08, outputPerSecond720p: 0.14, unit: "USD" },
         aliases: ["grok-imagine-video-1.5-2026-05-30"],
         limitations: ["Prompt-only T2V and reference_images returned xAI 400 in live smoke.", "No confirmed video input/edit/extend support."],
       },
@@ -346,9 +346,12 @@ export function buildCapabilities() {
     tools: [
       { type: "web_search", description: "Web search + browse. Params: allowed_domains, excluded_domains, enable_image_understanding, enable_image_search" },
       { type: "x_search", description: "X (Twitter) search with citations" },
-      { type: "code_interpreter", description: "Server-side Python execution (a.k.a. Code Execution)" },
-      { type: "collections_search", description: "RAG over your uploaded collections" },
-      { type: "mcp", description: "Remote MCP server. Params: server_url, server_label, allowed_tools, authorization, headers" },
+      { type: "code_execution", aliases: ["code_interpreter"], description: "Server-side Python execution. REST/SDK alias support differs by surface." },
+      { type: "collections_search", aliases: ["file_search"], description: "RAG over your uploaded collections" },
+      { type: "attachment_search", description: "Search files attached to the current message" },
+      { type: "view_image", description: "Analyze images found during Web Search or X Search" },
+      { type: "view_x_video", description: "Analyze X videos found during X Search" },
+      { type: "mcp", description: "Remote MCP server. Params: server_url, server_label, allowed_tools, authorization, headers. OpenAI require_approval/connector_id are not xAI params." },
       { type: "function", description: "Custom client-side function calling (max 128)" },
     ],
     searchParameters: {

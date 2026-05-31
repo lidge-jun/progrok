@@ -29,9 +29,9 @@ automation.
 <thead><tr><th>Model</th><th>Type</th><th>Best for</th><th>Notes</th></tr></thead>
 <tbody>
 <tr><td><code>grok-imagine-image</code></td><td>Image</td><td>Image generation and reference-based editing.</td><td>Use through <code>progrok image</code> for file handling and output directories.</td></tr>
-<tr><td><code>grok-imagine-image-quality</code></td><td>Image</td><td>Higher-quality still image output.</td><td>Use when quality matters more than latency or cost.</td></tr>
+<tr><td><code>grok-imagine-image-quality</code></td><td>Image</td><td>Higher-quality still image output.</td><td><code>grok-imagine-image-pro</code> is a retired slug that redirects here; prefer the quality model ID in new docs and scripts.</td></tr>
 <tr><td><code>grok-imagine-video</code></td><td>Video</td><td>T2V, I2V, reference-to-video, edit, and extend.</td><td>Base model for every confirmed video-input workflow. Use <code>progrok video</code> for polling, local files, and downloads.</td></tr>
-<tr><td><code>grok-imagine-video-1.5-preview</code></td><td>Video</td><td>Preview I2V generation.</td><td>Live smoke passes image-to-video. Prompt-only T2V and reference_images currently return xAI 400 errors, despite the broad model-page modality label.</td></tr>
+<tr><td><code>grok-imagine-video-1.5-preview</code></td><td>Video</td><td>Preview I2V generation.</td><td>Alias: <code>grok-imagine-video-1.5-2026-05-30</code>. Official model metadata lists text+image input; live OAuth smoke passes I2V but rejects prompt-only T2V and <code>reference_images</code>.</td></tr>
 </tbody>
 </table>
 

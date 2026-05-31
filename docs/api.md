@@ -307,7 +307,7 @@ USD-per-1M-tokens). Use `progrok models --detail` for a formatted view.
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/v1/files` | Upload (`multipart`, ≤50 MB). Optional `expires_after` (1h–30d), `purpose` |
+| POST | `/v1/files` | Upload (`multipart`; use ≤48 MB as conservative limit because official pages conflict with 50 MB). Optional `expires_after` (1h–30d), `purpose` |
 | GET | `/v1/files` | List (AIP-160 `filter`, `sort_by`, `order`, `pagination_token`) |
 | GET | `/v1/files/{file_id}` | Metadata |
 | DELETE | `/v1/files/{file_id}` | Delete |

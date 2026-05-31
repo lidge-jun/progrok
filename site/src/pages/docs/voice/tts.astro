@@ -5,21 +5,26 @@ const title = 'Text to Speech';
 
 <DocsLayout title={title}>
 <h1>Text to Speech</h1>
-<p>Convert text to audio using <code>POST /v1/tts</code>. Returns audio data in the specified format.</p>
+<p>Convert text to raw audio bytes with <code>POST /v1/tts</code>. xAI's TTS surface uses five built-in voices, BCP-47 language codes, speech tags, and an object-shaped <code>output_format</code>.</p>
 <pre><code>{`curl -X POST http://localhost:18645/v1/tts \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "voice_id": "alloy",
+    "voice_id": "eve",
     "text": "Hello, welcome to progrok.",
-    "output_format": "mp3",
+    "language": "en",
+    "output_format": {"codec": "mp3", "sample_rate": 44100, "bit_rate": 192000},
     "speed": 1.0
   }' --output speech.mp3`}</code></pre>
 <table>
 <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
-<tr><td>voice_id</td><td>string</td><td>Voice identifier to use for synthesis</td></tr>
-<tr><td>text</td><td>string</td><td>Text content to convert to speech</td></tr>
-<tr><td>output_format</td><td>string</td><td>Audio format (mp3, wav, opus, flac)</td></tr>
-<tr><td>speed</td><td>number</td><td>Playback speed multiplier (0.25–4.0)</td></tr>
+<tr><td>text</td><td>string</td><td>Required. Max 15,000 characters. Supports inline tags like <code>[pause]</code> and wrapping tags like <code>&lt;whisper&gt;</code>.</td></tr>
+<tr><td>voice_id</td><td>string</td><td>Built-ins: <code>ara</code>, <code>eve</code>, <code>leo</code>, <code>rex</code>, <code>sal</code>. Custom voice IDs are also accepted.</td></tr>
+<tr><td>language</td><td>string</td><td>Required BCP-47 code such as <code>en</code>, <code>ko</code>, <code>pt-BR</code>, or <code>auto</code>.</td></tr>
+<tr><td>output_format</td><td>object</td><td><code>{`{codec: "mp3"|"wav"|"pcm"|"mulaw"|"alaw", sample_rate, bit_rate}`}</code>. MP3 defaults to 24 kHz / 128 kbps.</td></tr>
+<tr><td>speed</td><td>number</td><td>Playback speed multiplier, range 0.7-1.5.</td></tr>
+<tr><td>optimize_streaming_latency</td><td>integer</td><td>0, 1, or 2. Lower first-audio latency trades off chunk quality.</td></tr>
+<tr><td>text_normalization</td><td>boolean</td><td>Normalize written-form text before synthesis.</td></tr>
 </table>
+<p><code>alloy</code>, <code>opus</code>, <code>flac</code>, and OpenAI-style <code>0.25-4.0</code> speed ranges are not xAI TTS values.</p>
 </DocsLayout>

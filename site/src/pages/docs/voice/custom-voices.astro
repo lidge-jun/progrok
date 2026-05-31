@@ -5,10 +5,20 @@ const title = 'Custom Voices';
 
 <DocsLayout title={title}>
 <h1>Custom Voices</h1>
-<p>Clone a voice by uploading audio samples via <code>POST /v1/custom-voices</code> with multipart form data. The cloned voice can then be used as a <code>voice_id</code> in TTS requests.</p>
+<p>Clone a voice from one reference clip and reuse the returned <code>voice_id</code> in TTS, streaming TTS, or Voice Agent calls. API creation is enterprise-gated; console-created custom voices can still be used by ID.</p>
 <pre><code>{`curl -X POST http://localhost:18645/v1/custom-voices \
   -H "Authorization: Bearer $API_KEY" \
   -F "name=my-voice" \
-  -F "samples=@sample1.mp3" \
-  -F "samples=@sample2.mp3"`}</code></pre>
+  -F "gender=female" \
+  -F "accent=american" \
+  -F "language=en" \
+  -F "file=@reference.mp3"`}</code></pre>
+<table>
+<tr><th>Rule</th><th>Official behavior</th></tr>
+<tr><td>Upload field</td><td>Use singular <code>file</code>, not repeated <code>samples</code>.</td></tr>
+<tr><td>Reference length</td><td>Max 120 seconds; 90-120 seconds is recommended for best quality.</td></tr>
+<tr><td>Availability</td><td>Currently United States only, excluding Illinois.</td></tr>
+<tr><td>Scope</td><td>Custom voices are team-scoped and do not appear in <code>GET /v1/tts/voices</code>.</td></tr>
+<tr><td>Limits</td><td>Team voice count is limited; delete unused voices when rotating references.</td></tr>
+</table>
 </DocsLayout>

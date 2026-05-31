@@ -16,18 +16,20 @@ model data before production automation.
 <table>
 <thead><tr><th>Model</th><th>Input</th><th>Output</th><th>Cached</th></tr></thead>
 <tbody>
-<tr><td>grok-4.3</td><td>$1.25 / 1M</td><td>$2.50 / 1M</td><td>$0.31 / 1M</td></tr>
-<tr><td>grok-build-0.1</td><td>$1.00 / 1M</td><td>$2.00 / 1M</td><td>$0.25 / 1M</td></tr>
+<tr><td>grok-4.3</td><td>$1.25 / 1M</td><td>$2.50 / 1M</td><td>$0.20 / 1M</td></tr>
+<tr><td>grok-build-0.1</td><td>$1.00 / 1M</td><td>$2.00 / 1M</td><td>$0.20 / 1M</td></tr>
+<tr><td>grok-4.20 family</td><td>$1.25 / 1M</td><td>$2.50 / 1M</td><td>$0.20 / 1M</td></tr>
 </tbody>
 </table>
 
 <h2>Imagine API</h2>
 <table>
-<thead><tr><th>Type</th><th>Price</th></tr></thead>
+<thead><tr><th>Model</th><th>Media input</th><th>Output pricing</th></tr></thead>
 <tbody>
-<tr><td>Image (standard)</td><td>$0.02 / image</td></tr>
-<tr><td>Image (quality)</td><td>$0.04 / image</td></tr>
-<tr><td>Video</td><td>$0.05 / sec</td></tr>
+<tr><td>grok-imagine-image</td><td>$0.002 / input image</td><td>$0.02 / generated image at 1K or 2K</td></tr>
+<tr><td>grok-imagine-image-quality</td><td>$0.01 / input image</td><td>$0.05 / 1K image, $0.07 / 2K image</td></tr>
+<tr><td>grok-imagine-video</td><td>$0.002 / input image, $0.01 / input video second</td><td>$0.05 / sec at 480p, $0.07 / sec at 720p</td></tr>
+<tr><td>grok-imagine-video-1.5-preview</td><td>$0.01 / input image</td><td>$0.08 / sec at 480p, $0.14 / sec at 720p</td></tr>
 </tbody>
 </table>
 
@@ -35,8 +37,21 @@ model data before production automation.
 <table>
 <thead><tr><th>Service</th><th>Price</th></tr></thead>
 <tbody>
-<tr><td>Text to Speech</td><td>$0.01 / 1K chars</td></tr>
-<tr><td>Speech to Text</td><td>$0.003 / min</td></tr>
+<tr><td>Realtime Voice Agent</td><td>$0.05 / min ($3.00 / hr)</td></tr>
+<tr><td>Realtime text input</td><td>$0.004 / message</td></tr>
+<tr><td>Text to Speech</td><td>$15.00 / 1M chars</td></tr>
+<tr><td>Speech to Text</td><td>$0.10 / hr REST, $0.20 / hr streaming</td></tr>
+</tbody>
+</table>
+
+<h2>Tool invocation pricing</h2>
+<table>
+<thead><tr><th>Tool</th><th>Cost</th></tr></thead>
+<tbody>
+<tr><td><code>web_search</code>, <code>x_search</code>, <code>code_execution</code>/<code>code_interpreter</code></td><td>$5 / 1K calls plus model tokens</td></tr>
+<tr><td><code>attachment_search</code></td><td>$10 / 1K calls plus model tokens</td></tr>
+<tr><td><code>collections_search</code>/<code>file_search</code></td><td>$2.50 / 1K calls plus model tokens</td></tr>
+<tr><td><code>view_image</code>, <code>view_x_video</code>, Remote MCP tools</td><td>Token-based or tool-defined cost</td></tr>
 </tbody>
 </table>
 

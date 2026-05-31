@@ -5,5 +5,21 @@ const title = 'Files';
 
 <DocsLayout title={title}>
 <h1>Files</h1>
-<p>Upload and manage files for use with tools and batches. Send a multipart request to <code>POST /v1/files</code> (max 50 MB per file). Files can be referenced by ID in subsequent API calls.</p>
+<p>Upload and manage private files for chat attachments, image/video media references, batches, and collections. Official xAI pages currently conflict between 48 MB and 50 MB file limits, so automation should use 48 MB as the conservative ceiling.</p>
+<pre><code>{`curl https://api.x.ai/v1/files \
+  -H "Authorization: Bearer $XAI_API_KEY" \
+  -F expires_after=86400 \
+  -F purpose=assistants \
+  -F file=@document.pdf`}</code></pre>
+<table>
+<tr><th>Endpoint</th><th>Purpose</th></tr>
+<tr><td><code>POST /v1/files</code></td><td>Multipart upload from path, bytes, object, or open handle. Returns reusable <code>file_id</code>.</td></tr>
+<tr><td><code>GET /v1/files</code></td><td>List with <code>limit</code>, <code>order</code>, <code>sort_by</code>, and <code>pagination_token</code>.</td></tr>
+<tr><td><code>GET /v1/files/&#123;file_id&#125;</code></td><td>Read metadata.</td></tr>
+<tr><td><code>GET /v1/files/&#123;file_id&#125;/content</code></td><td>Download file content.</td></tr>
+<tr><td><code>DELETE /v1/files/&#123;file_id&#125;</code></td><td>Delete the uploaded file.</td></tr>
+<tr><td><code>POST /v1/files:initialize</code></td><td>Start chunked upload for larger/more resilient transfers.</td></tr>
+<tr><td><code>POST /v1/files:uploadChunks</code></td><td>Upload chunk data after initialization.</td></tr>
+</table>
+<p><code>expires_after</code> must be sent before the <code>file</code> field in multipart requests. Files referenced in chat attachments can activate <code>attachment_search</code>; media APIs can reference uploaded assets as <code>file_id</code>.</p>
 </DocsLayout>
