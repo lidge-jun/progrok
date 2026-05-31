@@ -1,0 +1,100 @@
+---
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const withBase = (path: string): string => `${base}${path}`;
+const pathname = Astro.url.pathname.replace(/\/$/, '');
+
+const sections = [
+  {
+    title: 'Start',
+    links: [
+      { href: '/docs', label: 'Overview' },
+      { href: '/docs/quickstart', label: 'Quick start' },
+      { href: '/docs/models', label: 'Models' },
+      { href: '/docs/pricing', label: 'Pricing' },
+    ],
+  },
+  {
+    title: 'CLI',
+    links: [
+      { href: '/docs/cli/login', label: 'Login' },
+      { href: '/docs/cli/proxy', label: 'Proxy' },
+      { href: '/docs/cli/search', label: 'Search' },
+      { href: '/docs/cli/video', label: 'Video' },
+      { href: '/docs/cli/image', label: 'Image' },
+      { href: '/docs/cli/chat', label: 'Chat' },
+      { href: '/docs/cli/models', label: 'Models command' },
+    ],
+  },
+  {
+    title: 'Text',
+    links: [
+      { href: '/docs/text/generation', label: 'Generation' },
+      { href: '/docs/text/reasoning', label: 'Reasoning' },
+      { href: '/docs/text/structured-outputs', label: 'Structured outputs' },
+      { href: '/docs/text/streaming', label: 'Streaming' },
+      { href: '/docs/text/multi-agent', label: 'Multi-agent' },
+    ],
+  },
+  {
+    title: 'Tools',
+    links: [
+      { href: '/docs/tools/overview', label: 'Overview' },
+      { href: '/docs/tools/function-calling', label: 'Function calling' },
+      { href: '/docs/tools/web-search', label: 'Web search' },
+      { href: '/docs/tools/x-search', label: 'X search' },
+      { href: '/docs/tools/code-execution', label: 'Code execution' },
+      { href: '/docs/tools/collections-search', label: 'Collections search' },
+    ],
+  },
+  {
+    title: 'Media',
+    links: [
+      { href: '/docs/images/generation', label: 'Image generation' },
+      { href: '/docs/images/editing', label: 'Image editing' },
+      { href: '/docs/images/multi-image-editing', label: 'Multi-image editing' },
+      { href: '/docs/video/generation', label: 'Video generation' },
+      { href: '/docs/video/image-to-video', label: 'Image to video' },
+      { href: '/docs/video/reference-to-video', label: 'Reference to video' },
+      { href: '/docs/video/editing', label: 'Video editing' },
+      { href: '/docs/video/extension', label: 'Video extension' },
+    ],
+  },
+  {
+    title: 'Voice',
+    links: [
+      { href: '/docs/voice/overview', label: 'Overview' },
+      { href: '/docs/voice/tts', label: 'Text to speech' },
+      { href: '/docs/voice/stt', label: 'Speech to text' },
+      { href: '/docs/voice/custom-voices', label: 'Custom voices' },
+    ],
+  },
+  {
+    title: 'Advanced',
+    links: [
+      { href: '/docs/advanced/batch-api', label: 'Batch API' },
+      { href: '/docs/advanced/files', label: 'Files' },
+      { href: '/docs/advanced/rate-limits', label: 'Rate limits' },
+    ],
+  },
+];
+---
+
+<aside class="docs-sidebar" aria-label="Documentation navigation">
+  <a class="docs-home-link" href={withBase('/docs')}>Documentation</a>
+  {sections.map((section) => (
+    <section>
+      <h2>{section.title}</h2>
+      <ul>
+        {section.links.map((link) => {
+          const href = withBase(link.href);
+          const isActive = pathname === href.replace(/\/$/, '');
+          return (
+            <li>
+              <a href={href} aria-current={isActive ? 'page' : undefined}>{link.label}</a>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  ))}
+</aside>

@@ -1,14 +1,9 @@
 ---
+import DocsLayout from '../../../layouts/DocsLayout.astro';
 const title = 'Multi Agent';
 ---
-<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8"/><title>{title} — progrok</title><meta name="viewport" content="width=device-width"/>
-<style>:root{--bg:#0d1117;--fg:#c9d1d9;--accent:#58a6ff;--code-bg:#161b22}*{margin:0;box-sizing:border-box}body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--fg);line-height:1.6;padding:2rem;max-width:800px;margin:0 auto}nav{margin-bottom:2rem}nav a{color:var(--accent);text-decoration:none;margin-right:1rem}h1{margin-bottom:1rem;color:#fff}h2{margin:1.5rem 0 .5rem;color:#fff}p{margin:.5rem 0}pre{background:var(--code-bg);padding:1rem;border-radius:6px;overflow-x:auto;margin:1rem 0}code{font-family:monospace;font-size:.9em}table{width:100%;border-collapse:collapse;margin:1rem 0}th,td{border:1px solid #30363d;padding:.5rem;text-align:left}th{background:var(--code-bg)}a{color:var(--accent)}</style>
-</head>
-<body>
-<nav><a href="/progrok/">Home</a><a href="/progrok/docs">Docs</a></nav>
-<main>
+
+<DocsLayout title={title}>
 <h1>Multi Agent</h1>
 <p>The <code>grok-4.20-multi-agent-0309</code> model orchestrates multiple agents in parallel. The reasoning effort level controls how many agents are spawned: <code>low</code> = 4 agents, <code>medium</code> = 8, <code>high</code> = 12, <code>xhigh</code> = 16 agents.</p>
 <pre><code>{`curl -X POST http://localhost:18645/v1/responses \
@@ -21,7 +16,4 @@ const title = 'Multi Agent';
   ],
   "reasoning": {"effort": "xhigh"}
 }'`}</code></pre>
-</main>
-<footer style="margin-top:3rem;padding-top:1rem;border-top:1px solid #30363d;color:#8b949e;font-size:.85em">progrok — MIT License</footer>
-</body>
-</html>
+</DocsLayout>

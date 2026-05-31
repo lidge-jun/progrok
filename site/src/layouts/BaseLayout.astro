@@ -1,0 +1,43 @@
+---
+import '../styles/global.css';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  bodyClass?: string;
+}
+
+const {
+  title,
+  description = 'progrok is a local OAuth proxy and CLI for using xAI Grok models from OpenAI-compatible clients.',
+  bodyClass = '',
+} = Astro.props;
+
+const pageTitle = title === 'progrok' ? 'progrok - xAI Grok OAuth proxy' : `${title} - progrok`;
+const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url.origin);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical.toString()} />
+    <meta name="twitter:card" content="summary" />
+    <link rel="canonical" href={canonical.toString()} />
+    <title>{pageTitle}</title>
+  </head>
+  <body class={bodyClass}>
+    <Header />
+    <main id="content">
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>
