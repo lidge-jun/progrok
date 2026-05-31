@@ -120,6 +120,7 @@ async function downloadAndSave(videoUrl: string, outPath: string): Promise<void>
 
 export function videoCommand(): Command {
   const cmd = new Command("video")
+    .enablePositionalOptions()
     .description(
       `Generate, edit, or extend video with Grok Imagine Video.
 

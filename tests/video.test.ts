@@ -79,4 +79,19 @@ describe("videoCommand", () => {
     assert(extend.options.find((o: any) => o.long === "--video"), "extend missing --video");
     assert(extend.options.find((o: any) => o.long === "--upload-url"), "extend missing --upload-url");
   });
+
+  it("parses edit/extend options after the prompt", () => {
+    const cmd = videoCommand();
+    const extend = cmd.commands.find((c) => c.name() === "extend");
+    assert(extend, "missing extend subcommand");
+
+    let parsed: any;
+    extend.action((prompt, opts) => { parsed = { prompt, opts }; });
+    cmd.parse(["node", "progrok", "extend", "continue", "--video", "file_id:file-123", "--duration", "2", "--json"]);
+
+    assert.equal(parsed.prompt, "continue");
+    assert.equal(parsed.opts.video, "file_id:file-123");
+    assert.equal(parsed.opts.duration, "2");
+    assert.equal(parsed.opts.json, true);
+  });
 });
