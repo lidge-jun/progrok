@@ -7,20 +7,31 @@ export function loginCommand(): Command {
   const cmd = new Command("login")
     .description(
       `Log in to xAI via OAuth (SuperGrok subscription required).
-  Default: PKCE flow — opens browser, callback on 127.0.0.1:56121.
-  Remote:  --device-code — displays URL + code for manual entry.
+  Default: device-code flow — displays URL + code for manual entry.
+  Browser: --browser — opens browser, callback on 127.0.0.1:56121.
+  Manual:  --manual-paste — PKCE flow but paste the callback code manually.
   Tokens saved to ~/.progrok/auth.json, auto-refreshed before expiry.`,
     )
     .option(
       "--device-code",
-      "Use device code flow (for SSH/remote environments)",
+      "Use device code flow (default)",
     )
-    .action(async (opts: { deviceCode?: boolean }) => {
+    .option(
+      "--browser",
+      "Use PKCE browser flow with loopback callback",
+    )
+    .option(
+      "--manual-paste",
+      "Use PKCE flow but paste the authorization code manually",
+    )
+    .action(async (opts: { deviceCode?: boolean; browser?: boolean; manualPaste?: boolean }) => {
       try {
-        if (opts.deviceCode) {
-          await loginWithDeviceCode();
-        } else {
+        if (opts.browser) {
           await loginWithPKCE();
+        } else if (opts.manualPaste) {
+          await loginWithPKCE({ manualPaste: true });
+        } else {
+          await loginWithDeviceCode();
         }
       } catch (err) {
         log.error((err as Error).message);

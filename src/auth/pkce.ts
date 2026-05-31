@@ -1,4 +1,5 @@
 import { randomBytes, createHash } from "node:crypto";
+import { createInterface } from "node:readline";
 import {
   XAI_OAUTH_CLIENT_ID,
   XAI_OAUTH_SCOPE,
@@ -19,7 +20,45 @@ function generatePKCE(): { verifier: string; challenge: string } {
   return { verifier, challenge };
 }
 
-export async function loginWithPKCE(): Promise<void> {
+interface PKCEOptions {
+  manualPaste?: boolean;
+}
+
+function extractCodeFromInput(input: string): string | null {
+  const trimmed = input.trim();
+  // Full callback URL: http://127.0.0.1:56121/callback?code=XXX&state=YYY
+  try {
+    const url = new URL(trimmed);
+    const code = url.searchParams.get("code");
+    if (code) return code;
+  } catch { /* not a URL */ }
+  // Query fragment: ?code=XXX&state=YYY
+  if (trimmed.startsWith("?")) {
+    const params = new URLSearchParams(trimmed.slice(1));
+    const code = params.get("code");
+    if (code) return code;
+  }
+  // Bare code (no whitespace, no = sign typically)
+  if (trimmed.length > 10 && !trimmed.includes(" ")) return trimmed;
+  return null;
+}
+
+async function promptForCode(): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve, reject) => {
+    rl.question("\n  Paste the callback URL or authorization code: ", (answer) => {
+      rl.close();
+      const code = extractCodeFromInput(answer);
+      if (!code) {
+        reject(new Error("Could not extract authorization code from input."));
+      } else {
+        resolve(code);
+      }
+    });
+  });
+}
+
+export async function loginWithPKCE(options: PKCEOptions = {}): Promise<void> {
   const discovery = await fetchOIDCDiscovery();
   const pkce = generatePKCE();
   const state = randomBytes(16).toString("hex");
@@ -33,15 +72,28 @@ export async function loginWithPKCE(): Promise<void> {
   authorizeUrl.searchParams.set("code_challenge", pkce.challenge);
   authorizeUrl.searchParams.set("code_challenge_method", "S256");
 
-  log.info("Opening browser for xAI login...");
-  log.dim(
-    `If the browser doesn't open, visit:\n${authorizeUrl.toString()}`,
-  );
+  let code: string;
 
-  const callbackPromise = startCallbackServer(state);
-  await openUrl(authorizeUrl.toString());
-
-  const { code } = await callbackPromise;
+  if (options.manualPaste) {
+    log.info("Opening browser for xAI login (manual-paste mode)...");
+    log.dim(
+      `Visit this URL to authorize:\n${authorizeUrl.toString()}`,
+    );
+    log.dim(
+      `\nAfter approving, paste the callback URL or the authorization code shown on the page.`,
+    );
+    await openUrl(authorizeUrl.toString());
+    code = await promptForCode();
+  } else {
+    log.info("Opening browser for xAI login...");
+    log.dim(
+      `If the browser doesn't open, visit:\n${authorizeUrl.toString()}`,
+    );
+    const callbackPromise = startCallbackServer(state);
+    await openUrl(authorizeUrl.toString());
+    const result = await callbackPromise;
+    code = result.code;
+  }
 
   log.info("Exchanging authorization code...");
 
