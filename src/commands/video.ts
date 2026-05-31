@@ -125,7 +125,7 @@ export function videoCommand(): Command {
   cmd
     .command("edit <prompt>")
     .description("Edit existing video with a text prompt (real V2V). Model: grok-imagine-video only.")
-    .requiredOption("--video <url-or-path>", "source video URL or local .mp4 path")
+    .requiredOption("--video <url>", "source video HTTPS URL (from previous generation)")
     .option("--model <id>", "video model (must be grok-imagine-video)", DEFAULT_VIDEO_MODEL)
     .option("--output <path>", "output file path")
     .option("--json", "output structured JSON")
@@ -138,7 +138,7 @@ export function videoCommand(): Command {
   cmd
     .command("extend <prompt>")
     .description("Extend video from its last frame. Model: grok-imagine-video only.")
-    .requiredOption("--video <url-or-path>", "source video URL or local .mp4 path")
+    .requiredOption("--video <url>", "source video HTTPS URL (from previous generation)")
     .option("--model <id>", "video model (must be grok-imagine-video)", DEFAULT_VIDEO_MODEL)
     .option("--duration <s>", "extension duration 2-10s (default 6)", "6")
     .option("--output <path>", "output file path")

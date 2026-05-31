@@ -152,8 +152,10 @@ export OPENAI_API_KEY=anything
 | `progrok search <query> --reasoning high` | Add reasoning effort to a search request. |
 | `progrok image <prompt>` | Generate an Imagine image. |
 | `progrok image <prompt> --ref ./input.png` | Edit or compose from a reference image. |
-| `progrok video <prompt>` | Submit a text-to-video job and poll until completion. |
-| `progrok video <prompt> --image ./input.png` | Submit an image-to-video job. |
+| `progrok video <prompt>` | Text-to-video generation. |
+| `progrok video <prompt> --image ./input.png` | Image-to-video (animate still image). |
+| `progrok video edit <prompt> --video <url>` | Edit existing video with text (real V2V). `grok-imagine-video` only. |
+| `progrok video extend <prompt> --video <url>` | Continue video from last frame. `grok-imagine-video` only. |
 | `progrok capabilities --json` | Print machine-readable command, model, and endpoint metadata. |
 | `progrok skill` | Print an agent-oriented usage guide. |
 
@@ -186,10 +188,36 @@ progrok image "make this diagram cleaner" --ref ./diagram.png --output ./out
 Video generation:
 
 ```bash
+# Text-to-video
 progrok video "a terminal command expanding into a network diagram"
+
+# Image-to-video (animate a still image)
 progrok video "turn this interface into a smooth product demo" --image ./screen.png
-progrok video "short launch animation" --model grok-imagine-video-1.5-preview
+
+# Video editing — modify existing video, keep motion (grok-imagine-video only)
+progrok video edit "Make the background a sunset sky" --video https://vidgen.x.ai/.../clip.mp4
+
+# Video extension — continue from last frame (grok-imagine-video only)
+progrok video extend "Camera slowly pulls back revealing the full scene" \
+  --video https://vidgen.x.ai/.../clip.mp4 --duration 5
 ```
+
+### Model constraints
+
+| Model | T2V | I2V | Ref2V | Edit | Extend |
+|-------|:---:|:---:|:-----:|:----:|:------:|
+| `grok-imagine-video` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `grok-imagine-video-1.5-preview` | ⚠️¹ | ✅ | ✅ | ❌ | ❌ |
+
+¹ T2V not natively supported; progrok injects a white canvas as workaround.
+
+### Video editing/extension constraints
+
+- **Input**: `.mp4` (H.264/H.265/AV1), max 8.7s (edit) or 2–15s (extend)
+- **`--video`**: Must be an HTTPS URL (local file paths not supported yet)
+- **Edit output**: Same duration/aspect/resolution as input (max 720p)
+- **Extend duration**: 2–10s (default 6s), added to original
+- **Model**: `grok-imagine-video` only — 1.5-preview returns "not supported"
 
 Media commands call xAI endpoints directly with your OAuth session and poll async
 jobs until completion.
@@ -220,8 +248,8 @@ secret through the HTTP proxy and connect directly to xAI's WebSocket endpoint.
 | `grok-4.20-multi-agent-0309` | Deep research | 200K+ | Supports high and xhigh effort. |
 | `grok-imagine-image` | Image generation and editing | - | Billed per image. |
 | `grok-imagine-image-quality` | Higher-quality image output | - | Billed per image. |
-| `grok-imagine-video` | Video generation and editing | - | Billed per second. |
-| `grok-imagine-video-1.5-preview` | Video v1.5 preview | - | Improved image-to-video behavior. |
+| `grok-imagine-video` | Video: T2V, I2V, Ref2V, Edit, Extend | - | $0.05/sec (480p), $0.07/sec (720p). |
+| `grok-imagine-video-1.5-preview` | Video: I2V, Ref2V only (no Edit/Extend) | - | $0.08/sec (480p), $0.14/sec (720p). |
 
 Run the live metadata command before relying on a model in automation:
 

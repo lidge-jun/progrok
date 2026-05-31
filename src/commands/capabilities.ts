@@ -40,7 +40,7 @@ const ENDPOINTS = [
   // Videos (Imagine API, async)
   { category: "videos", method: "POST", path: "/v1/videos/generations", type: "async", description: "T2V / I2V / R2V — duration 1-15s, resolution 480p/720p/1080p" },
   { category: "videos", method: "POST", path: "/v1/videos/edits", type: "async", description: "Edit a source video by prompt" },
-  { category: "videos", method: "POST", path: "/v1/videos/extensions", type: "async", description: "Extend a video (1-10s continuation)" },
+  { category: "videos", method: "POST", path: "/v1/videos/extensions", type: "async", description: "Extend a video (2-10s continuation, grok-imagine-video only)" },
   { category: "videos", method: "GET", path: "/v1/videos/{id}", type: "poll", description: "Poll generation: pending(progress) → done(video.url)" },
   // Voice — HTTP
   { category: "voice", method: "POST", path: "/v1/tts", type: "binary", description: "Text-to-speech — voice_id, output_format, speed, speech tags" },
