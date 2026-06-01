@@ -215,6 +215,7 @@ Full request/response contracts: see `docs/api.md`. Live metadata:
 |-------|----------|---------|-----------------------|
 | `grok-4.3` (default) | Chat, agentic tools, search, vision | 1M | $1.25 / $2.50 |
 | `grok-build-0.1` | Fast agentic coding | 256K | $1.00 / $2.00 |
+| `grok-composer-2.5` | Agentic code composition | TBD | TBD (team access required) |
 | `grok-4.20-0309-reasoning` | Deep reasoning (legacy) | 200K+ | $1.25 / $2.50 |
 | `grok-4.20-0309-non-reasoning` | Fast, no thinking (legacy) | 200K+ | $1.25 / $2.50 |
 | `grok-4.20-multi-agent-0309` | Deep research (4/16 agents, beta) | 200K+ | $1.25 / $2.50 |

@@ -62,17 +62,19 @@ export function modelsCommand(): Command {
 
         log.info("Available Grok models:\n");
         for (const m of data.data) {
-          const tag = m.id.includes("reasoning")
-            ? " [reasoning]"
-            : m.id.includes("non-reasoning")
-              ? " [fast]"
-              : m.id.includes("build") || m.id.includes("code")
-                ? " [code]"
-                : m.id.includes("imagine-video")
-                  ? " [video]"
-                  : m.id.includes("imagine")
-                    ? " [image]"
-                    : "";
+          const tag = m.id.includes("composer")
+            ? " [composer]"
+            : m.id.includes("reasoning")
+              ? " [reasoning]"
+              : m.id.includes("non-reasoning")
+                ? " [fast]"
+                : m.id.includes("build") || m.id.includes("code")
+                  ? " [code]"
+                  : m.id.includes("imagine-video")
+                    ? " [video]"
+                    : m.id.includes("imagine")
+                      ? " [image]"
+                      : "";
           console.log(`  ${m.id}${tag}`);
         }
         log.dim("\n  Use --detail for pricing and aliases");

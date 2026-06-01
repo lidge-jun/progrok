@@ -64,7 +64,7 @@ After `progrok login`, the stored OAuth session powers every surface below:
 | Current search | `progrok search` | Grok Responses with web search, X search, citations, JSON output, and optional reasoning effort. |
 | Image workflows | `progrok image` | Imagine generation and editing with local reference files and output handling. |
 | Video workflows | `progrok video` | Async video submission, polling, progress display, and download handling. |
-| Coding models | `grok-build-0.1` through the proxy | Grok Build-style coding work from clients that can point at a local OpenAI-compatible endpoint. |
+| Coding models | `grok-build-0.1`, `grok-composer-2.5` through the proxy | Grok Build and Composer coding work from clients that can point at a local OpenAI-compatible endpoint. |
 | Agent discovery | `progrok capabilities --json` | Machine-readable ports, commands, models, endpoints, and auth requirements. |
 
 The placeholder `OPENAI_API_KEY` or `Authorization` value is only there to
@@ -286,6 +286,7 @@ secret through the HTTP proxy and connect directly to xAI's WebSocket endpoint.
 | --- | --- | --- | --- |
 | `grok-4.3` | Default chat, tools, search, vision | 1M | Also available through common Grok aliases. |
 | `grok-build-0.1` | Fast agentic coding | 256K | Good default for Grok Build-style coding tools through the OAuth proxy. |
+| `grok-composer-2.5` | Agentic code composition | TBD | Grok Build composer model. Requires team-level access; may not be visible to all accounts yet. |
 | `grok-4.20-0309-reasoning` | Deep reasoning | 200K+ | Legacy reasoning model. |
 | `grok-4.20-0309-non-reasoning` | Lower-latency text | 200K+ | Legacy non-reasoning model. |
 | `grok-4.20-multi-agent-0309` | Deep research | 200K+ | Supports high and xhigh effort. |
