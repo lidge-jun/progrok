@@ -286,7 +286,8 @@ secret through the HTTP proxy and connect directly to xAI's WebSocket endpoint.
 | --- | --- | --- | --- |
 | `grok-4.3` | Default chat, tools, search, vision | 1M | Also available through common Grok aliases. |
 | `grok-build-0.1` | Fast agentic coding | 256K | Good default for Grok Build-style coding tools through the OAuth proxy. |
-| `grok-composer-2.5` | Agentic code composition | TBD | Grok Build composer model. Requires team-level access; may not be visible to all accounts yet. |
+| `grok-composer-2.5-fast` | Agentic code composition (fast) | TBD | Live on `/v1/chat/completions`; supports `reasoning_content`. Not listed in `/v1/models` yet. |
+| `grok-composer-2.5` | Agentic code composition | TBD | Requires team-level access; may not be visible to all accounts yet. |
 | `grok-4.20-0309-reasoning` | Deep reasoning | 200K+ | Legacy reasoning model. |
 | `grok-4.20-0309-non-reasoning` | Lower-latency text | 200K+ | Legacy non-reasoning model. |
 | `grok-4.20-multi-agent-0309` | Deep research | 200K+ | Supports high and xhigh effort. |
