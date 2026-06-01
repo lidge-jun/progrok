@@ -1,0 +1,34 @@
+---
+import DocsLayout from '../../../layouts/DocsLayout.astro';
+const title = 'xAI Smoke Matrix';
+---
+
+<DocsLayout title={title}>
+<h1>xAI Smoke Matrix</h1>
+<p>This matrix records live OAuth smoke results for the broader xAI surface that progrok activates. It separates confirmed working surfaces from environment-dependent checks that need external setup.</p>
+
+<h2>Passed</h2>
+<table>
+<thead><tr><th>Surface</th><th>Probe</th><th>Evidence</th></tr></thead>
+<tbody>
+<tr><td>Models</td><td><code>/v1/models</code>, <code>/v1/language-models</code>, <code>/v1/image-generation-models</code>, <code>/v1/video-generation-models</code></td><td>All returned HTTP 200.</td></tr>
+<tr><td>Files</td><td>upload, list, metadata, content, delete</td><td>Uploaded text file returned <code>file_id</code>; content download matched; delete returned <code>deleted: true</code>.</td></tr>
+<tr><td>Voice</td><td>TTS voices, TTS generation, STT from generated TTS, realtime client secret, custom voice list</td><td>All returned HTTP 200. STT transcript returned the expected smoke text.</td></tr>
+<tr><td>Images</td><td>generation, single-image edit with data URI</td><td>Both returned base64 image output.</td></tr>
+<tr><td>Tools</td><td><code>web_search</code>, <code>x_search</code>, <code>code_execution</code></td><td>Responses completed. Code execution returned <code>437</code> for <code>19*23</code>.</td></tr>
+<tr><td>Video</td><td>T2V, I2V, R2V, edit, extend, file_id, seconds alias, upload URL, 1.5 I2V</td><td>See the dedicated Video Smoke Matrix page.</td></tr>
+</tbody>
+</table>
+
+<h2>Not Testable Without External Setup</h2>
+<table>
+<thead><tr><th>Surface</th><th>Reason</th></tr></thead>
+<tbody>
+<tr><td>Function calling</td><td>Requires a client execution loop. xAI can emit tool calls, but progrok does not execute arbitrary user functions.</td></tr>
+<tr><td>Remote MCP</td><td>Requires a reachable MCP server URL and known tool contract.</td></tr>
+<tr><td><code>collections_search</code></td><td>Requires a pre-created xAI collection and management setup.</td></tr>
+<tr><td><code>attachment_search</code></td><td>Requires a chat attachment contract beyond the current progrok CLI wrappers.</td></tr>
+<tr><td>Realtime WebSocket TTS/STT/Voice Agent</td><td>WebSocket endpoints are intentionally not proxied. Only HTTP client-secret minting was smoke-tested.</td></tr>
+</tbody>
+</table>
+</DocsLayout>
