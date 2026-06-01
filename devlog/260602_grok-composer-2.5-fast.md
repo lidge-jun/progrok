@@ -66,7 +66,7 @@ hosting their own variant through the same API surface.
 | **cli-jaw** | Added to registry, cursor-runtime, frontend, constants, contracts | Pushed (b939f415) |
 | **hermes-agent** | PR #36968 — added to xAI model list | Submitted |
 | **openclaw** | PR #89190 — added to xAI model catalog + prefixes | Submitted |
-| **opencode** | Archived project, no update needed | Skipped |
+| **opencode** | Added to xai.go model definitions | Fork branch pushed (af5ed12); upstream archived — PR blocked |
 
 ## Smoke Test Summary
 
