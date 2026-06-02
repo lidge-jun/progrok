@@ -10,6 +10,7 @@ import { capabilitiesCommand } from "./commands/capabilities.js";
 import { searchCommand } from "./commands/search.js";
 import { videoCommand } from "./commands/video.js";
 import { imageCommand } from "./commands/image.js";
+import { billingCommand } from "./commands/billing.js";
 import { showStarPrompt } from "./utils/star-prompt.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -70,8 +71,9 @@ program.addCommand(capabilitiesCommand());
 program.addCommand(searchCommand());
 program.addCommand(videoCommand());
 program.addCommand(imageCommand());
+program.addCommand(billingCommand());
 
-const REAL_COMMANDS = new Set(["login", "logout", "proxy", "chat", "models", "status", "skill", "capabilities", "search", "video", "image"]);
+const REAL_COMMANDS = new Set(["login", "logout", "proxy", "chat", "models", "status", "skill", "capabilities", "search", "video", "image", "billing"]);
 const subcommand = process.argv[2];
 if (subcommand && REAL_COMMANDS.has(subcommand)) {
   await showStarPrompt();
