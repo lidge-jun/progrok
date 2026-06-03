@@ -7,6 +7,15 @@ import {
   XAI_OAUTH_TIMEOUT_MS,
 } from "./constants.js";
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 interface CallbackResult {
   code: string;
   state: string;
@@ -63,7 +72,7 @@ export function startCallbackServer(
         const desc = url.searchParams.get("error_description") || error;
         res.writeHead(200, { "Content-Type": "text/html" });
         res.end(
-          `<html><body><h2>Login failed</h2><p>${desc}</p><p>You can close this tab.</p></body></html>`,
+          `<html><body><h2>Login failed</h2><p>${escapeHtml(desc)}</p><p>You can close this tab.</p></body></html>`,
         );
         clearTimeout(timeout);
         server?.close();

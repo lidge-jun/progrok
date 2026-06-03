@@ -7,6 +7,8 @@ import {
 import { getValidBearer } from "../auth/token-store.js";
 import { log } from "../utils/logger.js";
 
+const MAX_BODY_BYTES = 100 * 1024 * 1024; // 100 MB
+
 const HOP_BY_HOP = new Set([
   "host",
   "content-length",
@@ -61,12 +63,25 @@ async function handleProxy(req: Request, res: Response): Promise<void> {
   }
 
   const chunks: Buffer[] = [];
+  let totalBytes = 0;
   for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string);
+    totalBytes += buf.length;
+    if (totalBytes > MAX_BODY_BYTES) {
+      res.status(413).json({
+        error: {
+          message: `Request body exceeds ${MAX_BODY_BYTES / 1024 / 1024}MB limit`,
+          type: "payload_too_large",
+        },
+      });
+      return;
+    }
+    chunks.push(buf);
   }
   const body = Buffer.concat(chunks);
 
-  const qs = req.url.includes("?") ? "?" + req.url.split("?")[1] : "";
+  const qsIdx = req.url.indexOf("?");
+  const qs = qsIdx >= 0 ? req.url.slice(qsIdx) : "";
   const upstreamUrl = `${XAI_API_BASE_URL}${relPath}${qs}`;
   const fwdHeaders = filterHeaders(
     req.headers as Record<string, string>,
@@ -131,6 +146,11 @@ export async function startProxy(
       log.success("progrok proxy running");
       log.info(`  Listening:    http://${host}:${port}/v1`);
       log.info(`  Forwarding:   ${XAI_API_BASE_URL}`);
+      if (host === "0.0.0.0" || host === "::") {
+        log.error(
+          "  ⚠ Bound to all interfaces — your OAuth token is accessible on the local network!",
+        );
+      }
       log.dim(
         "  Client auth:  any bearer token (proxy injects your OAuth credential)",
       );
