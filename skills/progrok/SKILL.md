@@ -297,6 +297,8 @@ curl http://127.0.0.1:18645/v1/responses \
 progrok capabilities          # human-readable
 progrok capabilities --json   # structured JSON for agents
 progrok models --detail       # live pricing + aliases
+progrok billing               # plan tier, usage, remaining quota
+progrok billing --json        # structured billing data for agents
 ```
 
 ## Install

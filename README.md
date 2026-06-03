@@ -156,6 +156,8 @@ export OPENAI_API_KEY=anything
 | `progrok video <prompt> --image ./input.png` | Image-to-video (animate still image). |
 | `progrok video edit <prompt> --video <url>` | Edit existing video with text (real V2V). `grok-imagine-video` only. |
 | `progrok video extend <prompt> --video <url>` | Continue video from last frame. `grok-imagine-video` only. |
+| `progrok billing` | Show subscription plan, usage, and remaining quota. |
+| `progrok billing --json` | Machine-readable billing and usage data. |
 | `progrok capabilities --json` | Print machine-readable command, model, and endpoint metadata. |
 | `progrok skill` | Print an agent-oriented usage guide. |
 

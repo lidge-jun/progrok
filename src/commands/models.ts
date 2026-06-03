@@ -17,8 +17,7 @@ interface SimpleModel {
 }
 
 function formatPrice(ticks: number | undefined): string {
-  if (!ticks) return "-";
-  // ticks = per-token price in 1e-10 USD; show per 1M tokens
+  if (ticks == null) return "-";
   return `$${(ticks / 1e4).toFixed(2)}`;
 }
 
@@ -39,7 +38,7 @@ export function modelsCommand(): Command {
           const data = (await res.json()) as { models: LanguageModel[] };
 
           log.info("Grok Models (detailed)\n");
-          for (const m of data.models) {
+          for (const m of data.models ?? []) {
             const input = (m.input_modalities || []).join(", ");
             const inPrice = formatPrice(m.prompt_text_token_price);
             const outPrice = formatPrice(m.completion_text_token_price);
@@ -61,7 +60,7 @@ export function modelsCommand(): Command {
         const data = (await res.json()) as { data: SimpleModel[] };
 
         log.info("Available Grok models:\n");
-        for (const m of data.data) {
+        for (const m of data.data ?? []) {
           const tag = m.id.includes("composer")
             ? " [composer]"
             : m.id.includes("reasoning")
