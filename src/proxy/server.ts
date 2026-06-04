@@ -6,6 +6,7 @@ import {
 } from "../auth/constants.js";
 import { getValidBearer } from "../auth/token-store.js";
 import { log } from "../utils/logger.js";
+import { injectComposerToolDiscipline } from "./composer-inject.js";
 
 const HOP_BY_HOP = new Set([
   "host",
@@ -65,6 +66,10 @@ async function handleProxy(req: Request, res: Response): Promise<void> {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
   }
   const body = Buffer.concat(chunks);
+  const fwdBody =
+    req.method === "POST"
+      ? injectComposerToolDiscipline(relPath, body)
+      : body;
 
   const qs = req.url.includes("?") ? "?" + req.url.split("?")[1] : "";
   const upstreamUrl = `${XAI_API_BASE_URL}${relPath}${qs}`;
@@ -77,7 +82,7 @@ async function handleProxy(req: Request, res: Response): Promise<void> {
     const upstream = await fetch(upstreamUrl, {
       method: req.method,
       headers: fwdHeaders,
-      body: body.length > 0 ? body : undefined,
+      body: fwdBody.length > 0 ? new Uint8Array(fwdBody) : undefined,
     });
 
     res.status(upstream.status);
