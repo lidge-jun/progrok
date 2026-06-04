@@ -2,15 +2,21 @@ import { log } from "../utils/logger.js";
 
 /**
  * grok-composer-* models are coding-agent models trained on a proprietary
- * harness (Cursor / Grok Build). When driven through a generic OpenAI client
- * they ignore the caller's tool list and emit their built-in tools instead
- * (StrReplace, Shell, Grep, run_terminal_cmd, Read, Write ...), which the
- * caller cannot execute — so edits silently fail or the model spirals.
+ * harness (Cursor / Grok Build). Driven through a generic OpenAI client they
+ * misbehave in two ways this module corrects, at the proxy front-end:
  *
- * This module injects a tool-discipline system instruction for composer
- * requests so the model uses the caller's exact tool names/schemas.
- * It is a fail-safe transform: on any non-applicable case or parse error it
- * returns the original body untouched and never breaks the proxy.
+ *  1. They ignore the caller's tool list and emit their built-in harness tools
+ *     instead (StrReplace, run_terminal_cmd, Shell, Grep ...), which the caller
+ *     cannot execute — so edits silently fail. We inject a tool-discipline
+ *     system instruction so the model uses the caller's exact tools.
+ *  2. They reject the reasoning-effort parameter with HTTP 400
+ *     ("does not support parameter reasoningEffort"), which fails the whole
+ *     request. We strip that parameter for composer requests.
+ *
+ * Both are fail-safe: on any non-applicable case or parse error the original
+ * body is returned untouched and the proxy is never broken. Non-composer
+ * models (e.g. grok-4.3, which DOES support reasoning effort) are never
+ * touched.
  */
 
 const DISCIPLINE_MARKER = "[progrok:tool-discipline]";
@@ -34,15 +40,70 @@ function alreadyInjected(text: unknown): boolean {
   return typeof text === "string" && text.includes(DISCIPLINE_MARKER);
 }
 
+function isObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
 /**
- * Returns a (possibly modified) request body. Only touches POST bodies for
- * the Responses / Chat Completions endpoints when the target model is a
- * composer model and the request actually carries a non-empty tools array.
+ * Remove the reasoning-effort parameter, which composer models reject (400).
+ * Handles both the Chat Completions form (`reasoning_effort`) and the
+ * Responses form (`reasoning.effort`). Returns true if anything changed.
  */
-export function injectComposerToolDiscipline(
+function stripReasoningEffort(parsed: Record<string, unknown>): boolean {
+  let changed = false;
+  if ("reasoning_effort" in parsed) {
+    delete parsed["reasoning_effort"];
+    changed = true;
+  }
+  const reasoning = parsed["reasoning"];
+  if (isObject(reasoning) && "effort" in reasoning) {
+    delete reasoning["effort"];
+    changed = true;
+    if (Object.keys(reasoning).length === 0) delete parsed["reasoning"];
+  }
+  return changed;
+}
+
+/**
+ * Inject the tool-discipline instruction. Only when a non-empty tools array is
+ * present and it has not already been injected. Returns true if it injected.
+ */
+function injectToolDiscipline(
   relPath: string,
-  body: Buffer,
-): Buffer {
+  parsed: Record<string, unknown>,
+): boolean {
+  const tools = parsed["tools"];
+  if (!Array.isArray(tools) || tools.length === 0) return false;
+
+  if (relPath === "/responses") {
+    const existing = parsed["instructions"];
+    if (alreadyInjected(existing)) return false;
+    parsed["instructions"] =
+      typeof existing === "string" && existing.length > 0
+        ? `${existing}\n\n${TOOL_DISCIPLINE}`
+        : TOOL_DISCIPLINE;
+    return true;
+  }
+
+  // /chat/completions — prepend a dedicated system message
+  const messages = parsed["messages"];
+  if (!Array.isArray(messages)) return false;
+  const seen = messages.some((m) =>
+    alreadyInjected((m as Record<string, unknown>)?.["content"]),
+  );
+  if (seen) return false;
+  messages.unshift({ role: "system", content: TOOL_DISCIPLINE });
+  return true;
+}
+
+/**
+ * Returns a (possibly modified) request body for composer requests on the
+ * Responses / Chat Completions endpoints. Strips the unsupported reasoning
+ * effort parameter and injects the tool-discipline instruction. Any other
+ * request (wrong path, non-composer model, non-JSON body, parse error) passes
+ * through untouched.
+ */
+export function prepareComposerRequest(relPath: string, body: Buffer): Buffer {
   if (process.env["PROGROK_DISABLE_COMPOSER_INJECT"] === "1") return body;
   if (!INJECT_PATHS.has(relPath)) return body;
   if (body.length === 0) return body;
@@ -56,33 +117,20 @@ export function injectComposerToolDiscipline(
 
   try {
     if (!isComposerModel(parsed["model"])) return body;
-    const tools = parsed["tools"];
-    if (!Array.isArray(tools) || tools.length === 0) return body;
-
-    if (relPath === "/responses") {
-      const existing = parsed["instructions"];
-      if (alreadyInjected(existing)) return body;
-      parsed["instructions"] =
-        typeof existing === "string" && existing.length > 0
-          ? `${existing}\n\n${TOOL_DISCIPLINE}`
-          : TOOL_DISCIPLINE;
-    } else {
-      // /chat/completions — prepend a dedicated system message
-      const messages = parsed["messages"];
-      if (!Array.isArray(messages)) return body;
-      const seen = messages.some((m) =>
-        alreadyInjected((m as Record<string, unknown>)?.["content"]),
-      );
-      if (seen) return body;
-      messages.unshift({ role: "system", content: TOOL_DISCIPLINE });
-    }
-
-    const out = Buffer.from(JSON.stringify(parsed), "utf8");
-    log.dim(`[progrok] composer tool-discipline injected (${relPath})`);
-    return out;
+    const stripped = stripReasoningEffort(parsed);
+    const injected = injectToolDiscipline(relPath, parsed);
+    if (!stripped && !injected) return body;
+    const notes = [
+      stripped ? "stripped reasoning_effort" : "",
+      injected ? "injected tool-discipline" : "",
+    ]
+      .filter(Boolean)
+      .join(", ");
+    log.dim(`[progrok] composer request adjusted (${relPath}): ${notes}`);
+    return Buffer.from(JSON.stringify(parsed), "utf8");
   } catch (err) {
-    // Never break the proxy because of an injection edge case.
-    log.dim(`[progrok] composer inject skipped: ${(err as Error).message}`);
+    // Never break the proxy because of a transform edge case.
+    log.dim(`[progrok] composer transform skipped: ${(err as Error).message}`);
     return body;
   }
 }

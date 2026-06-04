@@ -50,6 +50,21 @@ apply_patch etc.
   proxy on launchd port 18645): composer EDIT tasks **3/3 succeed** — file
   modified, tools `read`+`edit` complete, 7-10s, no hang.
 
+## Update — reasoning-effort strip
+
+Composer also **rejects the reasoning-effort parameter** with HTTP 400
+(`Model grok-composer-2.5-fast does not support parameter reasoningEffort`),
+on both `reasoning_effort` (Chat Completions) and `reasoning.effort`
+(Responses). Verified: `grok-4.3` accepts it (200); composer does not.
+
+The same proxy transform (`prepareComposerRequest`) now strips that parameter
+for composer requests so a stray effort/variant no longer fails the whole
+request. Non-composer models keep their effort untouched. Verified live:
+composer + effort → 200 (was 400); grok-4.3 + effort → 200 (preserved).
+
+Implication: do not set an opencode `--variant`/effort for composer; its model
+config carries no `variants`, so the default path is already safe.
+
 ## Notes
 
 - opencode must use the Responses API for composer to be stable. Configure the
