@@ -16,13 +16,13 @@ import { log } from "../utils/logger.js";
 const DISCIPLINE_MARKER = "[progrok:tool-discipline]";
 
 const TOOL_DISCIPLINE =
-  `${DISCIPLINE_MARKER} Tool-calling contract (progrok): You MUST use ONLY the ` +
-  `tools provided in this request's tool list, calling each by its EXACT name ` +
-  `and EXACT parameter keys as defined. NEVER invent or call tools that are not ` +
-  `in the provided list — in particular do NOT use StrReplace, Shell, Grep, ` +
-  `run_terminal_cmd, Read, Write, Edit, or apply_patch unless that exact name ` +
-  `appears in the provided tool list. To modify an existing file, use the ` +
-  `provided file-editing tool with its given parameters (do not rename it).`;
+  `${DISCIPLINE_MARKER} The tools provided in this request are the ONLY tools ` +
+  `that exist in this environment. Call them strictly by their exact names and ` +
+  `parameter schemas, and never call any tool whose exact name is not in the ` +
+  `provided list. Do not fall back to built-in coding-agent harness tools from ` +
+  `your own training (e.g. StrReplace, run_terminal_cmd, Shell, Grep) unless ` +
+  `that exact name appears in the provided list; use the request's own tools ` +
+  `instead — for example, edit files with the provided file-editing tool.`;
 
 const INJECT_PATHS = new Set(["/responses", "/chat/completions"]);
 
