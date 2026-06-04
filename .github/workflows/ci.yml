@@ -4,19 +4,70 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# Least-privilege: CI only needs to read the repo.
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  # Fast feedback: type errors fail the run before the heavier matrix starts.
+  typecheck:
+    name: Typecheck
     runs-on: ubuntu-latest
-
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-
-      - run: npm install
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - run: npm run typecheck
+
+  # Verify the published artifact actually builds and the CLI entry runs.
+  build:
+    name: Build & smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - run: npm run build
-      - run: npm test
+      - name: Verify built CLI entry exists
+        run: test -f dist/index.js
+      - name: Smoke-run built CLI
+        run: node dist/index.js --version
+
+  # Full test matrix across supported OSes and Node versions.
+  test:
+    name: Test (${{ matrix.os }} · node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      # Don't abort the whole matrix when one cell fails — we want the full grid.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['20', '22', '24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      # Run under bash on every OS so the `tests/*.test.ts` glob in the npm
+      # "test" script expands on Windows too (cmd/PowerShell would not expand it).
+      - name: Run tests
+        run: npm test
+        shell: bash
