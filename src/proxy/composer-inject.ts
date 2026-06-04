@@ -17,10 +17,15 @@ import { log } from "../utils/logger.js";
  *     model to use the caller's provided read/inspection tools instead of
  *     analyzing unseen attachment contents from filenames alone.
  *
- * Both are fail-safe: on any non-applicable case or parse error the original
- * body is returned untouched and the proxy is never broken. Non-composer
- * models (e.g. grok-4.3, which DOES support reasoning effort) are never
- * touched.
+ * Separately, for ALL grok models (not just composer), this module can inject
+ * xAI server-side Agent Tools (web_search / x_search) into the Responses-API
+ * tools array, opt-in via PROGROK_INJECT_SEARCH, so generic clients like
+ * opencode can use native web/X search.
+ *
+ * Every transform is fail-safe: on any non-applicable case or parse error the
+ * original body is returned untouched and the proxy is never broken. The
+ * composer-specific transforms (1-3) never touch non-composer models such as
+ * grok-4.3 (which DOES support reasoning effort).
  */
 
 const DISCIPLINE_MARKER = "[progrok:tool-discipline]";
@@ -106,15 +111,77 @@ function injectToolDiscipline(
   return true;
 }
 
+const SEARCH_ALIASES: Record<string, string> = {
+  web: "web_search",
+  web_search: "web_search",
+  x: "x_search",
+  x_search: "x_search",
+};
+
 /**
- * Returns a (possibly modified) request body for composer requests on the
- * Responses / Chat Completions endpoints. Strips the unsupported reasoning
- * effort parameter and injects the tool-discipline instruction. Any other
- * request (wrong path, non-composer model, non-JSON body, parse error) passes
- * through untouched.
+ * Parse the PROGROK_INJECT_SEARCH opt-in toggle into a list of xAI server-side
+ * search tool types. Accepts e.g. "web,x", "web_search", "all"/"1"/"true".
+ * Returns [] when unset (feature off by default).
  */
-export function prepareComposerRequest(relPath: string, body: Buffer): Buffer {
-  if (process.env["PROGROK_DISABLE_COMPOSER_INJECT"] === "1") return body;
+function parseSearchToggle(): string[] {
+  const raw = (process.env["PROGROK_INJECT_SEARCH"] || "").trim().toLowerCase();
+  if (!raw) return [];
+  if (raw === "1" || raw === "all" || raw === "true") {
+    return ["web_search", "x_search"];
+  }
+  const out = new Set<string>();
+  for (const tok of raw.split(/[,\s]+/).filter(Boolean)) {
+    const mapped = SEARCH_ALIASES[tok];
+    if (mapped) out.add(mapped);
+  }
+  return [...out];
+}
+
+/**
+ * Inject xAI server-side Agent Tools (web_search / x_search) into the tools
+ * array so grok models can search through generic clients (e.g. opencode).
+ * Responses-API only (Chat Completions rejects these tool types), opt-in via
+ * PROGROK_INJECT_SEARCH, skips multi-agent models, and de-dupes by type.
+ * Applies to ALL grok models, not just composer. Returns true if it changed.
+ */
+function injectServerSideSearch(
+  relPath: string,
+  parsed: Record<string, unknown>,
+): boolean {
+  if (relPath !== "/responses") return false;
+  const wanted = parseSearchToggle();
+  if (wanted.length === 0) return false;
+  const model = parsed["model"];
+  if (typeof model === "string" && model.toLowerCase().includes("multi-agent")) {
+    return false;
+  }
+  let tools = parsed["tools"];
+  if (!Array.isArray(tools)) {
+    tools = [];
+    parsed["tools"] = tools;
+  }
+  const present = new Set(
+    (tools as unknown[]).map((t) => (isObject(t) ? String(t["type"] || "") : "")),
+  );
+  let changed = false;
+  for (const type of wanted) {
+    if (!present.has(type)) {
+      (tools as unknown[]).push({ type });
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/**
+ * Returns a (possibly modified) request body for grok requests on the
+ * Responses / Chat Completions endpoints:
+ *  - server-side search injection (all grok models, opt-in via env, Responses);
+ *  - composer-only: strip unsupported reasoning effort + inject tool-discipline.
+ * Any other request (wrong path, non-JSON body, parse error) passes through
+ * untouched, and the proxy is never broken by a transform edge case.
+ */
+export function prepareGrokRequest(relPath: string, body: Buffer): Buffer {
   if (!INJECT_PATHS.has(relPath)) return body;
   if (body.length === 0) return body;
 
@@ -126,21 +193,28 @@ export function prepareComposerRequest(relPath: string, body: Buffer): Buffer {
   }
 
   try {
-    if (!isComposerModel(parsed["model"])) return body;
-    const stripped = stripReasoningEffort(parsed);
-    const injected = injectToolDiscipline(relPath, parsed);
-    if (!stripped && !injected) return body;
+    const composerDisabled =
+      process.env["PROGROK_DISABLE_COMPOSER_INJECT"] === "1";
+    const searched = injectServerSideSearch(relPath, parsed);
+    let stripped = false;
+    let injected = false;
+    if (!composerDisabled && isComposerModel(parsed["model"])) {
+      stripped = stripReasoningEffort(parsed);
+      injected = injectToolDiscipline(relPath, parsed);
+    }
+    if (!searched && !stripped && !injected) return body;
     const notes = [
+      searched ? "injected server-side search" : "",
       stripped ? "stripped reasoning_effort" : "",
       injected ? "injected tool-discipline" : "",
     ]
       .filter(Boolean)
       .join(", ");
-    log.dim(`[progrok] composer request adjusted (${relPath}): ${notes}`);
+    log.dim(`[progrok] grok request adjusted (${relPath}): ${notes}`);
     return Buffer.from(JSON.stringify(parsed), "utf8");
   } catch (err) {
     // Never break the proxy because of a transform edge case.
-    log.dim(`[progrok] composer transform skipped: ${(err as Error).message}`);
+    log.dim(`[progrok] grok transform skipped: ${(err as Error).message}`);
     return body;
   }
 }

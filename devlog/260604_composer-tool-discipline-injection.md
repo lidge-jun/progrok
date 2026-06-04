@@ -81,6 +81,29 @@ Verification: after rebuilding and restarting the launchd proxy, a direct
 path returned HTTP 200 and a `function_call` named `read` with the exact image
 path, instead of answering from the filename.
 
+## Update — server-side search injection (web_search / x_search)
+
+The xAI Responses API exposes server-side Agent Tools (the old chat
+`search_parameters` Live Search is deprecated → HTTP 410). Valid tool types
+(from the API's own deserializer): `function, web_search, x_search,
+collections_search, file_search, code_execution, code_interpreter, mcp, shell`.
+Verified live: grok-4.3 AND composer both accept `web_search`/`x_search`, and
+they coexist with caller `function` tools in one request. These are
+Responses-API only (Chat Completions returns 422).
+
+Generic clients like opencode don't add xAI's server-side search (they ship
+their own `function` tools). So `prepareGrokRequest` can inject `web_search` /
+`x_search` into the Responses tools array, opt-in via `PROGROK_INJECT_SEARCH`
+(`web`, `x`, `web,x`, or `all`/`1`). Applies to ALL grok models (not just
+composer), skips multi-agent models, de-dupes by type, default OFF.
+
+Verified: with the toggle on, a request carrying only a `function` tool gets
+`web_search`+`x_search` injected and grok actually runs the search
+(`num_server_side_tools_used: 2`, real cited X answer). Default off → no change.
+
+The module entry point was renamed `prepareComposerRequest` → `prepareGrokRequest`
+since search injection applies beyond composer. Unit tests: 23/23.
+
 ## Notes
 
 - opencode must use the Responses API for composer to be stable. Configure the

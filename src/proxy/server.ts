@@ -6,7 +6,7 @@ import {
 } from "../auth/constants.js";
 import { getValidBearer } from "../auth/token-store.js";
 import { log } from "../utils/logger.js";
-import { prepareComposerRequest } from "./composer-inject.js";
+import { prepareGrokRequest } from "./composer-inject.js";
 
 const HOP_BY_HOP = new Set([
   "host",
@@ -67,7 +67,7 @@ async function handleProxy(req: Request, res: Response): Promise<void> {
   }
   const body = Buffer.concat(chunks);
   const fwdBody =
-    req.method === "POST" ? prepareComposerRequest(relPath, body) : body;
+    req.method === "POST" ? prepareGrokRequest(relPath, body) : body;
 
   const qs = req.url.includes("?") ? "?" + req.url.split("?")[1] : "";
   const upstreamUrl = `${XAI_API_BASE_URL}${relPath}${qs}`;
