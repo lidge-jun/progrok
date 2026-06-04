@@ -66,8 +66,7 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      # Run under bash on every OS so the `tests/*.test.ts` glob in the npm
-      # "test" script expands on Windows too (cmd/PowerShell would not expand it).
+      # Test discovery is handled by scripts/run-tests.mjs (shell- and
+      # Node-version-independent), so no special shell is needed here.
       - name: Run tests
         run: npm test
-        shell: bash

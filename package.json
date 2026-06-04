@@ -18,7 +18,7 @@
     "build": "npm run typecheck && tsup && node scripts/copy-public.mjs",
     "dev": "tsup --watch",
     "prepublishOnly": "npm run build",
-    "test": "node --test-concurrency=1 --import tsx --experimental-test-module-mocks --test tests/*.test.ts"
+    "test": "node scripts/run-tests.mjs"
   },
   "keywords": [
     "grok",
