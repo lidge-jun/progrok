@@ -65,6 +65,22 @@ composer + effort → 200 (was 400); grok-4.3 + effort → 200 (preserved).
 Implication: do not set an opencode `--variant`/effort for composer; its model
 config carries no `variants`, so the default path is already safe.
 
+## Update — text-only attachment/read guidance
+
+In opencode's progrok provider config, `grok-composer-2.5-fast` is registered as
+text-only input while other Grok models can accept text+image. If a user pastes
+or attaches an image, composer may receive only a text hint/path plus the
+client's file tools. The injected discipline now explicitly tells composer that
+it cannot infer attachment or image contents from a text-only message, path, or
+filename alone; when a read/file-inspection tool is provided, it must call that
+exact provided tool before analyzing the attachment. If no suitable tool exists,
+it should say it cannot inspect the attachment directly.
+
+Verification: after rebuilding and restarting the launchd proxy, a direct
+`POST /v1/responses` smoke with only a `read` function tool and a pasted PNG
+path returned HTTP 200 and a `function_call` named `read` with the exact image
+path, instead of answering from the filename.
+
 ## Notes
 
 - opencode must use the Responses API for composer to be stable. Configure the

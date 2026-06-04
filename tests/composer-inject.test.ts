@@ -32,6 +32,31 @@ describe("prepareComposerRequest", () => {
     assert.deepEqual(parsed["tools"], TOOLS);
   });
 
+  it("tells text-only composer to inspect attachments with provided read-like tools", () => {
+    const out = prepareComposerRequest(
+      "/responses",
+      buf({
+        model: "grok-composer-2.5-fast",
+        input: [{ role: "user", content: "Analyze /tmp/screenshot.png" }],
+        tools: [
+          ...TOOLS,
+          {
+            type: "function",
+            name: "read",
+            parameters: {
+              type: "object",
+              properties: { filePath: { type: "string" } },
+            },
+          },
+        ],
+      }),
+    );
+    const instructions = String(parse(out)["instructions"]);
+    assert.ok(instructions.includes("pasted image"));
+    assert.ok(instructions.includes("read/file-inspection tool"));
+    assert.ok(instructions.includes("cannot see attachment or image contents"));
+  });
+
   it("appends to existing instructions, preserving the original prompt", () => {
     const out = prepareComposerRequest(
       "/responses",

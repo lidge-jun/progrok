@@ -12,6 +12,10 @@ import { log } from "../utils/logger.js";
  *  2. They reject the reasoning-effort parameter with HTTP 400
  *     ("does not support parameter reasoningEffort"), which fails the whole
  *     request. We strip that parameter for composer requests.
+ *  3. When registered as a text-only model in generic clients, attached images
+ *     and files may be represented only as paths or text hints. We instruct the
+ *     model to use the caller's provided read/inspection tools instead of
+ *     analyzing unseen attachment contents from filenames alone.
  *
  * Both are fail-safe: on any non-applicable case or parse error the original
  * body is returned untouched and the proxy is never broken. Non-composer
@@ -28,7 +32,13 @@ const TOOL_DISCIPLINE =
   `provided list. Do not fall back to built-in coding-agent harness tools from ` +
   `your own training (e.g. StrReplace, run_terminal_cmd, Shell, Grep) unless ` +
   `that exact name appears in the provided list; use the request's own tools ` +
-  `instead — for example, edit files with the provided file-editing tool.`;
+  `instead — for example, edit files with the provided file-editing tool. ` +
+  `If the user asks about an attached file, pasted image, screenshot, or file ` +
+  `path and a read/file-inspection tool is available in the provided list, ` +
+  `call that provided tool by its exact name before analyzing the content. You ` +
+  `cannot see attachment or image contents from a text-only message, path, or ` +
+  `filename alone. If no suitable provided tool exists, say you cannot inspect ` +
+  `the attachment directly.`;
 
 const INJECT_PATHS = new Set(["/responses", "/chat/completions"]);
 
