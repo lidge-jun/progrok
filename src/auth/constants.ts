@@ -29,6 +29,12 @@ export const TOKEN_REFRESH_SKEW_MS = 2 * 60 * 1000;
 export const XAI_API_BASE_URL = "https://api.x.ai/v1";
 export const DEFAULT_MODEL = "grok-4.3";
 
+/** Default model for `progrok search` (multi-agent + web/x tools). */
+export const SEARCH_DEFAULT_MODEL = "grok-4.20-multi-agent-0309";
+
+/** Default reasoning effort for search (multi-agent: high → 12 agents). */
+export const SEARCH_DEFAULT_REASONING = "high";
+
 // Proxy
 export const PROXY_DEFAULT_PORT = 18645;
 export const PROXY_DEFAULT_HOST = "127.0.0.1";
