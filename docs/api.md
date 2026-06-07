@@ -391,6 +391,8 @@ Forwarded to xAI without filtering — any new HTTP endpoint works automatically
 `search_parameters: { mode: "off"|"on"|"auto", sources: ["web","x","news","rss"],
 from_date, to_date, max_search_results, return_citations }`.
 
+`progrok search` uses **POST /v1/responses** with `web_search` / `x_search` tools (Agent Tools API). Do **not** use Chat `search_parameters` — xAI returns **410 Live search is deprecated** for that path. Citation contract is sent via `instructions`; parse `url_citation` from the response. Agents: `--json` + list every `citations[].url`.
+
 ---
 
 ## Authentication

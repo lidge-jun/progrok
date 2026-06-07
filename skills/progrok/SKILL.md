@@ -54,7 +54,9 @@ progrok search "quantum news" --model grok-4.3    # pick the model
 ```
 
 Output is an AI summary with inline `[[n]](url)` citations plus a deduplicated
-Sources list. Use `--json` for `{ answer, citations[], queries[], usage }`.
+Sources list and a **Markdown links** block (human mode). Agents must use
+`--json` and paste `citations[].url` into their reply — paraphrasing `answer`
+alone drops links. JSON shape: `{ answer, citations[], queries[], usage }`.
 
 ### Pattern 1: Direct proxy (recommended for agents)
 

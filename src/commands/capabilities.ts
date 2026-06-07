@@ -270,7 +270,7 @@ export function buildCapabilities() {
         output: ["text"],
         context: "200K+ (long-context pricing above 200K tokens)",
         pricing: { inputPer1M: 1.25, cachedInputPer1M: 0.2, outputPer1M: 2.5, longContext: { thresholdTokens: 200000, inputPer1M: 2.5, cachedInputPer1M: 0.4, outputPer1M: 5.0 }, searchPer1KSources: 25.0, unit: "USD" },
-        reasoning: { effort: ["low", "medium", "high", "xhigh"], default: "low", note: "effort selects agent count: low/medium=4, high/xhigh=16" },
+        reasoning: { effort: ["low", "medium", "high", "xhigh"], default: "high", note: "effort selects agent count: low/medium=4, high/xhigh=16; progrok search CLI default is high" },
         structuredOutput: true,
         functionCalling: false,
         tools: ["web_search", "x_search", "code_interpreter", "collections_search", "mcp"],
