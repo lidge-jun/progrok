@@ -11,6 +11,7 @@ import { log } from "../utils/logger.js";
 import { writeFileSync } from "node:fs";
 import { mediaRef } from "../utils/media.js";
 import { collectRefs } from "../utils/collect-refs.js";
+import { parseIntOrThrow } from "../utils/parse-int.js";
 
 export interface VideoOptions {
   model?: string;
@@ -161,8 +162,8 @@ export function videoCommand(): Command {
 async function generateAction(prompt: string, opts: VideoOptions): Promise<void> {
   try {
     const bearer = await getValidBearer();
-    const duration = parseInt(opts.seconds ?? opts.duration ?? "5", 10);
-    const timeout = parseInt(opts.timeout ?? String(VIDEO_DEFAULT_TIMEOUT_S), 10) * 1000;
+    const duration = parseIntOrThrow(opts.seconds ?? opts.duration ?? "5", "duration", 1, 15);
+    const timeout = parseIntOrThrow(opts.timeout ?? String(VIDEO_DEFAULT_TIMEOUT_S), "timeout", 1) * 1000;
     const refs = opts.ref ?? [];
 
     if (opts.image && refs.length > 0) {
@@ -173,9 +174,6 @@ async function generateAction(prompt: string, opts: VideoOptions): Promise<void>
     }
     if (refs.length > 0 && duration > 10) {
       throw new Error("Reference-to-video duration is capped at 10 seconds.");
-    }
-    if (duration < 1 || duration > 15) {
-      throw new Error("Video generation duration must be 1-15 seconds.");
     }
     if (opts.model?.includes("1.5") && !opts.image) {
       throw new Error("grok-imagine-video-1.5-preview live-smoke supports image-to-video only; prompt-only T2V and reference_images are rejected by xAI.");
@@ -232,7 +230,7 @@ async function generateAction(prompt: string, opts: VideoOptions): Promise<void>
 async function editAction(prompt: string, opts: VideoEditOptions): Promise<void> {
   try {
     const bearer = await getValidBearer();
-    const timeout = parseInt(opts.timeout ?? String(VIDEO_DEFAULT_TIMEOUT_S), 10) * 1000;
+    const timeout = parseIntOrThrow(opts.timeout ?? String(VIDEO_DEFAULT_TIMEOUT_S), "timeout", 1) * 1000;
     const model = opts.model ?? DEFAULT_VIDEO_MODEL;
 
     if (model.includes("1.5")) {
@@ -275,15 +273,12 @@ async function editAction(prompt: string, opts: VideoEditOptions): Promise<void>
 async function extendAction(prompt: string, opts: VideoExtendOptions): Promise<void> {
   try {
     const bearer = await getValidBearer();
-    const timeout = parseInt(opts.timeout ?? String(VIDEO_DEFAULT_TIMEOUT_S), 10) * 1000;
-    const duration = parseInt(opts.duration ?? "6", 10);
+    const timeout = parseIntOrThrow(opts.timeout ?? String(VIDEO_DEFAULT_TIMEOUT_S), "timeout", 1) * 1000;
+    const duration = parseIntOrThrow(opts.duration ?? "6", "duration", 2, 10);
     const model = opts.model ?? DEFAULT_VIDEO_MODEL;
 
     if (model.includes("1.5")) {
       throw new Error("Video extension is only supported by grok-imagine-video (not 1.5-preview).");
-    }
-    if (duration < 2 || duration > 10) {
-      throw new Error("Extension duration must be 2-10 seconds.");
     }
 
     const sourceVideo = mediaRef(opts.video, "video");

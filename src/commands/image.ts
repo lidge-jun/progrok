@@ -9,6 +9,7 @@ import { log } from "../utils/logger.js";
 import { writeFileSync } from "node:fs";
 import { fileToDataUri } from "../utils/media.js";
 import { collectRefs } from "../utils/collect-refs.js";
+import { parseIntOrThrow } from "../utils/parse-int.js";
 
 export interface ImageOptions {
   model?: string;
@@ -44,7 +45,7 @@ export function imageCommand(): Command {
       try {
         const bearer = await getValidBearer();
         const refs = opts.ref ?? [];
-        const n = parseInt(opts.n ?? "1", 10);
+        const n = parseIntOrThrow(opts.n ?? "1", "n", 1, 10);
         const isEdit = refs.length > 0;
 
         const endpoint = isEdit ? "images/edits" : "images/generations";
