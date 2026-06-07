@@ -33,19 +33,26 @@ export async function fetchOIDCDiscovery(): Promise<OIDCDiscovery> {
     throw new Error(`OIDC discovery failed: HTTP ${res.status}`);
   }
 
-  const data = (await res.json()) as Record<string, unknown>;
+  /** Shape of a standard OIDC .well-known/openid-configuration response. */
+  interface OIDCRawResponse {
+    authorization_endpoint: string;
+    token_endpoint: string;
+    device_authorization_endpoint?: string;
+  }
+
+  const data = (await res.json()) as OIDCRawResponse;
 
   const authorizationEndpoint = requireTrustedEndpoint(
-    data.authorization_endpoint as string,
+    data.authorization_endpoint,
     "authorization_endpoint",
   );
   const tokenEndpoint = requireTrustedEndpoint(
-    data.token_endpoint as string,
+    data.token_endpoint,
     "token_endpoint",
   );
   const deviceAuthorizationEndpoint = data.device_authorization_endpoint
     ? requireTrustedEndpoint(
-        data.device_authorization_endpoint as string,
+        data.device_authorization_endpoint,
         "device_authorization_endpoint",
       )
     : undefined;

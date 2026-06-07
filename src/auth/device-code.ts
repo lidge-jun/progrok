@@ -81,7 +81,7 @@ export async function loginWithDeviceCode(): Promise<void> {
       return;
     }
 
-    const err = (await pollRes.json()) as Record<string, string>;
+    const err = (await pollRes.json()) as { error: string; error_description?: string };
     if (err.error === "authorization_pending") continue;
     if (err.error === "slow_down") {
       await new Promise((r) => setTimeout(r, 5000));

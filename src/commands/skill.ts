@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative } from "node:path";
 import { readPackageVersion } from "../utils/version.js";
+import { log } from "../utils/logger.js";
 
 // tsup bundles to dist/index.js → one level up is the project root
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -12,7 +13,7 @@ const SKILL_PATH = join(ROOT, "skills", "progrok", "SKILL.md");
 
 function readSkill(): string {
   if (!existsSync(SKILL_PATH)) {
-    console.error(`packaged skill not found: ${SKILL_PATH}`);
+    log.error(`packaged skill not found: ${SKILL_PATH}`);
     process.exit(5);
   }
   return readFileSync(SKILL_PATH, "utf-8");
