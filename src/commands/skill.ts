@@ -2,22 +2,13 @@ import { Command } from "commander";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative } from "node:path";
+import { readPackageVersion } from "../utils/version.js";
 
 // tsup bundles to dist/index.js → one level up is the project root
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SKILL_PATH = join(ROOT, "skills", "progrok", "SKILL.md");
-const PACKAGE_PATH = join(ROOT, "package.json");
 
-function readPackageVersion(): string {
-  try {
-    const pkg = JSON.parse(readFileSync(PACKAGE_PATH, "utf-8")) as {
-      version?: string;
-    };
-    return pkg.version || "?";
-  } catch {
-    return "?";
-  }
-}
+
 
 function readSkill(): string {
   if (!existsSync(SKILL_PATH)) {

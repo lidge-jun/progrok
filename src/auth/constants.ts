@@ -29,10 +29,25 @@ export const TOKEN_REFRESH_SKEW_MS = 2 * 60 * 1000;
 export const XAI_API_BASE_URL = "https://api.x.ai/v1";
 export const DEFAULT_MODEL = "grok-4.3";
 
+/** Default model for `progrok search` (multi-agent + web/x tools). */
+export const SEARCH_DEFAULT_MODEL = "grok-4.20-multi-agent-0309";
+
+/** Default reasoning effort for search (multi-agent: high → 12 agents). */
+export const SEARCH_DEFAULT_REASONING = "high";
+
 // Proxy
 export const PROXY_DEFAULT_PORT = 18645;
 export const PROXY_DEFAULT_HOST = "127.0.0.1";
 export const CHAT_DEFAULT_PORT = 18646;
+
+// Image / Video
+export const DEFAULT_IMAGE_MODEL = "grok-imagine-image";
+export const DEFAULT_VIDEO_MODEL = "grok-imagine-video";
+export const VIDEO_POLL_INTERVAL_MS = 5_000;
+export const VIDEO_DEFAULT_TIMEOUT_S = 600;
+
+// Cost
+export const USD_TICKS_DIVISOR = 10_000_000_000;
 
 // Paths
 export const CONFIG_DIR = join(homedir(), ".progrok");

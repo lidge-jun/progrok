@@ -12,22 +12,9 @@ import { videoCommand } from "./commands/video.js";
 import { imageCommand } from "./commands/image.js";
 import { billingCommand } from "./commands/billing.js";
 import { showStarPrompt } from "./utils/star-prompt.js";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { readPackageVersion } from "./utils/version.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function getVersion(): string {
-  try {
-    const pkg = JSON.parse(
-      readFileSync(join(__dirname, "..", "package.json"), "utf8"),
-    ) as { version: string };
-    return pkg.version;
-  } catch {
-    return "0.0.0";
-  }
-}
 
 const program = new Command();
 program.enablePositionalOptions();
@@ -58,7 +45,7 @@ program
     /v1/batch/completions    Batch processing
     /v1/embeddings           Embeddings`,
   )
-  .version(getVersion());
+  .version(readPackageVersion());
 
 program.addCommand(loginCommand());
 program.addCommand(logoutCommand());

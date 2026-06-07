@@ -6,6 +6,7 @@ import {
 } from "../auth/constants.js";
 import { getValidBearer } from "../auth/token-store.js";
 import { log } from "../utils/logger.js";
+import { prepareGrokRequest } from "./composer-inject.js";
 
 const MAX_BODY_BYTES = 100 * 1024 * 1024; // 100 MB
 
@@ -79,6 +80,8 @@ async function handleProxy(req: Request, res: Response): Promise<void> {
     chunks.push(buf);
   }
   const body = Buffer.concat(chunks);
+  const fwdBody =
+    req.method === "POST" ? prepareGrokRequest(relPath, body) : body;
 
   const qsIdx = req.url.indexOf("?");
   const qs = qsIdx >= 0 ? req.url.slice(qsIdx) : "";
@@ -92,7 +95,7 @@ async function handleProxy(req: Request, res: Response): Promise<void> {
     const upstream = await fetch(upstreamUrl, {
       method: req.method,
       headers: fwdHeaders,
-      body: body.length > 0 ? body : undefined,
+      body: fwdBody.length > 0 ? new Uint8Array(fwdBody) : undefined,
     });
 
     res.status(upstream.status);
@@ -118,8 +121,8 @@ async function handleProxy(req: Request, res: Response): Promise<void> {
           if (done) break;
           res.write(value);
         }
-      } catch {
-        /* stream interrupted */
+      } catch (streamErr) {
+        log.dim(`[progrok] stream read interrupted: ${(streamErr as Error).message}`);
       }
     }
     res.end();

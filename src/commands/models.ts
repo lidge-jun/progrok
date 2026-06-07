@@ -21,6 +21,16 @@ function formatPrice(ticks: number | undefined): string {
   return `$${(ticks / 1e4).toFixed(2)}`;
 }
 
+const MODEL_TAGS: [string, string][] = [
+  ["composer", " [composer]"],
+  ["non-reasoning", " [fast]"],
+  ["reasoning", " [reasoning]"],
+  ["build", " [code]"],
+  ["code", " [code]"],
+  ["imagine-video", " [video]"],
+  ["imagine", " [image]"],
+];
+
 export function modelsCommand(): Command {
   return new Command("models")
     .description("List available Grok models")
@@ -61,19 +71,7 @@ export function modelsCommand(): Command {
 
         log.info("Available Grok models:\n");
         for (const m of data.data ?? []) {
-          const tag = m.id.includes("composer")
-            ? " [composer]"
-            : m.id.includes("reasoning")
-              ? " [reasoning]"
-              : m.id.includes("non-reasoning")
-                ? " [fast]"
-                : m.id.includes("build") || m.id.includes("code")
-                  ? " [code]"
-                  : m.id.includes("imagine-video")
-                    ? " [video]"
-                    : m.id.includes("imagine")
-                      ? " [image]"
-                      : "";
+          const tag = MODEL_TAGS.find(([k]) => m.id.includes(k))?.[1] ?? "";
           console.log(`  ${m.id}${tag}`);
         }
         log.dim("\n  Use --detail for pricing and aliases");

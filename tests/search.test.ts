@@ -1,6 +1,27 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildSearchTools, extractSearchResult, searchCommand } from "../src/commands/search.js";
+import {
+  buildSearchRequestBody,
+  buildSearchTools,
+  extractSearchResult,
+  SEARCH_CITATION_INSTRUCTIONS,
+  searchCommand,
+} from "../src/commands/search.js";
+
+describe("buildSearchRequestBody", () => {
+  it("includes citation instructions and web+x tools by default", () => {
+    const body = buildSearchRequestBody("test query", { model: "grok-4.20-multi-agent-0309" });
+    assert.equal(body.instructions, SEARCH_CITATION_INSTRUCTIONS);
+    assert.deepEqual(body.tools, [{ type: "web_search" }, { type: "x_search" }]);
+    assert.match(body.instructions, /\[\[n\]\]\(full_url\)/);
+    assert.equal(body.reasoning?.effort, "high");
+  });
+
+  it("maps --web only to web_search tool", () => {
+    const body = buildSearchRequestBody("q", { model: "grok-4.20-multi-agent-0309", web: true });
+    assert.deepEqual(body.tools, [{ type: "web_search" }]);
+  });
+});
 
 describe("buildSearchTools", () => {
   it("defaults to both web and x when no flags", () => {

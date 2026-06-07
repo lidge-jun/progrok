@@ -1,18 +1,16 @@
 import {
   readFileSync,
   writeFileSync,
-  mkdirSync,
-  existsSync,
   unlinkSync,
 } from "node:fs";
 import {
-  CONFIG_DIR,
   AUTH_FILE,
   TOKEN_REFRESH_SKEW_MS,
   XAI_OAUTH_CLIENT_ID,
   XAI_OAUTH_FETCH_TIMEOUT_MS,
 } from "./constants.js";
 import { log } from "../utils/logger.js";
+import { ensureConfigDir } from "../utils/config.js";
 
 export interface TokenData {
   accessToken: string;
@@ -31,11 +29,7 @@ export interface SaveTokenInput {
   tokenEndpoint?: string;
 }
 
-function ensureConfigDir(): void {
-  if (!existsSync(CONFIG_DIR)) {
-    mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
-  }
-}
+
 
 export async function saveTokens(input: SaveTokenInput): Promise<void> {
   ensureConfigDir();

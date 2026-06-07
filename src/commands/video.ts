@@ -1,12 +1,16 @@
 import { Command } from "commander";
 import { getValidBearer } from "../auth/token-store.js";
-import { XAI_API_BASE_URL } from "../auth/constants.js";
+import {
+  XAI_API_BASE_URL,
+  DEFAULT_VIDEO_MODEL,
+  VIDEO_POLL_INTERVAL_MS,
+  VIDEO_DEFAULT_TIMEOUT_S,
+  USD_TICKS_DIVISOR,
+} from "../auth/constants.js";
 import { log } from "../utils/logger.js";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { extname, resolve } from "node:path";
-
-const DEFAULT_VIDEO_MODEL = "grok-imagine-video";
-const POLL_INTERVAL_MS = 5000;
+import { writeFileSync } from "node:fs";
+import { mediaRef } from "../utils/media.js";
+import { collectRefs } from "../utils/collect-refs.js";
 
 export interface VideoOptions {
   model?: string;
@@ -41,48 +45,14 @@ export interface VideoExtendOptions {
   timeout?: string;
 }
 
-interface MediaRef {
-  url?: string;
-  file_id?: string;
-}
 
-function fileToDataUri(filePath: string, mediaKind: "image" | "video"): string {
-  const abs = resolve(filePath);
-  const buf = readFileSync(abs);
-  const ext = extname(abs).toLowerCase();
-  const mime =
-    mediaKind === "image"
-      ? ext === ".png"
-        ? "image/png"
-        : ext === ".webp"
-          ? "image/webp"
-          : "image/jpeg"
-      : ext === ".webm"
-        ? "video/webm"
-        : ext === ".mov"
-          ? "video/quicktime"
-          : "video/mp4";
-  return `data:${mime};base64,${buf.toString("base64")}`;
-}
-
-function mediaRef(input: string, mediaKind: "image" | "video"): MediaRef {
-  if (input.startsWith("file_id:")) return { file_id: input.slice("file_id:".length) };
-  if (input.startsWith("http://") || input.startsWith("https://") || input.startsWith("data:")) {
-    return { url: input };
-  }
-  if (existsSync(resolve(input))) return { url: fileToDataUri(input, mediaKind) };
-  if (/^file[-_]/.test(input)) return { file_id: input };
-  throw new Error(
-    `${mediaKind} input must be a local file, URL, data URI, or file_id:<id>. Got: ${input}`,
-  );
-}
 
 async function pollUntilDone(requestId: string, bearer: string, timeout: number, json?: boolean): Promise<Record<string, unknown>> {
   const deadline = Date.now() + timeout;
   let lastProgress = -1;
 
   while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    await new Promise((r) => setTimeout(r, VIDEO_POLL_INTERVAL_MS));
 
     const poll = await fetch(`${XAI_API_BASE_URL}/videos/${requestId}`, {
       headers: { Authorization: `Bearer ${bearer}` },
@@ -150,7 +120,7 @@ export function videoCommand(): Command {
     .option("--upload-url <url>", "signed output.upload_url for xAI to PUT the result")
     .option("--output <path>", "output file path")
     .option("--json", "output structured JSON")
-    .option("--timeout <s>", "polling timeout in seconds", "600")
+    .option("--timeout <s>", "polling timeout in seconds", String(VIDEO_DEFAULT_TIMEOUT_S))
     .action(async (prompt: string | undefined, opts: VideoOptions) => {
       if (!prompt) { cmd.help(); return; }
       await generateAction(prompt, opts);
@@ -165,7 +135,7 @@ export function videoCommand(): Command {
     .option("--upload-url <url>", "signed output.upload_url for xAI to PUT the result")
     .option("--output <path>", "output file path")
     .option("--json", "output structured JSON")
-    .option("--timeout <s>", "polling timeout in seconds", "600")
+    .option("--timeout <s>", "polling timeout in seconds", String(VIDEO_DEFAULT_TIMEOUT_S))
     .action(async (prompt: string, opts: VideoEditOptions) => {
       await editAction(prompt, opts);
     });
@@ -180,7 +150,7 @@ export function videoCommand(): Command {
     .option("--upload-url <url>", "signed output.upload_url for xAI to PUT the result")
     .option("--output <path>", "output file path")
     .option("--json", "output structured JSON")
-    .option("--timeout <s>", "polling timeout in seconds", "600")
+    .option("--timeout <s>", "polling timeout in seconds", String(VIDEO_DEFAULT_TIMEOUT_S))
     .action(async (prompt: string, opts: VideoExtendOptions) => {
       await extendAction(prompt, opts);
     });
@@ -192,7 +162,7 @@ async function generateAction(prompt: string, opts: VideoOptions): Promise<void>
   try {
     const bearer = await getValidBearer();
     const duration = parseInt(opts.seconds ?? opts.duration ?? "5", 10);
-    const timeout = parseInt(opts.timeout ?? "600", 10) * 1000;
+    const timeout = parseInt(opts.timeout ?? String(VIDEO_DEFAULT_TIMEOUT_S), 10) * 1000;
     const refs = opts.ref ?? [];
 
     if (opts.image && refs.length > 0) {
@@ -252,7 +222,7 @@ async function generateAction(prompt: string, opts: VideoOptions): Promise<void>
     log.success(`Video saved: ${outPath}`);
     log.info(`Duration: ${video.duration}s`);
     const usage = data.usage as { cost_in_usd_ticks?: number } | undefined;
-    if (usage?.cost_in_usd_ticks) log.dim(`Cost: $${(usage.cost_in_usd_ticks / 10_000_000_000).toFixed(4)}`);
+    if (usage?.cost_in_usd_ticks) log.dim(`Cost: $${(usage.cost_in_usd_ticks / USD_TICKS_DIVISOR).toFixed(4)}`);
   } catch (err) {
     log.error((err as Error).message);
     process.exit(1);
@@ -262,7 +232,7 @@ async function generateAction(prompt: string, opts: VideoOptions): Promise<void>
 async function editAction(prompt: string, opts: VideoEditOptions): Promise<void> {
   try {
     const bearer = await getValidBearer();
-    const timeout = parseInt(opts.timeout ?? "600", 10) * 1000;
+    const timeout = parseInt(opts.timeout ?? String(VIDEO_DEFAULT_TIMEOUT_S), 10) * 1000;
     const model = opts.model ?? DEFAULT_VIDEO_MODEL;
 
     if (model.includes("1.5")) {
@@ -305,7 +275,7 @@ async function editAction(prompt: string, opts: VideoEditOptions): Promise<void>
 async function extendAction(prompt: string, opts: VideoExtendOptions): Promise<void> {
   try {
     const bearer = await getValidBearer();
-    const timeout = parseInt(opts.timeout ?? "600", 10) * 1000;
+    const timeout = parseInt(opts.timeout ?? String(VIDEO_DEFAULT_TIMEOUT_S), 10) * 1000;
     const duration = parseInt(opts.duration ?? "6", 10);
     const model = opts.model ?? DEFAULT_VIDEO_MODEL;
 
@@ -349,6 +319,4 @@ async function extendAction(prompt: string, opts: VideoExtendOptions): Promise<v
   }
 }
 
-function collectRefs(value: string, prev: string[]): string[] {
-  return [...prev, value];
-}
+

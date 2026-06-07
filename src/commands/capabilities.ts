@@ -1,7 +1,4 @@
 import { Command } from "commander";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 import {
   XAI_API_BASE_URL,
   DEFAULT_MODEL,
@@ -9,19 +6,8 @@ import {
   PROXY_DEFAULT_HOST,
   CHAT_DEFAULT_PORT,
 } from "../auth/constants.js";
+import { readPackageVersion } from "../utils/version.js";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-
-function readPackageVersion(): string {
-  try {
-    const pkg = JSON.parse(
-      readFileSync(join(ROOT, "package.json"), "utf-8"),
-    ) as { version?: string };
-    return pkg.version || "?";
-  } catch {
-    return "?";
-  }
-}
 
 // Endpoint surface mirrors the xAI REST API (https://docs.x.ai). Every HTTP
 // /v1/* path is forwarded by the proxy verbatim. WebSocket (wss) endpoints and
@@ -271,7 +257,7 @@ export function buildCapabilities() {
         output: ["text"],
         context: "200K+ (long-context pricing above 200K tokens)",
         pricing: { inputPer1M: 1.25, cachedInputPer1M: 0.2, outputPer1M: 2.5, longContext: { thresholdTokens: 200000, inputPer1M: 2.5, cachedInputPer1M: 0.4, outputPer1M: 5.0 }, searchPer1KSources: 25.0, unit: "USD" },
-        reasoning: { effort: ["low", "medium", "high", "xhigh"], default: "low", note: "effort selects agent count: low/medium=4, high/xhigh=16" },
+        reasoning: { effort: ["low", "medium", "high", "xhigh"], default: "high", note: "effort selects agent count: low/medium=4, high/xhigh=16; progrok search CLI default is high" },
         structuredOutput: true,
         functionCalling: false,
         tools: ["web_search", "x_search", "code_interpreter", "collections_search", "mcp"],
