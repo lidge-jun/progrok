@@ -4,9 +4,29 @@
 # Example: npm latest = 0.2.0 → preview = 0.2.1-preview.20260422153000
 set -euo pipefail
 
-PKG_NAME="progrok"
+PKG_NAME=$(node -p "require('./package.json').name")
 
 cd "$(dirname "$0")/.."
+
+# ─── Preflight: npm auth + repo ────────────────────────
+if ! NPM_USER=$(npm whoami 2>/dev/null); then
+  echo "❌ Not logged in to npm. Run: npm login"
+  exit 1
+fi
+echo "🔐 npm user: $NPM_USER"
+
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+REPO_URL=$(git remote get-url origin | sed 's/\.git$//' | sed 's|git@github.com:|https://github.com/|')
+
+# ─── Rollback trap ────────────────────────────────────
+cleanup_on_fail() {
+  if [ -n "${VERSION:-}" ]; then
+    echo "❌ Preview release failed. Rolling back..."
+    git tag -d "v$VERSION" 2>/dev/null || true
+    git reset --soft HEAD~1 2>/dev/null || true
+  fi
+}
+trap cleanup_on_fail ERR
 
 if ! git diff --cached --quiet; then
   echo "❌ Refusing preview release: staged changes exist"
@@ -62,10 +82,10 @@ else
   COMMIT_COUNT="?"
 fi
 
-echo ""
+echo
 echo "📝 Changes since ${PREV_TAG:-'(none)'} ($COMMIT_COUNT commits):"
 echo "$CHANGELOG" | head -10
-echo ""
+echo
 
 # ─── Test ──────────────────────────────────────────────
 echo "🧪 Running test suite..."
@@ -91,6 +111,7 @@ git commit -m "chore: preview v$VERSION" --allow-empty
 
 echo "🚀 Publishing preview to npm..."
 TARBALL="$(npm pack | tail -1)"
+[ -z "$TARBALL" ] && { echo "❌ npm pack produced no output"; exit 1; }
 trap 'rm -f "$TARBALL"' EXIT
 npm publish "$TARBALL" --tag preview --access public
 
@@ -98,7 +119,7 @@ echo "🏷   Creating preview tag..."
 git tag "v$VERSION"
 
 echo "⬆   Pushing branch + tag..."
-git push origin main
+git push origin "$CURRENT_BRANCH"
 git push origin "v$VERSION"
 
 # ─── GitHub Prerelease with changelog ──────────────────
@@ -121,8 +142,8 @@ else
   echo "⚠️  Skipped GitHub prerelease (gh CLI not found)"
 fi
 
-echo ""
+echo
 echo "✅ Preview published: $PKG_NAME@$VERSION"
 echo "   Install: npm install -g $PKG_NAME@preview"
 echo "   Exact:   npm install -g $PKG_NAME@$VERSION"
-echo "   Release: https://github.com/lidge-jun/progrok/releases/tag/v$VERSION"
+echo "   Release: $REPO_URL/releases/tag/v$VERSION"

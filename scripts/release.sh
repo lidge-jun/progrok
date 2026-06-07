@@ -6,14 +6,32 @@
 #   ./scripts/release.sh minor    → minor bump (0.2.0 → 0.3.0)
 #   ./scripts/release.sh major    → major bump (0.2.0 → 1.0.0)
 #   ./scripts/release.sh 0.3.0    → explicit version
-set -e
+set -euo pipefail
 
-PKG_NAME="progrok"
+PKG_NAME=$(node -p "require('./package.json').name")
 
 echo "🦈 $PKG_NAME release script"
 echo "========================="
 
 cd "$(dirname "$0")/.."
+
+# ─── Preflight: branch + repo ─────────────────────────
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$CURRENT_BRANCH" != "main" ]; then
+  echo "❌ Releases must be from main branch (current: $CURRENT_BRANCH)"
+  exit 1
+fi
+REPO_URL=$(git remote get-url origin | sed 's/\.git$//' | sed 's|git@github.com:|https://github.com/|')
+
+# ─── Rollback trap ────────────────────────────────────
+cleanup_on_fail() {
+  if [ -n "${VERSION:-}" ]; then
+    echo "❌ Release failed. Rolling back local tag and commit..."
+    git tag -d "v$VERSION" 2>/dev/null || true
+    git reset --soft HEAD~1 2>/dev/null || true
+  fi
+}
+trap cleanup_on_fail ERR
 
 # ─── Preflight: npm auth ───────────────────────────────
 if ! NPM_USER=$(npm whoami 2>/dev/null); then
@@ -75,9 +93,16 @@ collision_check() {
   return 1
 }
 
+MAX_RETRIES=20
+RETRIES=0
 while collision_check "$VERSION"; do
   if [ "$EXPLICIT_VERSION" = "1" ]; then
     echo "❌ Version $VERSION already exists (tag or npm). Choose a different version."
+    exit 1
+  fi
+  RETRIES=$((RETRIES + 1))
+  if [ "$RETRIES" -ge "$MAX_RETRIES" ]; then
+    echo "❌ Exceeded $MAX_RETRIES collision retries. Aborting."
     exit 1
   fi
   echo "⚠️  v$VERSION already taken (tag or npm). Bumping patch and retrying..."
@@ -88,7 +113,7 @@ done
 echo "📌 New version: $VERSION"
 
 # ─── Collect changelog ─────────────────────────────────
-PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]' | head -1)
+PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
 if [ -n "$PREV_TAG" ]; then
   CHANGELOG=$(git log "$PREV_TAG"..HEAD --pretty=format:"- %s" --no-merges | head -50)
   COMMIT_COUNT=$(git rev-list "$PREV_TAG"..HEAD --count)
@@ -97,14 +122,14 @@ else
   COMMIT_COUNT="?"
 fi
 
-echo ""
+echo
 echo "📝 Changes since ${PREV_TAG:-'(none)'} ($COMMIT_COUNT commits):"
 echo "$CHANGELOG" | head -15
-echo ""
+echo
 
 # ─── Commit + Tag ──────────────────────────────────────
 echo "🏷️  Preparing commit + tag v$VERSION..."
-HEAD_MSG=$(git log -1 --pretty=%s 2>/dev/null || echo "")
+HEAD_MSG=$(git log -1 --pretty=%s 2>/dev/null || echo)
 if [ "$HEAD_MSG" = "chore: release v$VERSION" ] && git diff --quiet HEAD -- package.json package-lock.json; then
   echo "ℹ️  HEAD already matches release commit, skipping commit"
 else
@@ -150,7 +175,7 @@ else
     echo "⚠️  Skipped GitHub Release (gh CLI not found or no previous tag)"
 fi
 
-echo ""
+echo
 echo "✅ $PKG_NAME@$VERSION published!"
 echo "   Install: npm install -g $PKG_NAME"
-echo "   Release: https://github.com/lidge-jun/progrok/releases/tag/v$VERSION"
+echo "   Release: $REPO_URL/releases/tag/v$VERSION"
