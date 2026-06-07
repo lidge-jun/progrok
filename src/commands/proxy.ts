@@ -6,6 +6,7 @@ import {
   PROXY_DEFAULT_HOST,
 } from "../auth/constants.js";
 import { log } from "../utils/logger.js";
+import { parseIntOrThrow } from "../utils/parse-int.js";
 
 export function proxyCommand(): Command {
   return new Command("proxy")
@@ -25,7 +26,7 @@ export function proxyCommand(): Command {
       }
 
       try {
-        await startProxy(parseInt(opts.port, 10), opts.host);
+        await startProxy(parseIntOrThrow(opts.port, "port", 1, 65535), opts.host);
         await new Promise(() => {});
       } catch (err) {
         log.error((err as Error).message);

@@ -6,6 +6,7 @@ import {
   PROXY_DEFAULT_HOST,
 } from "../auth/constants.js";
 import { log } from "../utils/logger.js";
+import { parseIntOrThrow } from "../utils/parse-int.js";
 
 export function chatCommand(): Command {
   return new Command("chat")
@@ -25,7 +26,7 @@ export function chatCommand(): Command {
       }
 
       try {
-        await startChat(parseInt(opts.port, 10), opts.host);
+        await startChat(parseIntOrThrow(opts.port, "port", 1, 65535), opts.host);
         await new Promise(() => {});
       } catch (err) {
         log.error((err as Error).message);
