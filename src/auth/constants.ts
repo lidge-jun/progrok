@@ -40,6 +40,15 @@ export const PROXY_DEFAULT_PORT = 18645;
 export const PROXY_DEFAULT_HOST = "127.0.0.1";
 export const CHAT_DEFAULT_PORT = 18646;
 
+// Image / Video
+export const DEFAULT_IMAGE_MODEL = "grok-imagine-image";
+export const DEFAULT_VIDEO_MODEL = "grok-imagine-video";
+export const VIDEO_POLL_INTERVAL_MS = 5_000;
+export const VIDEO_DEFAULT_TIMEOUT_S = 600;
+
+// Cost
+export const USD_TICKS_DIVISOR = 10_000_000_000;
+
 // Paths
 export const CONFIG_DIR = join(homedir(), ".progrok");
 export const AUTH_FILE = join(CONFIG_DIR, "auth.json");

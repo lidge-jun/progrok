@@ -1,7 +1,4 @@
 import { Command } from "commander";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 import {
   XAI_API_BASE_URL,
   DEFAULT_MODEL,
@@ -9,19 +6,8 @@ import {
   PROXY_DEFAULT_HOST,
   CHAT_DEFAULT_PORT,
 } from "../auth/constants.js";
+import { readPackageVersion } from "../utils/version.js";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-
-function readPackageVersion(): string {
-  try {
-    const pkg = JSON.parse(
-      readFileSync(join(ROOT, "package.json"), "utf-8"),
-    ) as { version?: string };
-    return pkg.version || "?";
-  } catch {
-    return "?";
-  }
-}
 
 // Endpoint surface mirrors the xAI REST API (https://docs.x.ai). Every HTTP
 // /v1/* path is forwarded by the proxy verbatim. WebSocket (wss) endpoints and

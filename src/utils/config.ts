@@ -12,7 +12,7 @@ interface AppConfig {
   };
 }
 
-function ensureConfigDir(): void {
+export function ensureConfigDir(): void {
   if (!existsSync(CONFIG_DIR)) {
     mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
   }

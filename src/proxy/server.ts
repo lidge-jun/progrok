@@ -106,8 +106,8 @@ async function handleProxy(req: Request, res: Response): Promise<void> {
           if (done) break;
           res.write(value);
         }
-      } catch {
-        /* stream interrupted */
+      } catch (streamErr) {
+        log.dim(`[progrok] stream read interrupted: ${(streamErr as Error).message}`);
       }
     }
     res.end();

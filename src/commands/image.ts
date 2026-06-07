@@ -1,11 +1,14 @@
 import { Command } from "commander";
 import { getValidBearer } from "../auth/token-store.js";
-import { XAI_API_BASE_URL } from "../auth/constants.js";
+import {
+  XAI_API_BASE_URL,
+  DEFAULT_IMAGE_MODEL,
+  USD_TICKS_DIVISOR,
+} from "../auth/constants.js";
 import { log } from "../utils/logger.js";
-import { readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
-
-const DEFAULT_IMAGE_MODEL = "grok-imagine-image";
+import { writeFileSync } from "node:fs";
+import { fileToDataUri } from "../utils/media.js";
+import { collectRefs } from "../utils/collect-refs.js";
 
 export interface ImageOptions {
   model?: string;
@@ -17,12 +20,7 @@ export interface ImageOptions {
   n?: string;
 }
 
-function imageToDataUri(filePath: string): string {
-  const abs = resolve(filePath);
-  const buf = readFileSync(abs);
-  const ext = abs.toLowerCase().endsWith(".png") ? "png" : "jpeg";
-  return `data:image/${ext};base64,${buf.toString("base64")}`;
-}
+
 
 export function imageCommand(): Command {
   return new Command("image")
@@ -62,9 +60,9 @@ export function imageCommand(): Command {
 
         if (isEdit) {
           if (refs.length === 1) {
-            body.image = { type: "image_url", url: imageToDataUri(refs[0]) };
+            body.image = { type: "image_url", url: fileToDataUri(refs[0], "image") };
           } else {
-            body.images = refs.map((r) => ({ type: "image_url", url: imageToDataUri(r) }));
+            body.images = refs.map((r) => ({ type: "image_url", url: fileToDataUri(r, "image") }));
           }
         }
 
@@ -110,7 +108,7 @@ export function imageCommand(): Command {
         }
 
         if (data.usage?.cost_in_usd_ticks) {
-          log.dim(`Cost: $${(data.usage.cost_in_usd_ticks / 10_000_000_000).toFixed(4)}`);
+          log.dim(`Cost: $${(data.usage.cost_in_usd_ticks / USD_TICKS_DIVISOR).toFixed(4)}`);
         }
       } catch (err) {
         log.error((err as Error).message);
@@ -119,6 +117,4 @@ export function imageCommand(): Command {
     });
 }
 
-function collectRefs(value: string, prev: string[]): string[] {
-  return [...prev, value];
-}
+

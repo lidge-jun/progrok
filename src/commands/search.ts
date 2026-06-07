@@ -134,6 +134,8 @@ export function extractSearchResult(data: ResponsesData): SearchResult {
   return { answer: answer.trim(), citations, queries, usage: data.usage };
 }
 
+const VALID_REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh"]);
+
 export function searchCommand(): Command {
   return new Command("search")
     .description("Search the web and X with Grok — AI summary + citations (no API key)")
@@ -148,8 +150,7 @@ export function searchCommand(): Command {
     )
     .action(async (query: string, opts: SearchOptions) => {
       try {
-        const VALID_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh"]);
-        if (opts.reasoning && !VALID_EFFORTS.has(opts.reasoning)) {
+        if (opts.reasoning && !VALID_REASONING_EFFORTS.has(opts.reasoning)) {
           throw new Error(
             `invalid --reasoning '${opts.reasoning}'. use: none|low|medium|high|xhigh`,
           );
