@@ -8,7 +8,7 @@ import {
 } from "./constants.js";
 import { fetchOIDCDiscovery } from "./discovery.js";
 import { startCallbackServer } from "./callback-server.js";
-import { saveTokens } from "./token-store.js";
+import { saveTokens, type OAuthTokenResponse } from "./token-store.js";
 import { openUrl } from "../utils/open-url.js";
 import { log } from "../utils/logger.js";
 
@@ -115,13 +115,13 @@ export async function loginWithPKCE(options: PKCEOptions = {}): Promise<void> {
     throw new Error(`Token exchange failed: ${err}`);
   }
 
-  const tokens = (await tokenRes.json()) as Record<string, unknown>;
+  const tokens = (await tokenRes.json()) as OAuthTokenResponse;
 
   await saveTokens({
-    accessToken: tokens.access_token as string,
-    refreshToken: tokens.refresh_token as string | undefined,
-    expiresIn: tokens.expires_in as number | undefined,
-    idToken: tokens.id_token as string | undefined,
+    accessToken: tokens.access_token,
+    refreshToken: tokens.refresh_token,
+    expiresIn: tokens.expires_in,
+    idToken: tokens.id_token,
     tokenEndpoint: discovery.tokenEndpoint,
   });
 

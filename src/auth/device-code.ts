@@ -5,7 +5,7 @@ import {
   XAI_DEVICE_CODE_POLL_INTERVAL_MS,
 } from "./constants.js";
 import { fetchOIDCDiscovery } from "./discovery.js";
-import { saveTokens } from "./token-store.js";
+import { saveTokens, type OAuthTokenResponse } from "./token-store.js";
 import { log } from "../utils/logger.js";
 
 interface DeviceCodeResponse {
@@ -69,12 +69,12 @@ export async function loginWithDeviceCode(): Promise<void> {
     });
 
     if (pollRes.ok) {
-      const tokens = (await pollRes.json()) as Record<string, unknown>;
+      const tokens = (await pollRes.json()) as OAuthTokenResponse;
       await saveTokens({
-        accessToken: tokens.access_token as string,
-        refreshToken: tokens.refresh_token as string | undefined,
-        expiresIn: tokens.expires_in as number | undefined,
-        idToken: tokens.id_token as string | undefined,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresIn: tokens.expires_in,
+        idToken: tokens.id_token,
         tokenEndpoint: discovery.tokenEndpoint,
       });
       log.success("Logged in to xAI successfully!");

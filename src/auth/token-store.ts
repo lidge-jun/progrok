@@ -29,6 +29,15 @@ export interface SaveTokenInput {
   tokenEndpoint?: string;
 }
 
+/** Shape returned by xAI OAuth token endpoint (token exchange and refresh). */
+export interface OAuthTokenResponse {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+  id_token?: string;
+  token_type?: string;
+}
+
 
 
 export async function saveTokens(input: SaveTokenInput): Promise<void> {
@@ -113,7 +122,7 @@ export async function getValidBearer(): Promise<string> {
       throw new Error("Token refresh failed. Run `progrok login` again.");
     }
 
-    const refreshed = (await res.json()) as Record<string, unknown>;
+    const refreshed = (await res.json()) as OAuthTokenResponse;
 
     if (
       typeof refreshed.access_token !== "string" ||
