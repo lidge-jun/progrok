@@ -66,4 +66,9 @@ if (subcommand && REAL_COMMANDS.has(subcommand)) {
   await showStarPrompt();
 }
 
+process.on("unhandledRejection", (err) => {
+  console.error(`\x1b[31m${(err as Error)?.message ?? err}\x1b[0m`);
+  process.exit(1);
+});
+
 program.parse();
