@@ -8,6 +8,9 @@ import {
   searchCommand,
 } from "../src/commands/search.js";
 
+/** Minimal shape of a Commander Option for test assertions. */
+interface CliOption { long?: string; description?: string; defaultValue?: unknown; }
+
 describe("buildSearchRequestBody", () => {
   it("includes citation instructions and web+x tools by default", () => {
     const body = buildSearchRequestBody("test query", { model: "grok-4.20-multi-agent-0309" });
@@ -131,13 +134,13 @@ describe("extractSearchResult", () => {
 describe("SearchOptions.reasoning validation", () => {
   it("has --reasoning option registered", () => {
     const cmd = searchCommand();
-    const opts = cmd.options.map((o: any) => o.long);
+    const opts = cmd.options.map((o: CliOption) => o.long);
     assert(opts.includes("--reasoning"), "missing --reasoning option");
   });
 
   it("--reasoning option description mentions effort", () => {
     const cmd = searchCommand();
-    const opt = cmd.options.find((o: any) => o.long === "--reasoning");
+    const opt = cmd.options.find((o: CliOption) => o.long === "--reasoning");
     assert(opt, "--reasoning option not found");
     assert.match(opt.description, /effort/);
   });
