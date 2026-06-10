@@ -1,6 +1,6 @@
 {
   "name": "progrok",
-  "version": "0.2.1",
+  "version": "2.0.3",
   "description": "Activate your xAI OAuth session as a local Grok API proxy and CLI tool surface.",
   "type": "module",
   "bin": {
