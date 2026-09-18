@@ -69,7 +69,7 @@ voice/sip.ts                         (SIP REST + webhook wire types)
 
 ## 3. 공개 계약과 마이그레이션
 
-- Voice 공개 API의 권위자는 `createTtsClient(options?: VoiceClientOptions): TtsClient`, `createSttClient(options?: VoiceClientOptions): SttClient`, `createRealtimeClient(options: CreateRealtimeClientOptions, deps?: VoiceWsDeps): Promise<RealtimeClient>` 세 factory다. 호출 계약은 `createTtsClient().synthesize()`, `createSttClient().transcribe()`, `createRealtimeClient()`이며 wp12 CLI와 wp13 웹앱은 이 이름을 그대로 쓴다. `synthesizeSpeech`, `transcribeSpeech`, `connectRealtime` 같은 별도 top-level helper를 만들지 않는다.
+- Voice 공개 API의 권위자는 wp9의 `createTtsClient(deps?: { transport?: XaiTransport }): { synthesize(req: TtsRequest): Promise<TtsResult> }`, `createSttClient(deps?: { transport?: XaiTransport }): { transcribe(req: SttRequest): Promise<SttResult> }`와 wp10의 `createRealtimeClient(opts: RealtimeOptions): RealtimeClient` 세 factory다. wp12 CLI와 wp13 웹앱은 이 이름을 그대로 쓴다. `synthesizeSpeech`, `transcribeSpeech`, `connectRealtime` 같은 별도 top-level helper를 만들지 않는다.
 - `~/.progrok/auth.json` 스키마와 저장 경로는 변경하지 않는다. server-side WS는 wp5의 `getValidBearerSnapshot()`을 읽기 전용으로 사용한다.
 - 기존 CLI 명령은 변경하지 않는다. Voice CLI는 wp12가 추가한다.
 - `/health` payload는 변경하지 않는다.
@@ -183,11 +183,10 @@ export function normalizeXaiPath(pathname: string): string {
   return `${path}${parsed.search}`;
 }
 
-export function resolveUpstreamUrl(pathname: string, authKind: UpstreamAuthKind): URL {
-  const normalized = normalizeXaiPath(pathname);
-  const decision = resolveUpstreamBase(normalized, authKind);
-  const suffix = normalized.replace(/^\/v1/, "");
-  return new URL(`${decision.baseUrl}${suffix}`);
+export function resolveUpstreamUrl(path: string, kind: PublicApiAuthKind): string {
+  const normalized = normalizeXaiPath(path);
+  const origin = new URL(resolveUpstreamBase(kind)).origin;
+  return new URL(normalized, `${origin}/`).toString();
 }
 ```
 
@@ -207,18 +206,14 @@ export function normalizeXaiPath(pathname: string): string {
   return `${path}${parsed.search}`;
 }
 
-export function resolveUpstreamUrl(pathname: string, authKind: UpstreamAuthKind): URL {
-  const normalized = normalizeXaiPath(pathname);
-  const decision = resolveUpstreamBase(normalized, authKind);
-  if (decision.kind === "public-api") return new URL(normalized, XAI_PUBLIC_API_ORIGIN);
-  if (!normalized.startsWith("/v1")) {
-    throw new Error("session API supports only /v1 paths");
-  }
-  return new URL(`${decision.baseUrl}${normalized.replace(/^\/v1/, "")}`);
+export function resolveUpstreamUrl(path: string, kind: PublicApiAuthKind): string {
+  const normalized = normalizeXaiPath(path);
+  const origin = new URL(resolveUpstreamBase(kind)).origin;
+  return new URL(normalized, `${origin}/`).toString();
 }
 ```
 
-테스트는 `/v1/models`, `models`, `/v2/phone-numbers`, `https://evil.invalid/v2/phone-numbers?x=1`을 넣는다. 마지막 입력은 host를 버리고 `https://api.x.ai/v2/phone-numbers?x=1`로 정규화되어야 한다. session-only 경로의 기존 판정은 유지한다.
+테스트는 `/v1/models`, `models`, `/v2/phone-numbers`, `https://evil.invalid/v2/phone-numbers?x=1`을 넣는다. 마지막 입력은 host를 버리고 `https://api.x.ai/v2/phone-numbers?x=1`로 정규화되어야 한다. `deployment-key`는 `PublicApiAuthKind`가 아니므로 호출자가 먼저 분기해 전용 클라이언트로 보내며 `resolveUpstreamBase`나 `resolveUpstreamUrl`에 전달하지 않는다.
 
 ## 8. NO CHANGE — `src/voice/protocol.ts` precondition (wp9 소유)
 
@@ -227,7 +222,7 @@ export function resolveUpstreamUrl(pathname: string, authKind: UpstreamAuthKind)
 wp10은 다음 wp9 export를 import해 `ws-client.ts`, `realtime.ts`, STT/TTS session을 구현한다.
 
 - runtime: `XAI_VOICE_WS_ORIGIN`, `PINNED_REALTIME_MODEL`, `REALTIME_MODEL_ALIAS`, `ephemeralProtocols`, `parseSttServerEvent`, `parseTtsServerEvent`, `parseRealtimeServerEvent`, `VoiceProtocolError`
-- type-only: `EphemeralProtocolStyle`, `StreamingSttWord`, `SttClientControl`, `SttServerEvent`, `TtsClientEvent`, `StreamingAudioTimestamps`, `TtsServerEvent`, `RealtimeClientEvent`, `RealtimeConversationItem`, `RealtimeNormalizedEvent`, `RealtimeReasoningEffort`, `RealtimeServerEvent`, `RealtimeSessionConfig`, `RealtimeVoiceModel`
+- type-only: `StreamingSttWord`, `SttClientControl`, `SttServerEvent`, `TtsClientEvent`, `StreamingAudioTimestamps`, `TtsServerEvent`, `RealtimeClientEvent`, `RealtimeConversationItem`, `RealtimeNormalizedEvent`, `RealtimeReasoningEffort`, `RealtimeServerEvent`, `RealtimeSessionConfig`, `RealtimeVoiceModel`
 
 `protocol.ts`는 Node builtin, `ws`, auth, transport를 import하지 않는 browser-safe 계약이어야 한다. wp10의 검증은 socket lifecycle, auth handshake, queue, STT/TTS/realtime session 통합에 한정하고, 상수·순수 helper·decoder의 소유 테스트는 wp9 `tests/voice-protocol.test.ts`에 둔다.
 
@@ -238,7 +233,7 @@ wp10은 다음 wp9 export를 import해 `ws-client.ts`, `realtime.ts`, STT/TTS se
 ```ts
 import WebSocket, { type RawData } from "ws";
 import { randomUUID } from "node:crypto";
-import { getValidBearerSnapshot } from "../auth/token-store.js";
+import { getValidBearerSnapshot } from "../auth/token-manager.js";
 import { buildUpstreamHeaders } from "../transport/headers.js";
 import { readPackageVersion } from "../utils/version.js";
 import {
@@ -247,7 +242,6 @@ import {
   ephemeralProtocols,
   parseSttServerEvent,
   parseTtsServerEvent,
-  type EphemeralProtocolStyle,
   type SttClientControl,
   type SttServerEvent,
   type TtsClientEvent,
@@ -262,7 +256,7 @@ export const VOICE_WS_OPEN_TIMEOUT_MS = 30_000;
 
 export type VoiceWsAuth =
   | { kind: "oauth" }
-  | { kind: "ephemeral"; clientSecret: string; style?: EphemeralProtocolStyle };
+  | { kind: "ephemeral"; clientSecret: string };
 
 export type VoiceWsFrame =
   | { kind: "text"; text: string }
@@ -309,11 +303,11 @@ export async function openVoiceSocket(
     perMessageDeflate: false,
   };
   if (auth.kind === "ephemeral") {
-    protocols = ephemeralProtocols(auth.clientSecret, auth.style);
+    protocols = ephemeralProtocols(auth.clientSecret);
   } else {
     const bearer = await getValidBearerSnapshot({ signal });
     const headers = buildUpstreamHeaders({
-      auth: { kind: "oauth", bearer: bearer.token },
+      auth: { kind: "oauth", bearer: bearer.bearer },
       clientVersion: deps.clientVersion ?? readPackageVersion(),
       trace: { requestId: randomUUID() },
     });
@@ -573,7 +567,6 @@ import {
 import {
   PINNED_REALTIME_MODEL,
   parseRealtimeServerEvent,
-  type EphemeralProtocolStyle,
   type RealtimeClientEvent,
   type RealtimeConversationItem,
   type RealtimeNormalizedEvent,
@@ -653,16 +646,18 @@ export function reduceRealtimeEvent(state: RealtimeState, event: RealtimeNormali
 
 export type RealtimeAuth =
   | { kind: "oauth" }
-  | { kind: "ephemeral"; clientSecret: string; style?: EphemeralProtocolStyle };
-export interface CreateRealtimeClientOptions {
+  | { kind: "ephemeral"; clientSecret: string };
+export interface RealtimeOptions {
   auth: RealtimeAuth;
   model?: RealtimeVoiceModel;
   reasoningEffort?: RealtimeReasoningEffort;
   callId?: string;
   conversationId?: string;
   signal?: AbortSignal;
+  deps?: VoiceWsDeps;
 }
 export interface RealtimeClient {
+  ready(): Promise<void>;
   updateSession(config: RealtimeSessionConfig): void;
   appendAudioBase64(audio: string): void;
   appendAudioBinary(audio: Uint8Array): void;
@@ -678,31 +673,42 @@ export interface RealtimeClient {
   close(): void;
 }
 
-export async function createRealtimeClient(
-  options: CreateRealtimeClientOptions,
-  deps: VoiceWsDeps = {},
-): Promise<RealtimeClient> {
-  if (options.callId && options.auth.kind === "ephemeral") {
+export function createRealtimeClient(opts: RealtimeOptions): RealtimeClient {
+  if (opts.callId && opts.auth.kind === "ephemeral") {
     throw new RangeError("SIP call_id sessions require server-side bearer authentication");
   }
   const query = new URLSearchParams();
-  if (!options.callId) query.set("model", options.model ?? PINNED_REALTIME_MODEL);
-  if (options.callId) query.set("call_id", options.callId);
-  if (options.conversationId) query.set("conversation_id", options.conversationId);
-  if (options.reasoningEffort) query.set("reasoning.effort", options.reasoningEffort);
-  const auth: VoiceWsAuth = options.auth.kind === "oauth"
+  if (!opts.callId) query.set("model", opts.model ?? PINNED_REALTIME_MODEL);
+  if (opts.callId) query.set("call_id", opts.callId);
+  if (opts.conversationId) query.set("conversation_id", opts.conversationId);
+  if (opts.reasoningEffort) query.set("reasoning.effort", opts.reasoningEffort);
+  const auth: VoiceWsAuth = opts.auth.kind === "oauth"
     ? { kind: "oauth" }
-    : { kind: "ephemeral", clientSecret: options.auth.clientSecret, style: options.auth.style };
-  const socket: VoiceSocket = await openVoiceSocket(`/v1/realtime?${query}`, auth, options.signal, deps);
+    : { kind: "ephemeral", clientSecret: opts.auth.clientSecret };
+  const socket = openVoiceSocket(`/v1/realtime?${query}`, auth, opts.signal, opts.deps ?? {});
   return makeRealtimeClient(socket);
 }
 
-function makeRealtimeClient(socket: VoiceSocket): RealtimeClient {
-  const send = (event: RealtimeClientEvent) => socket.sendJson(event);
+function makeRealtimeClient(socketPromise: Promise<VoiceSocket>): RealtimeClient {
+  let socket: VoiceSocket | undefined;
+  let dialFailure: unknown;
+  const settled = socketPromise.then(
+    (value) => { socket = value; },
+    (error) => { dialFailure = error; },
+  );
+  const ready = async () => {
+    await settled;
+    if (dialFailure !== undefined) throw dialFailure;
+  };
+  const withSocket = (run: (active: VoiceSocket) => void) => {
+    void settled.then(() => { if (socket) run(socket); });
+  };
+  const send = (event: RealtimeClientEvent) => withSocket((active) => active.sendJson(event));
   return {
+    ready,
     updateSession(session) { validateSessionConfig(session); send({ type: "session.update", session }); },
     appendAudioBase64(audio) { send({ type: "input_audio_buffer.append", audio }); },
-    appendAudioBinary(audio) { socket.sendBinary(audio); },
+    appendAudioBinary(audio) { withSocket((active) => active.sendBinary(audio)); },
     commitAudio() { send({ type: "input_audio_buffer.commit" }); },
     clearAudio() { send({ type: "input_audio_buffer.clear" }); },
     createItem(item, previous_item_id) { send({ type: "conversation.item.create", item, ...(previous_item_id ? { previous_item_id } : {}) }); },
@@ -717,7 +723,8 @@ function makeRealtimeClient(socket: VoiceSocket): RealtimeClient {
     createResponse(response) { send(response === undefined ? { type: "response.create" } : { type: "response.create", response }); },
     cancelResponse(response_id) { send(response_id === undefined ? { type: "response.cancel" } : { type: "response.cancel", response_id }); },
     async *events() {
-      for await (const frame of socket.frames()) {
+      await ready();
+      for await (const frame of socket!.frames()) {
         if (frame.kind === "binary") { yield { type: "response.output_audio.binary", bytes: frame.bytes }; continue; }
         if (frame.kind === "close") return;
         const event = parseRealtimeServerEvent(frame.text);
@@ -725,7 +732,7 @@ function makeRealtimeClient(socket: VoiceSocket): RealtimeClient {
         yield event;
       }
     },
-    close() { socket.close(); },
+    close() { withSocket((active) => active.close()); },
   };
 }
 ```

@@ -34,9 +34,9 @@ capabilities가 정적 fallback 모델을 계속 내보내는 안은 거절한�
 
 ## 진입 조건 — 앞 단계 공개 계약
 
-- wp6 소유 `src/transport/fetch.ts`가 `XaiTransport.request(path, init?, policy?): Promise<Response>`와 `createXaiTransport(options?: { signal?: AbortSignal; timeoutMs?: number }): XaiTransport`를 export해야 한다. wp12는 이 파일을 만들거나 transport 계약을 재정의하지 않고 import만 한다. 둘 중 하나라도 없으면 wp12 구현을 시작하지 않고 wp6 산출물을 먼저 완료한다.
-- wp9 소유 `src/voice/tts.ts`의 `createTtsClient(options?).synthesize(request, signal?)`와 `src/voice/stt.ts`의 `createSttClient(options?).transcribe(request, signal?)`가 존재해야 한다.
-- wp10 소유 `src/voice/realtime.ts`의 `createRealtimeClient(options, deps?)`와 반환 `RealtimeClient`의 semantic methods가 존재해야 한다.
+- wp6 소유 `src/transport/fetch.ts`가 `XaiTransport.fetch(input: XaiFetchInput): Promise<Response>`와 `createXaiTransport(opts?: { fetchImpl?: typeof fetch }): XaiTransport`를 export해야 한다. wp12는 이 파일을 만들거나 transport 계약을 재정의하지 않고 import만 한다. 둘 중 하나라도 없으면 wp12 구현을 시작하지 않고 wp6 산출물을 먼저 완료한다.
+- wp9 소유 `src/voice/tts.ts`의 `createTtsClient(deps?: { transport?: XaiTransport }).synthesize(req: TtsRequest): Promise<TtsResult>`와 `src/voice/stt.ts`의 `createSttClient(deps?: { transport?: XaiTransport }).transcribe(req: SttRequest): Promise<SttResult>`가 존재해야 한다.
+- wp10 소유 `src/voice/realtime.ts`의 `createRealtimeClient(opts: RealtimeOptions): RealtimeClient`와 반환 `RealtimeClient`의 semantic methods가 존재해야 한다. `RealtimeVoiceModel`과 `RealtimeReasoningEffort`는 wp9의 browser-safe `src/voice/protocol.ts`에서 import한다.
 
 위 세 모듈은 이 단계에서 `NO CHANGE — precondition`이다. wp12는 편의를 위해 `synthesizeSpeech`, `transcribeSpeech`, `connectRealtime` 같은 alias나 transport shim을 추가하지 않는다.
 
@@ -95,7 +95,7 @@ export interface CommandManifestEntry {
   json: boolean;
 }
 
-export const COMMAND_MANIFEST: readonly CommandManifestEntry[] = [
+export const COMMAND_MANIFEST: CommandManifestEntry[] = [
   { name: "login", summary: "Authenticate with xAI OAuth.", mutatesRemote: true, json: false },
   { name: "logout", summary: "Remove local xAI credentials.", mutatesRemote: false, json: false },
   { name: "proxy", summary: "Run the local HTTP /v1 proxy.", mutatesRemote: false, json: false },
@@ -111,7 +111,7 @@ export const COMMAND_MANIFEST: readonly CommandManifestEntry[] = [
   { name: "tts", summary: "Synthesize speech to a file or stdout.", mutatesRemote: true, json: true },
   { name: "stt", summary: "Transcribe an audio file.", mutatesRemote: true, json: true },
   { name: "live", summary: "Bridge Realtime events over NDJSON stdin/stdout.", mutatesRemote: true, json: true },
-] as const;
+];
 ```
 
 `mutatesRemote`는 비용 발생·원격 생성/검색을 포함한다. 로컬 파일 생성 여부와 혼동하지 않는다.
@@ -176,16 +176,15 @@ wp12는 wp9/wp10이 이미 소유한 factory 계약을 그대로 사용한다.
 
 ```ts
 // src/voice/tts.ts
-export function createTtsClient(options?: VoiceClientOptions): TtsClient;
-// TtsClient.synthesize(request: TtsRequest, signal?: AbortSignal): Promise<TtsResult>
+export function createTtsClient(deps?: { transport?: XaiTransport }): {
+  synthesize(req: TtsRequest): Promise<TtsResult>;
+};
 // src/voice/stt.ts
-export function createSttClient(options?: VoiceClientOptions): SttClient;
-// SttClient.transcribe(request: SttRequest, signal?: AbortSignal): Promise<SttResponse>
+export function createSttClient(deps?: { transport?: XaiTransport }): {
+  transcribe(req: SttRequest): Promise<SttResult>;
+};
 // src/voice/realtime.ts
-export function createRealtimeClient(
-  options: CreateRealtimeClientOptions,
-  deps?: VoiceWsDeps,
-): Promise<RealtimeClient>;
+export function createRealtimeClient(opts: RealtimeOptions): RealtimeClient;
 ```
 
 ### `src/commands/tts.ts`
@@ -206,6 +205,25 @@ export interface TtsCliOptions {
   output?: string;
   stdout?: boolean;
   json?: boolean;
+}
+
+function decodeTtsJsonBody(body: unknown): {
+  audio: string;
+  contentType: string;
+  duration?: number;
+} {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("TTS JSON body must be an object");
+  }
+  const value = body as Record<string, unknown>;
+  if (typeof value.audio !== "string" || typeof value.content_type !== "string") {
+    throw new Error("TTS JSON body omitted audio or content_type");
+  }
+  return {
+    audio: value.audio,
+    contentType: value.content_type,
+    ...(typeof value.duration === "number" ? { duration: value.duration } : {}),
+  };
 }
 
 export function ttsCommand(): Command {
@@ -229,12 +247,13 @@ export function ttsCommand(): Command {
           text,
           output_format: { codec: opts.format ?? "mp3" },
         });
+        const json = result.kind === "json" ? decodeTtsJsonBody(result.body) : undefined;
         const bytes = result.kind === "audio"
           ? result.bytes
-          : new Uint8Array(Buffer.from(result.value.audio, "base64"));
+          : new Uint8Array(Buffer.from(json!.audio, "base64"));
         const contentType = result.kind === "audio"
           ? result.contentType
-          : result.value.content_type;
+          : json!.contentType;
         if (opts.stdout) {
           process.stdout.write(bytes);
           return;
@@ -247,7 +266,7 @@ export function ttsCommand(): Command {
             bytes: bytes.byteLength,
             contentType,
             kind: result.kind,
-            ...(result.kind === "json" ? { duration: result.value.duration } : {}),
+            ...(json?.duration !== undefined ? { duration: json.duration } : {}),
           }, null, 2));
         } else {
           log.success(`Audio saved: ${path}`);
@@ -260,7 +279,7 @@ export function ttsCommand(): Command {
 }
 ```
 
-`TtsRequest`에는 `model`이 없으므로 CLI에도 `--model`을 만들지 않는다. `output_format`은 문자열이 아니라 객체라는 라이브 근거(`001_endpoint_inventory.md:92`)를 유지한다. `TtsResult.kind === "audio"`이면 `bytes/contentType`, `kind === "json"`이면 base64 `value.audio`와 `value.content_type`을 사용한다. binary stdout에서는 로그를 stdout에 섞지 않는다.
+`TtsRequest`에는 `model`이 없으므로 CLI에도 `--model`을 만들지 않는다. `output_format`은 문자열이 아니라 객체라는 라이브 근거(`001_endpoint_inventory.md:92`)를 유지한다. `TtsResult.kind === "audio"`이면 `bytes/contentType`, `kind === "json"`이면 `body: unknown`을 로컬 경계에서 검증한 뒤 base64 audio와 content type을 사용한다. binary stdout에서는 로그를 stdout에 섞지 않는다.
 
 ### `src/commands/stt.ts`
 
@@ -319,10 +338,12 @@ import { createInterface } from "node:readline";
 import {
   createRealtimeClient,
   type RealtimeClient,
-  type RealtimeClientEvent,
-  type RealtimeReasoningEffort,
-  type RealtimeVoiceModel,
 } from "../voice/realtime.js";
+import type {
+  RealtimeClientEvent,
+  RealtimeReasoningEffort,
+  RealtimeVoiceModel,
+} from "../voice/protocol.js";
 import { log } from "../utils/logger.js";
 import { DEFAULT_LIVE_MODEL } from "./command-manifest.js";
 
@@ -349,7 +370,9 @@ function parseRealtimeModel(value: string): RealtimeVoiceModel {
 }
 
 function parseReasoningEffort(value: string): RealtimeReasoningEffort {
-  if (value !== "high" && value !== "none") throw new Error("--reasoning must be high or none");
+  if (value !== "low" && value !== "medium" && value !== "high") {
+    throw new Error("--reasoning must be low, medium, or high");
+  }
   return value;
 }
 
@@ -381,7 +404,7 @@ export function liveCommand(): Command {
     .description("Bridge xAI Realtime events over NDJSON stdin/stdout (no microphone capture)")
     .option("--model <id>", "pinned Voice model or latest alias", parseRealtimeModel, DEFAULT_LIVE_MODEL)
     .option("--conversation-id <id>", "resume an existing conversation")
-    .option("--reasoning <effort>", "high|none", parseReasoningEffort)
+    .option("--reasoning <effort>", "low|medium|high", parseReasoningEffort)
     .option("--event <json>", "send one client event (repeatable)", collectEvent, [])
     .option("--no-stdin", "do not read additional NDJSON events from stdin")
     .option("--once", "exit after the first response.done or error")
@@ -515,7 +538,7 @@ import {
 } from "../auth/constants.js";
 import { COMMAND_MANIFEST, DEFAULT_LIVE_MODEL } from "./command-manifest.js";
 import { SURFACE_REGISTRY } from "../surfaces/registry.js";
-import { ModelsClient, type ModelFamily, type XaiModel } from "../surfaces/models.js";
+import { ModelsClient } from "../surfaces/index.js";
 import { createXaiTransport } from "../transport/fetch.js";
 ```
 
@@ -551,7 +574,10 @@ const MODEL_FAMILIES = [
   "image-generation-models",
   "video-generation-models",
   "embedding-models",
-] as const satisfies readonly ModelFamily[];
+] as const;
+
+type ModelFamily = (typeof MODEL_FAMILIES)[number];
+type XaiModel = Awaited<ReturnType<ModelsClient["list"]>>[number];
 
 export interface CatalogSnapshot {
   status: "live" | "partial" | "offline" | "unavailable";
@@ -566,7 +592,7 @@ export async function loadCatalogSnapshot(options: {
 } = {}): Promise<CatalogSnapshot> {
   if (options.offline) return { status: "offline", fetchedAt: null, families: {}, errors: {} };
   try {
-    const client = options.client ?? new ModelsClient(createXaiTransport({ timeoutMs: 5_000 }));
+    const client = options.client ?? new ModelsClient(createXaiTransport());
     const settled = await Promise.allSettled(MODEL_FAMILIES.map((family) => client.list(family)));
     const families: CatalogSnapshot["families"] = {};
     const errors: CatalogSnapshot["errors"] = {};
@@ -711,7 +737,7 @@ const res = await fetch(`${XAI_API_BASE_URL}/models`, {
 after:
 
 ```ts
-import { ModelsClient, type ModelFamily } from "../surfaces/models.js";
+import { ModelsClient } from "../surfaces/index.js";
 import { createXaiTransport } from "../transport/fetch.js";
 
 const MODEL_KIND = {
@@ -720,7 +746,9 @@ const MODEL_KIND = {
   image: "image-generation-models",
   video: "video-generation-models",
   embedding: "embedding-models",
-} as const satisfies Record<string, ModelFamily>;
+} as const;
+
+type ModelFamily = (typeof MODEL_KIND)[keyof typeof MODEL_KIND];
 
 // command options
 .option("--detail", "Show the detailed language-model catalog (preserved)")
@@ -761,10 +789,10 @@ const data = (await res.json()) as { /* ... */ };
 after:
 
 ```ts
-import { ImagesClient, type ImageRequest } from "../surfaces/images.js";
+import { ImagesClient } from "../surfaces/index.js";
 import { createXaiTransport } from "../transport/fetch.js";
 
-const request: ImageRequest = {
+const request: Parameters<ImagesClient["create"]>[0] = {
   model: opts.model ?? DEFAULT_IMAGE_MODEL,
   prompt,
   n,
@@ -801,8 +829,10 @@ const { request_id } = (await res.json()) as { request_id: string };
 after:
 
 ```ts
-import { VideosClient, type VideoOperation, type VideoPollResponse } from "../surfaces/videos.js";
+import { VideosClient } from "../surfaces/index.js";
 import { createXaiTransport } from "../transport/fetch.js";
+
+type VideoPollResponse = Awaited<ReturnType<VideosClient["poll"]>>;
 
 const client = new VideosClient(createXaiTransport());
 const { requestId } = await client.start("generations", body);

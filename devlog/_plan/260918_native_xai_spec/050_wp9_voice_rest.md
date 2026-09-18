@@ -31,7 +31,7 @@ voice/{tts,stt,custom-voices,client-secrets}.ts
   -> voice/protocol.ts               (공유 타입만)
   -> voice/http.ts
   -> transport/fetch.ts
-  -> auth/bearer-session.ts
+  -> auth/token-manager.ts
 ```
 
 선택한 구조의 이유:
@@ -67,7 +67,7 @@ voice/{tts,stt,custom-voices,client-secrets}.ts
 
 ## 3. 공개 계약 보존과 마이그레이션
 
-- Voice REST 공개 API의 권위자는 factory인 `createTtsClient(options?: VoiceClientOptions): TtsClient`와 `createSttClient(options?: VoiceClientOptions): SttClient`다. 호출 계약은 각각 `createTtsClient().synthesize(request, signal?)`와 `createSttClient().transcribe(request, signal?)`이며, wp12 CLI와 wp13 웹앱은 이 이름을 그대로 사용한다. `synthesizeSpeech`/`transcribeSpeech` 같은 별도 top-level helper를 만들지 않는다.
+- Voice REST 공개 API의 권위자는 `createTtsClient(deps?: { transport?: XaiTransport }): { synthesize(req: TtsRequest): Promise<TtsResult> }`와 `createSttClient(deps?: { transport?: XaiTransport }): { transcribe(req: SttRequest): Promise<SttResult> }`다. wp12 CLI와 wp13 웹앱은 이 이름을 그대로 사용한다. `synthesizeSpeech`/`transcribeSpeech` 같은 별도 top-level helper를 만들지 않는다.
 - `TtsRequest`에는 `model` 필드가 없고, `TtsResult`는 `kind: "audio" | "json"`으로 분기하는 discriminated union이다. wp12도 factory 반환값과 이 union을 그대로 소비한다.
 - `~/.progrok/auth.json`의 camelCase 스키마는 읽지도 쓰지도 않는다. wp5의 accessor만 간접 사용한다. 마이그레이션 없음.
 - 기존 CLI 명령과 옵션은 변경하지 않는다. 새 Voice CLI는 wp12 소유다.
@@ -103,10 +103,15 @@ export const XAI_VOICE_WS_ORIGIN = "wss://api.x.ai" as const;
 export const PINNED_REALTIME_MODEL = "grok-voice-think-fast-2.0" as const;
 export const REALTIME_MODEL_ALIAS = "grok-voice-latest" as const;
 export const XAI_EPHEMERAL_PROTOCOL_PREFIX = "xai-client-secret." as const;
-export const OPENAI_REALTIME_PROTOCOLS = ["realtime", "openai-beta.realtime-v1"] as const;
 
 export const STT_CLIENT_EVENT_TYPES = ["finalize", "Finalize", "audio.done"] as const;
-export const STT_SERVER_EVENT_TYPES = ["transcript.created", "transcript.partial", "transcript.done", "error"] as const;
+export const STT_EVENTS: { created: "transcript.created"; partial: "transcript.partial"; done: "transcript.done"; error: "error" } = {
+  created: "transcript.created",
+  partial: "transcript.partial",
+  done: "transcript.done",
+  error: "error",
+};
+export const STT_SERVER_EVENT_TYPES = Object.values(STT_EVENTS);
 export const TTS_CLIENT_EVENT_TYPES = ["text.delta", "text.done"] as const;
 export const TTS_SERVER_EVENT_TYPES = ["audio.delta", "audio.done", "error"] as const;
 export const REALTIME_CLIENT_EVENT_TYPES = [
@@ -135,13 +140,10 @@ export interface EphemeralClientSecret {
   expires_at: number;
 }
 
-export type EphemeralProtocolStyle = "xai" | "openai-compatible";
-export function ephemeralProtocols(secret: string, style: EphemeralProtocolStyle = "xai"): string[] {
+export const ephemeralProtocols: (secret: string) => string[] = (secret) => {
   if (!secret || /[\r\n,]/.test(secret)) throw new RangeError("invalid ephemeral client secret");
-  return style === "xai"
-    ? [`${XAI_EPHEMERAL_PROTOCOL_PREFIX}${secret}`]
-    : [OPENAI_REALTIME_PROTOCOLS[0], `openai-insecure-api-key.${secret}`, OPENAI_REALTIME_PROTOCOLS[1]];
-}
+  return [`${XAI_EPHEMERAL_PROTOCOL_PREFIX}${secret}`];
+};
 
 export interface StreamingSttWord {
   text: string; start: number; end: number; confidence?: number; speaker?: number;
@@ -164,8 +166,8 @@ export type TtsServerEvent =
   | { type: "audio.done"; trace_id?: string }
   | { type: "error"; message: string };
 
-export type RealtimeVoiceModel = typeof PINNED_REALTIME_MODEL | typeof REALTIME_MODEL_ALIAS;
-export type RealtimeReasoningEffort = "high" | "none";
+export type RealtimeVoiceModel = string;
+export type RealtimeReasoningEffort = "low" | "medium" | "high";
 export type RealtimeAudioType = "audio/pcm" | "audio/pcmu" | "audio/pcma" | "audio/opus";
 export type RealtimeAudioRate = 8000 | 11025 | 16000 | 22050 | 24000 | 32000 | 44100 | 48000;
 export type RealtimeAudioTransport = "json" | "binary";
@@ -397,7 +399,7 @@ import {
 
 describe("Voice protocol", () => {
   it("exports the browser-safe event names consumed by wp10 and wp13", () => {});
-  it("builds xAI and OpenAI-compatible ephemeral subprotocol lists", () => {});
+  it("builds the xAI ephemeral subprotocol list", () => {});
   it("rejects empty, comma, CR and LF client secrets", () => {});
   it("decodes STT partial/done words and rejects malformed events", () => {});
   it("decodes TTS delta/done events and rejects malformed events", () => {});
@@ -416,8 +418,7 @@ describe("Voice protocol", () => {
 ### 공개 타입과 핵심 본문
 
 ```ts
-import { readPackageVersion } from "../utils/version.js";
-import { xaiFetch, type TransportDeps } from "../transport/fetch.js";
+import { createXaiTransport, type XaiTransport } from "../transport/fetch.js";
 
 const MAX_ERROR_BODY_BYTES = 64 * 1024;
 
@@ -443,8 +444,7 @@ export class VoiceHttpError extends Error {
 }
 
 export interface VoiceClientOptions {
-  clientVersion?: string;
-  transport?: TransportDeps;
+  transport?: XaiTransport;
 }
 
 export interface VoiceHttpClient {
@@ -486,16 +486,15 @@ async function throwForStatus(response: Response): Promise<never> {
 }
 
 export function createVoiceHttpClient(options: VoiceClientOptions = {}): VoiceHttpClient {
-  const clientVersion = options.clientVersion ?? readPackageVersion();
+  const transport = options.transport ?? createXaiTransport();
   const request = async (path: string, init: RequestInit = {}): Promise<Response> => {
-    const response = await xaiFetch({
-      path,
+    const response = await transport.fetch({
+      pathWithQuery: path,
       method: init.method ?? "GET",
-      incomingHeaders: Object.fromEntries(new Headers(init.headers)),
-      body: init.body ?? undefined,
+      headers: new Headers(init.headers),
+      body: init.body,
       signal: init.signal ?? undefined,
-      clientVersion,
-    }, options.transport);
+    });
     if (!response.ok) await throwForStatus(response);
     return response;
   };
@@ -546,13 +545,14 @@ export function jsonBody(value: unknown): Pick<RequestInit, "headers" | "body"> 
 }
 ```
 
-`RequestInit.signal`의 `null` 가능성은 `undefined`로 정규화한다. wp6가 구현 시 `xaiFetch` 대신 `executeXaiFetch`로 이름을 확정했다면 이 한 import/call만 최신 계약으로 바꾸고 endpoint 파일은 수정하지 않는다.
+`RequestInit.signal`의 `null` 가능성은 `undefined`로 정규화한다. 기본 transport는 wp6의 `createXaiTransport()`로 만들고, 테스트는 같은 공개 계약의 `XaiTransport`를 주입한다.
 
 ## 8. NEW `src/voice/tts.ts`
 
 ### endpoint 타입 전부
 
 ```ts
+import type { XaiTransport } from "../transport/fetch.js";
 import {
   createVoiceHttpClient, expectRecord, expectString, jsonBody,
   VoiceHttpError, type VoiceClientOptions,
@@ -592,8 +592,8 @@ export interface TtsJsonResponse {
   audio_timestamps?: TtsAudioTimestamps;
 }
 export type TtsResult =
-  | { kind: "audio"; bytes: Uint8Array; contentType: string }
-  | { kind: "json"; value: TtsJsonResponse };
+  | { kind: "audio"; bytes: Uint8Array; contentType: string; duration?: number }
+  | { kind: "json"; body: unknown };
 
 export interface TtsVoice {
   voice_id: string;
@@ -601,12 +601,6 @@ export interface TtsVoice {
   language: string | null;
 }
 export interface ListTtsVoicesResponse { voices: TtsVoice[] }
-
-export interface TtsClient {
-  synthesize(request: TtsRequest, signal?: AbortSignal): Promise<TtsResult>;
-  listVoices(signal?: AbortSignal): Promise<ListTtsVoicesResponse>;
-  getVoice(voiceId: string, signal?: AbortSignal): Promise<TtsVoice>;
-}
 ```
 
 `output_format`은 문자열 shortcut이 아니라 위 객체다. `bit_rate`는 MP3에만 허용한다. `replace`는 case-insensitive whole-word pronunciation map이며 최대 200개, key 100자, value 128자다. `speed`는 0.7–1.5다. `text`는 현재 공식 스키마 기준 최대 60,000자다. 저장소 기존 문서의 15,000자와 latency level 2는 wp15에서 교정한다.
@@ -663,18 +657,18 @@ function decodeVoice(wire: unknown): TtsVoice {
   return { voice_id: expectString(record, "voice_id"), name: expectString(record, "name"), language: record.language };
 }
 
-export function createTtsClient(options: VoiceClientOptions = {}): TtsClient {
-  const http = createVoiceHttpClient(options);
-  return {
-    async synthesize(request, signal) {
-      validateTtsRequest(request);
-      const response = await http.request("/v1/tts", { method: "POST", ...jsonBody(request), signal });
+export function createTtsClient(deps?: { transport?: XaiTransport }): { synthesize(req: TtsRequest): Promise<TtsResult> } {
+  const http = createVoiceHttpClient(deps);
+  const client = {
+    async synthesize(req: TtsRequest): Promise<TtsResult> {
+      validateTtsRequest(req);
+      const response = await http.request("/v1/tts", { method: "POST", ...jsonBody(req) });
       const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
       if (contentType.includes("application/json")) {
         let wire: unknown;
         try { wire = await response.json(); }
         catch { throw new VoiceHttpError("voice_invalid_response", response.status, "TTS returned invalid JSON"); }
-        return { kind: "json", value: decodeTtsJson(wire) };
+        return { kind: "json", body: decodeTtsJson(wire) };
       }
       return {
         kind: "audio",
@@ -694,6 +688,7 @@ export function createTtsClient(options: VoiceClientOptions = {}): TtsClient {
       return http.requestJson(`/v1/tts/voices/${encodeURIComponent(voiceId)}`, { signal }, decodeVoice);
     },
   };
+  return client;
 }
 ```
 
@@ -704,6 +699,7 @@ TTS wire 문서는 JSON response를 기술하지만 라이브 응답은 `audio/m
 ### endpoint 요청/응답 타입 전부
 
 ```ts
+import type { XaiTransport } from "../transport/fetch.js";
 import { createVoiceHttpClient, expectRecord, expectString, type VoiceClientOptions } from "./http.js";
 import type { AudioSampleRate } from "./tts.js";
 
@@ -738,15 +734,15 @@ export interface SttChannel {
   text: string;
   words?: SttWord[];
 }
-export interface SttResponse {
+export interface SttResult {
   text: string;
   language: string;
   duration: number;
   words?: SttWord[];
   channels?: SttChannel[];
 }
-export interface SttClient {
-  transcribe(request: SttRequest, signal?: AbortSignal): Promise<SttResponse>;
+interface SttClient {
+  transcribe(req: SttRequest): Promise<SttResult>;
 }
 ```
 
@@ -812,10 +808,10 @@ function decodeWord(wire: unknown): SttWord {
   return word;
 }
 
-function decodeSttResponse(wire: unknown): SttResponse {
+function decodeSttResponse(wire: unknown): SttResult {
   const value = expectRecord(wire, "STT response");
   if (typeof value.duration !== "number" || !Number.isFinite(value.duration)) throw new TypeError("invalid duration");
-  const result: SttResponse = {
+  const result: SttResult = {
     text: expectString(value, "text"),
     language: expectString(value, "language"),
     duration: value.duration,
@@ -838,11 +834,11 @@ function decodeSttResponse(wire: unknown): SttResponse {
   return result;
 }
 
-export function createSttClient(options: VoiceClientOptions = {}): SttClient {
-  const http = createVoiceHttpClient(options);
+export function createSttClient(deps?: { transport?: XaiTransport }): { transcribe(req: SttRequest): Promise<SttResult> } {
+  const http = createVoiceHttpClient(deps);
   return {
-    transcribe(request, signal) {
-      return http.requestJson("/v1/stt", { method: "POST", body: buildSttForm(request), signal }, decodeSttResponse);
+    transcribe(req) {
+      return http.requestJson("/v1/stt", { method: "POST", body: buildSttForm(req) }, decodeSttResponse);
     },
   };
 }
@@ -856,7 +852,7 @@ URL source도 공식 request schema의 field이므로 multipart FormData로 보�
 
 ```ts
 import {
-  createVoiceHttpClient, expectRecord, expectString, jsonBody, type VoiceClientOptions,
+  createVoiceHttpClient, expectRecord, expectString, jsonBody,
 } from "./http.js";
 
 export type VoiceGender = "male" | "female" | "neutral";
@@ -1025,23 +1021,7 @@ Create 성공은 201, read/update/delete는 200이다. reference는 최대 120�
 import {
   createVoiceHttpClient, expectRecord, expectString, jsonBody, type VoiceClientOptions,
 } from "./http.js";
-import type {
-  EphemeralClientSecret,
-  RealtimeReasoningEffort,
-  RealtimeVoiceModel,
-} from "./protocol.js";
-export type { EphemeralClientSecret } from "./protocol.js";
-
-export interface CreateClientSecretRequest {
-  expires_after?: { seconds: number };
-  session?: {
-    model?: RealtimeVoiceModel;
-    reasoning?: { effort?: RealtimeReasoningEffort };
-  } | null;
-}
-export interface ClientSecretsClient {
-  create(request?: CreateClientSecretRequest, signal?: AbortSignal): Promise<EphemeralClientSecret>;
-}
+import type { EphemeralClientSecret } from "./protocol.js";
 
 function decodeClientSecret(wire: unknown): EphemeralClientSecret {
   const value = expectRecord(wire, "client secret");
@@ -1049,29 +1029,21 @@ function decodeClientSecret(wire: unknown): EphemeralClientSecret {
   return { value: expectString(value, "value"), expires_at: value.expires_at as number };
 }
 
-export function createClientSecretsClient(options: VoiceClientOptions = {}): ClientSecretsClient {
-  const http = createVoiceHttpClient(options);
-  return {
-    create(request = {}, signal) {
-      const seconds = request.expires_after?.seconds;
-      if (seconds !== undefined && (!Number.isInteger(seconds) || seconds < 1 || seconds > 3600)) {
-        throw new RangeError("client secret lifetime must be 1..3600 seconds");
-      }
-      return http.requestJson(
-        "/v1/realtime/client_secrets",
-        { method: "POST", ...jsonBody(request), signal },
-        decodeClientSecret,
-      );
-    },
-  };
+export function mintClientSecret(opts?: { session?: unknown }): Promise<EphemeralClientSecret> {
+  const http = createVoiceHttpClient();
+  return http.requestJson(
+    "/v1/realtime/client_secrets",
+    { method: "POST", ...jsonBody(opts ?? {}) },
+    decodeClientSecret,
+  );
 }
 ```
 
-기본 TTL은 upstream의 600초이며 최대 3600초다. 응답 `value`는 caller에게만 반환하고 객체 inspect/logging helper를 추가하지 않는다. `grok-voice-latest`는 현재 `grok-voice-think-fast-2.0` 별칭이지만, 프로덕션 pin 선택은 wp10 realtime client의 기본값에서 처리한다.
+`mintClientSecret`은 연결마다 호출한다. 응답 `value`는 caller에게만 반환하고 객체 inspect/logging helper를 추가하지 않는다. `grok-voice-latest`는 현재 `grok-voice-think-fast-2.0` 별칭이지만, 프로덕션 pin 선택은 wp10 realtime client의 기본값에서 처리한다.
 
 ## 12. NEW `tests/voice-rest.test.ts`
 
-Node 내장 `node:test`와 wp6 `TransportDeps.fetch` 주입을 사용한다. 실제 network와 실제 auth 파일을 읽지 않는다. 테스트는 최소 다음 독립 행을 가진다.
+Node 내장 `node:test`와 wp6 `XaiTransport.fetch` 주입을 사용한다. 실제 network와 실제 auth 파일을 읽지 않는다. 테스트는 최소 다음 독립 행을 가진다.
 
 ```ts
 import { describe, it } from "node:test";
@@ -1079,7 +1051,7 @@ import assert from "node:assert/strict";
 import { createTtsClient } from "../src/voice/tts.js";
 import { buildSttForm, createSttClient } from "../src/voice/stt.js";
 import { createCustomVoicesClient } from "../src/voice/custom-voices.js";
-import { createClientSecretsClient } from "../src/voice/client-secrets.js";
+import { mintClientSecret } from "../src/voice/client-secrets.js";
 import { VoiceHttpError } from "../src/voice/http.js";
 
 describe("Voice REST", () => {
@@ -1117,7 +1089,7 @@ describe("Voice REST", () => {
 4. TTS 타입, validation, raw/JSON response 분기를 구현한다.
 5. STT 합타입과 multipart 조립을 구현하고 file-last 테스트를 red-green한다.
 6. custom voice CRUD와 audio bytes를 구현한다.
-7. canonical `EphemeralClientSecret`을 쓰는 client secret 발급을 구현한다.
+7. canonical `EphemeralClientSecret`을 반환하는 `mintClientSecret`을 구현한다.
 8. focused tests, typecheck, 전체 test, build를 순서대로 실행한다.
 
 ## 14. 검증 명령
@@ -1142,7 +1114,7 @@ npm run build
 - STT가 file/url을 동시에 받지 않고, file multipart part가 항상 마지막이다.
 - STT의 diarize/keyterm/multichannel/vad_threshold와 response words/channels가 타입 및 테스트에 있다.
 - custom voice의 create/list/get/update/delete/audio 모든 요청·응답 타입과 함수가 있다.
-- client secret TTL과 `value`/`expires_at` decoder가 있고, 응답/model/reasoning 타입은 wp9의 `src/voice/protocol.ts`에서 import한다.
+- `mintClientSecret`과 `value`/`expires_at` decoder가 있고, canonical 응답 타입은 wp9의 `src/voice/protocol.ts`에서 import한다.
 - POST mutation은 자동 retry되지 않고 GET만 wp6 idempotent retry를 사용한다.
 - focused test, typecheck, 전체 test, build가 모두 exit 0이다.
 - `auth.json`, CLI 명령, `/health`, `/v1/*` relay 계약에 breaking change가 없다.

@@ -108,13 +108,14 @@ All notable changes to progrok are documented here.
 
 - Replaced conditional byte passthrough with canonical request and typed-event handling where parsing adds correctness.
 - Kept validated passthrough for binary, multipart, and unknown future endpoints.
-- Changed `capabilities --json` to schema v2; `commands` entries are objects and command names now come from `entry.name`.
+- Changed `capabilities --json` to schema v2; `commands` is generated from `COMMAND_MANIFEST`, endpoints are generated from `SURFACE_REGISTRY`, and command names now come from `entry.name`.
 - Updated public documentation and the packaged skill to the 2026-09-18 xAI surface.
 
 ### Compatibility
 
 - Preserved the path and schema of `~/.progrok/auth.json`; ima2-gen v3.16.1 shares only this credential file.
 - Preserved the existing localhost HTTP and CLI entry points.
+- Capabilities consumers must branch on `schemaVersion === 2` and read `commands[].name`; 3.0.0 does not provide a legacy `string[]` shim.
 
 ## [2.0.4] - 2026-09-18
 

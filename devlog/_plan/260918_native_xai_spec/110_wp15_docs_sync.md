@@ -7,6 +7,10 @@ wp5–wp14에서 실제로 구현되고 검증된 표면만 공개 문서에 반
 모델, 인증, 포트를 말해야 한다. 런타임 `GET /v1/models`가 모델 카탈로그의 권위이며,
 정적 가격표는 OAuth 세션의 권위가 아니다.
 
+이번 공개 문서는 progrok **3.0.0**을 대상으로 한다. `progrok capabilities --json`은
+schema v2이며 `commands`가 `string[]`가 아니라 `CommandManifestEntry[]`다. 문서와 skill은
+명령 이름을 `entry.name`에서 읽는 migration을 명시하고 legacy shim이 있다고 말하지 않는다.
+
 문서는 다음 네 연결 방식을 명확히 구분한다.
 
 | 경로 | client endpoint | 인증 |
@@ -91,6 +95,11 @@ ima2-gen v3.16.1 no longer bundles or supervises progrok. It calls xAI directly;
 the two tools only share the path and schema of `~/.progrok/auth.json`.
 ```
 
+3.0.0 migration 절에는 `capabilities --json`의 `schemaVersion: 2`와
+`commands: [{ name, summary, mutatesRemote, json }]` 형태를 적고, v1 소비자는 문자열 대신
+`entry.name`을 읽어야 한다고 명시한다. 기존 CLI command 이름과 localhost HTTP 경로는
+유지되지만 이 JSON 변경 때문에 3.0.0이라는 경계를 흐리지 않는다.
+
 ### MODIFY — `docs/api.md`
 
 Before:
@@ -128,6 +137,9 @@ After:
    새 secret을 발급하며 캐시·재사용하지 않는다. `/tts`의 browser ephemeral 인증은
    실측되지 않았으므로 server-side bearer만 문서화한다. OAuth/API key/client secret
    값을 URL query에 넣지 않는다.
+7. `## Capabilities schema v2`: progrok 3.0.0부터 `commands`가 객체 배열이고
+   `schemaVersion`이 `2`임을 설명한다. `COMMAND_MANIFEST`와 `SURFACE_REGISTRY`가 각각
+   commands/endpoints 값의 SSOT이며, command 이름 소비 예시는 `entry.name`을 사용한다.
 
 Voice model snippet은 다음으로 교체한다.
 
@@ -185,6 +197,9 @@ ws.addEventListener("open", () => ws.send(JSON.stringify({
 모델 표의 `-fast-1.0`/`-think-fast-1.0`을 제거하고 alias/pinned 2.0을 분리한다.
 가격 숫자는 삭제하고 “runtime catalog and xAI account terms are authoritative”로
 바꾼다. ports/path에는 네 direct xAI WS URL과 웹앱 URL을 넣고 local WS URL은 넣지 않는다.
+`capabilities --json` 예시는 schema v2만 싣고 `commands`를 문자열 배열로 보이지 않는다.
+progrok 3.0.0 migration note에서 이름은 `capabilities.commands.map((entry) => entry.name)`으로
+읽도록 안내하며 legacy shim은 문서화하지 않는다.
 
 ### MODIFY — `site/src/components/DocsSidebar.astro`
 
@@ -330,6 +345,7 @@ rg -n 'grok-voice-(fast|think-fast)-1\.0|ws://127\.0\.0\.1:18645/v1/(responses|r
   README.md docs/api.md skills/progrok/SKILL.md site/src/pages/docs
 rg -n 'gpt-4o|"size": "1024x1024"' site/src/pages/docs
 rg -n 'ima2-gen.*(bundl|supervis|18645)' README.md docs skills site/src/pages/docs
+rg -n 'schemaVersion.?[:=].?2|commands.*entry\.name' README.md docs/api.md skills/progrok/SKILL.md
 npm --prefix site run build
 npm run typecheck
 npm test
@@ -353,4 +369,6 @@ rg -n 'ima2-gen v3\.16\.1.*no longer bundles|only share.*~/.progrok/auth\.json' 
   설명된다.
 - ima2-gen v3.16.1이 progrok을 번들/실행하지 않고 auth file만 공유한다는 경계가
   README에 명시된다.
+- README, API reference, packaged skill이 progrok 3.0.0의 capabilities schema v2와
+  `commands[].name` migration을 같은 내용으로 설명하고 legacy shim을 약속하지 않는다.
 - site build, typecheck, test, `git diff --check`가 모두 exit 0이다.

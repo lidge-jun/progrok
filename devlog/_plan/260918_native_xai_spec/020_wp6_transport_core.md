@@ -38,7 +38,7 @@ proxy/server.ts
        ├─ transport/base-url.ts  host와 URL
        ├─ transport/headers.ts   인증·추적·forward header
        ├─ transport/retry.ts     pre-header/HTTP retry 판정
-       └─ auth/bearer-session.ts WP5 one-shot 401
+       └─ auth/token-manager.ts WP5 one-shot 401
 ```
 
 대안으로 `server.ts`에 helper를 추가하는 안은 reject한다. 현재 파일이 이미 body buffering, Express 응답, stream pump까지 소유하므로 transport 정책까지 남기면 `000_plan.md:28-32`의 분리 원칙을 위반한다. 범용 HTTP client 클래스를 만드는 안도 reject한다. xAI host/header/retry 규칙이 목적이므로 작은 함수 네 개가 더 깊고 테스트하기 쉽다.
@@ -59,7 +59,7 @@ proxy/server.ts
 | NEW | `src/transport/base-url.ts` | public 기본 URL 고정, explicit CLI-proxy opt-in 격리, URL 정규화 |
 | NEW | `src/transport/headers.ts` | hop-by-hop 제거, auth와 `x-grok-*` 조립 |
 | NEW | `src/transport/retry.ts` | replay-safe 분류, Retry-After/backoff, abortable sleep |
-| NEW | `src/transport/fetch.ts` | `XaiTransport`, `createXaiTransport`, header timeout, caller abort, HTTP retry, 401 one-shot, opt-in CLI-proxy client |
+| NEW | `src/transport/fetch.ts` | 하위 seam `executeXaiFetch`, 상위 `xaiFetch`, `XaiTransport`, header timeout, caller abort, HTTP retry, 401 one-shot, opt-in CLI-proxy client |
 | NEW | `scripts/probe-oauth-base-url.ts` | 두 host 지원 매트릭스 생성 |
 | NEW | `tests/transport.test.ts` | transport 단위·통합 회귀 테스트 |
 | NEW | `devlog/_plan/260918_native_xai_spec/evidence/wp6-oauth-base-url-probe.json` | probe가 생성하는 redacted 결과 |
@@ -80,15 +80,8 @@ proxy/server.ts
 export const XAI_PUBLIC_API_BASE_URL = "https://api.x.ai/v1";
 export const XAI_SESSION_API_BASE_URL = "https://cli-chat-proxy.grok.com/v1";
 
-export type UpstreamAuthKind = "oauth" | "api-key" | "deployment-key";
-export type PublicApiAuthKind = Exclude<UpstreamAuthKind, "deployment-key">;
-export type UpstreamBaseKind = "public-api" | "session-api";
-
-export interface BaseUrlDecision {
-  kind: UpstreamBaseKind;
-  baseUrl: string;
-  reason: "oauth-public-default" | "api-key-public-only" | "explicit-cli-proxy" | "deployment-key-only";
-}
+export type PublicApiAuthKind = "oauth" | "api-key";
+export type UpstreamAuthKind = PublicApiAuthKind | "deployment-key";
 
 export interface CliChatProxyOptIn { explicitOptIn: true }
 
@@ -103,26 +96,19 @@ export function normalizeXaiPath(pathname: string): string {
   return `${path}${parsed.search}`;
 }
 
-export function resolveUpstreamBase(
-  pathname: string,
-  authKind: PublicApiAuthKind,
-): BaseUrlDecision {
-  const normalized = normalizeXaiPath(pathname);
+export function resolveUpstreamBase(kind: PublicApiAuthKind): string {
+  void kind;
+  return XAI_PUBLIC_API_BASE_URL;
+}
+
+export function resolveUpstreamUrl(path: string, kind: PublicApiAuthKind): string {
+  const normalized = normalizeXaiPath(path);
   const pathOnly = new URL(normalized, "https://local.invalid").pathname;
   if (DEPLOYMENT_CONFIG.test(pathOnly)) throw new Error("/deployment/config requires GROK_DEPLOYMENT_KEY");
   if (FEEDBACK.test(pathOnly)) throw new Error("feedback base URL is not established; automatic routing is disabled");
-  return {
-    kind: "public-api",
-    baseUrl: XAI_PUBLIC_API_BASE_URL,
-    reason: authKind === "api-key" ? "api-key-public-only" : "oauth-public-default",
-  };
-}
-
-export function resolveUpstreamUrl(pathname: string, authKind: PublicApiAuthKind): URL {
-  const normalized = normalizeXaiPath(pathname);
-  const decision = resolveUpstreamBase(normalized, authKind);
+  const baseUrl = resolveUpstreamBase(kind);
   const suffix = normalized.replace(/^\/v1/, "");
-  return new URL(`${decision.baseUrl}${suffix}`);
+  return `${baseUrl}${suffix}`;
 }
 
 export function resolveCliChatProxyUrl(pathname: string, _optIn: CliChatProxyOptIn): URL {
@@ -140,7 +126,7 @@ export function resolveDeploymentConfigUrl(
 }
 ```
 
-정규화는 absolute URL의 외부 host를 신뢰하지 않고 path/query만 취한다. `..`, userinfo, fragment로 host를 바꿀 수 없어야 한다. 기본 `resolveUpstreamUrl`은 session host를 반환하는 분기가 없다. `createXaiTransport`와 프록시는 이 함수만 사용한다. `resolveCliChatProxyUrl`은 이름과 `{ explicitOptIn: true }` 인자로 별도 선택을 강제하며, `/deployment/config`는 `resolveDeploymentConfigUrl("deployment-key", ...)`만 사용한다. `/feedback*`는 기본 resolver에서 거부하고, 근거 URL이 별도 결정되기 전에는 어떤 전용 client에도 자동 등록하지 않는다.
+정규화는 absolute URL의 외부 host를 신뢰하지 않고 path/query만 취한다. `..`, userinfo, fragment로 host를 바꿀 수 없어야 한다. `resolveUpstreamBase`는 `PublicApiAuthKind` 하나만 받아 public base를 반환한다. `/deployment/config`와 `/feedback*` 경로 분기는 이를 호출하기 전에 `resolveUpstreamUrl`에서 끝나며 `deployment-key`는 절대 `resolveUpstreamBase`에 전달되지 않는다. 기본 `resolveUpstreamUrl`은 session host를 반환하는 분기가 없다. `createXaiTransport`와 프록시는 이 함수만 사용한다. `resolveCliChatProxyUrl`은 이름과 `{ explicitOptIn: true }` 인자로 별도 선택을 강제하며, `/deployment/config`는 `resolveDeploymentConfigUrl("deployment-key", ...)`만 사용한다. `/feedback*`는 근거 URL이 별도 결정되기 전에는 어떤 전용 client에도 자동 등록하지 않는다.
 
 ### 6.2 NEW `src/transport/headers.ts`
 
@@ -201,7 +187,7 @@ inbound `x-grok-user-id`, `x-grok-deployment-id`, `x-grok-conv-group-id`는 신�
 ### 6.3 NEW `src/transport/retry.ts`
 
 ```ts
-export type ReplayClass = "never" | "idempotent" | "explicit-idempotency-key";
+export type ReplayClass = "replayable" | "not-replayable";
 
 export interface RetryPolicy {
   replay: ReplayClass;
@@ -214,12 +200,12 @@ export interface RetryPolicy {
 
 export function classifyReplay(method: string, headers: Headers): ReplayClass {
   const upper = method.toUpperCase();
-  if (upper === "GET" || upper === "HEAD" || upper === "OPTIONS") return "idempotent";
-  return headers.has("idempotency-key") ? "explicit-idempotency-key" : "never";
+  if (upper === "GET" || upper === "HEAD" || upper === "OPTIONS") return "replayable";
+  return headers.has("idempotency-key") ? "replayable" : "not-replayable";
 }
 
 export function isRetryableStatus(status: number, policy: RetryPolicy): boolean {
-  if (policy.replay === "never") return false;
+  if (policy.replay === "not-replayable") return false;
   if (status === 429) return policy.retry429;
   return policy.retry5xx && [500, 502, 503, 504, 520, 521, 522].includes(status);
 }
@@ -251,32 +237,22 @@ export async function sleepWithAbort(ms: number, signal?: AbortSignal): Promise<
 ### 6.4 NEW `src/transport/fetch.ts`
 
 ```ts
-import { withBearer401Replay } from "../auth/bearer-session.js";
+import { withBearer401Replay } from "../auth/token-manager.js";
 import { resolveUpstreamUrl } from "./base-url.js";
-import { buildUpstreamHeaders, type GrokTraceContext } from "./headers.js";
+import { buildUpstreamHeaders } from "./headers.js";
 import { classifyReplay, isRetryableStatus, retryDelayMs, sleepWithAbort, type RetryPolicy } from "./retry.js";
 import { readPackageVersion } from "../utils/version.js";
 
 export interface XaiFetchInput {
-  path: string;
+  pathWithQuery: string;
   method: string;
-  incomingHeaders?: Headers | Record<string, string | string[] | undefined>;
-  body?: BodyInit;
+  headers: Headers;
+  body?: BodyInit | null;
   signal?: AbortSignal;
-  headerTimeoutMs?: number;
-  trace?: GrokTraceContext;
-  clientVersion: string;
-  replayable?: boolean;
 }
 
-export interface TransportDeps { fetch?: typeof globalThis.fetch }
-
 export interface XaiTransport {
-  request(
-    path: string,
-    init?: RequestInit,
-    policy?: { replayable?: boolean },
-  ): Promise<Response>;
+  fetch(input: XaiFetchInput): Promise<Response>;
 }
 
 function headerSignal(caller: AbortSignal | undefined, timeoutMs: number): {
@@ -293,17 +269,15 @@ function headerSignal(caller: AbortSignal | undefined, timeoutMs: number): {
   };
 }
 
-async function fetchAttempt(input: XaiFetchInput, bearer: string, deps: TransportDeps): Promise<Response> {
-  const url = resolveUpstreamUrl(input.path, "oauth");
-  const headers = buildUpstreamHeaders({
-    incoming: input.incomingHeaders,
-    auth: { kind: "oauth", bearer },
-    trace: input.trace,
-    clientVersion: input.clientVersion,
-  });
-  const bounded = headerSignal(input.signal, input.headerTimeoutMs ?? 30_000);
+async function fetchAttempt(
+  input: XaiFetchInput,
+  headers: Headers,
+  fetchImpl: typeof fetch,
+): Promise<Response> {
+  const url = resolveUpstreamUrl(input.pathWithQuery, "oauth");
+  const bounded = headerSignal(input.signal, 30_000);
   try {
-    return await (deps.fetch ?? globalThis.fetch)(url, {
+    return await fetchImpl(url, {
       method: input.method,
       headers,
       body: input.body,
@@ -315,24 +289,32 @@ async function fetchAttempt(input: XaiFetchInput, bearer: string, deps: Transpor
   }
 }
 
-async function fetchHttpRetry(input: XaiFetchInput, bearer: string, deps: TransportDeps): Promise<Response> {
-  const sampleHeaders = buildUpstreamHeaders({
-    incoming: input.incomingHeaders, auth: { kind: "oauth", bearer },
-    trace: input.trace, clientVersion: input.clientVersion,
+/** 하위 seam. 호출자가 이미 bearer를 들고 있을 때 쓴다. wp8 프록시가 이 경로를 쓴다. */
+export async function executeXaiFetch(
+  input: XaiFetchInput,
+  deps: { bearer: string; fetchImpl?: typeof fetch },
+): Promise<Response> {
+  const headers = buildUpstreamHeaders({
+    incoming: input.headers,
+    auth: { kind: "oauth", bearer: deps.bearer },
+    clientVersion: readPackageVersion(),
   });
-  const replay = input.replayable === false ? "never" : classifyReplay(input.method, sampleHeaders);
+  const replay = input.body instanceof ReadableStream
+    ? "not-replayable"
+    : classifyReplay(input.method, headers);
   const policy: RetryPolicy = {
-    replay, maxAttempts: replay === "never" ? 1 : 3,
+    replay, maxAttempts: replay === "not-replayable" ? 1 : 3,
     baseDelayMs: 400, maxDelayMs: 5_000, retry429: true, retry5xx: true,
   };
+  const fetchImpl = deps.fetchImpl ?? globalThis.fetch;
   let lastError: unknown;
   for (let attempt = 0; attempt < policy.maxAttempts; attempt += 1) {
     if (input.signal?.aborted) throw input.signal.reason;
     let response: Response;
     try {
-      response = await fetchAttempt({ ...input, trace: { ...input.trace, transientRetry: attempt > 0 } }, bearer, deps);
+      response = await fetchAttempt(input, headers, fetchImpl);
     } catch (error) {
-      if (input.signal?.aborted || replay === "never" || attempt + 1 >= policy.maxAttempts) throw error;
+      if (input.signal?.aborted || replay === "not-replayable" || attempt + 1 >= policy.maxAttempts) throw error;
       if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) throw error;
       lastError = error; // Response가 없으므로 header 전 네트워크 실패다.
       await sleepWithAbort(Math.min(150 * 2 ** attempt, 1_000), input.signal);
@@ -347,39 +329,27 @@ async function fetchHttpRetry(input: XaiFetchInput, bearer: string, deps: Transp
   throw lastError ?? new Error("xAI fetch exhausted retries");
 }
 
-export function xaiFetch(input: XaiFetchInput, deps: TransportDeps = {}): Promise<Response> {
-  return withBearer401Replay(
-    (snapshot) => fetchHttpRetry(input, snapshot.token, deps),
-    { signal: input.signal, discard: (response) => response.body?.cancel().catch(() => undefined) },
-  );
+/** 상위 API. bearer를 스스로 해석하고 401 replay까지 처리한 뒤 executeXaiFetch를 호출한다. */
+export function xaiFetch(
+  input: XaiFetchInput,
+  deps?: { fetchImpl?: typeof fetch },
+): Promise<Response> {
+  return withBearer401Replay((bearer) =>
+    deps?.fetchImpl
+      ? executeXaiFetch(input, { bearer, fetchImpl: deps.fetchImpl })
+      : executeXaiFetch(input, { bearer }));
 }
 
-export function createXaiTransport(options: {
-  signal?: AbortSignal;
-  timeoutMs?: number;
-} = {}): XaiTransport {
+export function createXaiTransport(opts?: { fetchImpl?: typeof fetch }): XaiTransport {
   return {
-    request(path, init = {}, policy = {}) {
-      const requestSignal = init.signal ?? undefined;
-      const signal = options.signal && requestSignal
-        ? AbortSignal.any([options.signal, requestSignal])
-        : options.signal ?? requestSignal;
-      return xaiFetch({
-        path,
-        method: init.method ?? "GET",
-        incomingHeaders: init.headers ? new Headers(init.headers) : undefined,
-        body: init.body ?? undefined,
-        signal,
-        headerTimeoutMs: options.timeoutMs,
-        clientVersion: readPackageVersion(),
-        replayable: policy.replayable,
-      });
+    fetch(input) {
+      return xaiFetch(input, opts);
     },
   };
 }
 ```
 
-`XaiTransport`와 `createXaiTransport`는 wp11이 import하는 공개 transport 계약이다. `createXaiTransport`는 OAuth 기본 레인만 만들며 내부에서 항상 `resolveUpstreamUrl(..., "oauth")`를 사용하므로 `cli-chat-proxy`로 갈 수 없다. `xaiFetch`는 Response를 반환한 뒤 body를 읽지 않는다. 따라서 stream 도중 reset, parser 오류, client disconnect를 이 레이어가 재시도할 기회가 없다. 이것이 mid-stream 금지의 구조적 보장이다. request body가 `ReadableStream`이면 재생 불가로 강제 분류하고 `duplex` 요구를 별도로 처리한다.
+`executeXaiFetch`는 이미 취득한 bearer를 받는 하위 seam이며 wp8이 직접 사용한다. `xaiFetch`는 bearer 획득과 401 one-shot replay를 소유하고 각 시도에서 `executeXaiFetch`를 호출한다. `XaiTransport`와 `createXaiTransport`는 wp11이 import하는 공개 transport 계약이다. `createXaiTransport`는 OAuth 기본 레인만 만들며 내부에서 항상 `resolveUpstreamUrl(..., "oauth")`를 사용하므로 `cli-chat-proxy`로 갈 수 없다. 두 fetch 함수 모두 Response를 반환한 뒤 body를 읽지 않는다. 따라서 stream 도중 reset, parser 오류, client disconnect를 이 레이어가 재시도할 기회가 없다. 이것이 mid-stream 금지의 구조적 보장이다. request body가 `ReadableStream`이면 재생 불가로 강제 분류하고 `duplex` 요구를 별도로 처리한다.
 
 `cli-chat-proxy`는 이 factory의 option이나 path 분기로 열지 않는다. 전용 factory의 공개 계약은 다음과 같이 별도로 둔다.
 
@@ -506,8 +476,7 @@ import { getValidBearer } from "../auth/token-store.js";
 
 ```ts
 import { PROXY_DEFAULT_PORT, PROXY_DEFAULT_HOST } from "../auth/constants.js";
-import { xaiFetch, type TransportDeps } from "../transport/fetch.js";
-import { readPackageVersion } from "../utils/version.js";
+import { xaiFetch } from "../transport/fetch.js";
 ```
 
 현재 `src/proxy/server.ts:88-99`의 URL/header/fetch 조립:
@@ -522,7 +491,7 @@ const upstream = await fetch(upstreamUrl, { /* ... */ });
 변경 후:
 
 ```ts
-export interface ProxyAppDeps { transport?: TransportDeps }
+export interface ProxyAppDeps { fetchImpl?: typeof fetch }
 export function createProxyApp(deps: ProxyAppDeps = {}): express.Application { /* routes unchanged */ }
 
 const abort = new AbortController();
@@ -531,13 +500,13 @@ req.once("aborted", onAborted);
 res.once("close", () => { if (!res.writableEnded) onAborted(); });
 
 const upstream = await xaiFetch({
-  path: `/v1${relPath}${qs}`,
+  pathWithQuery: `/v1${relPath}${qs}`,
   method: req.method,
-  incomingHeaders: req.headers as Record<string, string | string[] | undefined>,
+  headers: new Headers(Object.entries(req.headers).flatMap(([key, value]) =>
+    value === undefined ? [] : [[key, Array.isArray(value) ? value[0] ?? "" : value]])),
   body: fwdBody.length > 0 ? new Uint8Array(fwdBody) : undefined,
   signal: abort.signal,
-  clientVersion: readPackageVersion(),
-}, deps.transport);
+}, deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : undefined);
 ```
 
 `filterHeaders`와 로컬 `HOP_BY_HOP`은 삭제하고 `headers.ts`가 소유한다. response header 필터는 별도 allow/deny 함수로 `headers.ts`에 export하거나 server에 남기되 request policy와 중복하지 않는다. stream pump `src/proxy/server.ts:114-128`은 WP7 전까지 유지하고, catch에서 headers가 이미 전송된 mid-stream 오류는 로그만 남기고 retry하지 않는다.
@@ -557,7 +526,7 @@ const fakeFetch: typeof globalThis.fetch = async (input, init) => {
     headers: { "content-type": "application/json", "x-request-id": "test-request" },
   });
 };
-const app = createProxyApp({ transport: { fetch: fakeFetch } });
+const app = createProxyApp({ fetchImpl: fakeFetch });
 ```
 
 테스트는 `/health` exact body, unknown `/v1/*` forwarding, query 보존, inbound Authorization 교체, OAuth 보조 header, client abort, binary response, 두 번째 401 미재시도를 검증한다. 실제 홈 credential 대신 WP5 token-store deps 또는 임시 auth 파일을 주입한다.
@@ -581,7 +550,7 @@ request 준비
   ├─ caller aborted → 즉시 종료
   └─ fetch 시작
        ├─ Response 전 network reject
-       │    ├─ replay=never → 종료
+       │    ├─ not-replayable → 종료
        │    └─ replayable + budget → backoff 후 재시도
        └─ Response headers 도착(commit)
             ├─ 401 + OAuth + 아직 replay 안 함 → body cancel → generation-safe refresh → 1회 replay

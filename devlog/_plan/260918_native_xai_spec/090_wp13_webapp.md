@@ -58,7 +58,7 @@ src/commands/chat.ts
 
 src/web/client/app.ts
   -> chat.ts -> api.ts -> same-origin /v1/responses, /v1/models
-  -> voice.ts -> ../../voice/protocol.ts (wp9의 event/control/client-secret 타입과 parser)
+  -> voice.ts -> ../../voice/protocol.ts (wp9의 event/control/client-secret 타입과 상수)
              -> api.ts -> same-origin POST /v1/realtime/client_secrets
                         -> direct wss://api.x.ai/v1/stt|realtime
   -> media.ts -> api.ts -> same-origin image/video REST
@@ -1120,8 +1120,7 @@ import { mintClientSecret } from "./api.js";
 import type { VoiceMode, VoiceStatus } from "./contracts.js";
 import {
   ephemeralProtocols,
-  parseRealtimeServerEvent,
-  parseSttServerEvent,
+  STT_EVENTS,
   type EphemeralClientSecret,
   type RealtimeClientEvent,
   type RealtimeServerEvent,
@@ -1130,6 +1129,25 @@ import {
 } from "../../voice/protocol.js";
 
 const XAI_WS_BASE = "wss://api.x.ai/v1";
+
+function parseProtocolEvent<T extends { type: string }>(raw: string): T {
+  const value: unknown = JSON.parse(raw);
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Voice event must be an object");
+  }
+  if (typeof (value as { type?: unknown }).type !== "string") {
+    throw new Error("Voice event omitted type");
+  }
+  return value as T;
+}
+
+function parseSttEvent(raw: string): SttServerEvent {
+  const event = parseProtocolEvent<SttServerEvent>(raw);
+  if (!Object.values(STT_EVENTS).includes(event.type)) {
+    throw new Error(`Unknown STT event: ${event.type}`);
+  }
+  return event;
+}
 
 export interface VoiceSocketSpec {
   url: string;
@@ -1284,8 +1302,8 @@ export class VoiceController {
       return;
     }
     try {
-      if (mode === "stt") this.onSttEvent(parseSttServerEvent(event.data));
-      else this.onRealtimeEvent(parseRealtimeServerEvent(event.data));
+      if (mode === "stt") this.onSttEvent(parseSttEvent(event.data));
+      else this.onRealtimeEvent(parseProtocolEvent<RealtimeServerEvent>(event.data));
     } catch {
       this.fail("Voice API returned an invalid event");
     }
@@ -1998,7 +2016,7 @@ viewport는 1440×900, 1024×768, 768×1024, 390×844에서 확인한다. keyboa
 
 ## 12. 고정된 선행 계약과 구현 중 재확인할 경계
 
-- wp9의 `src/voice/protocol.ts`가 `EphemeralClientSecret`, `ephemeralProtocols`, `parseRealtimeServerEvent`, `parseSttServerEvent`, `RealtimeClientEvent`, `RealtimeServerEvent`, `SttClientControl`, `SttServerEvent`를 browser-safe export한다. wp13은 모두 type-only/value import로 재사용하며 client secret 응답 타입·event 이름·decoder·client control을 다시 선언하지 않는다.
+- wp9의 `src/voice/protocol.ts`가 `EphemeralClientSecret`, `ephemeralProtocols`, `STT_EVENTS`와 realtime/STT의 event·control 타입을 browser-safe export한다. wp13은 이 타입과 상수를 재사용하고, 004에 없는 parser export를 요구하지 않는다. JSON 문자열의 object/type 검증은 `voice.ts`의 브라우저 경계에서 수행한다.
 - wp7의 `src/core/types.ts`가 `ResponsesRequest`를 export한다. wp13의 `api.ts`는 이를 직접 import하며 browser 전용 중복 DTO를 선언하지 않는다.
 - 기존 `createProxyApp()` signature가 달라지면 `src/web/server.ts`만 조정한다. browser는 계속 same-origin `/v1/*`만 호출한다.
 - 라이브 realtime server가 binary output transport를 거부하면 JSON `response.output_audio.delta` base64 경로로 바꾸되, browser OAuth/ephemeral 경계는 바꾸지 않는다.

@@ -144,6 +144,7 @@ legacy shim을 만들어 minor로 우기지 않는다.
 ### D7. wp10이 browser-safe 프로토콜 모듈을 소유한다
 
 `src/voice/protocol.ts`에 realtime/stt/tts의 이벤트 이름과 타입을 Node 의존 없이 둔다.
+**소유 단계는 D14가 wp9으로 바꿨다.** 아래 문장의 wp10 소유 서술은 D14가 덮는다.
 wp13의 브라우저 코드는 이 모듈을 import한다. 두 벌로 구현하지 않는다.
 
 ### D8. inbound Authorization 헤더는 계속 무시한다
@@ -178,7 +179,7 @@ wp10은 "streaming STT/TTS는 bearer 전용, ephemeral은 realtime 전용"이라
 ### D13. 타입 중복 선언 금지
 
 canonical `ResponsesRequest`는 wp7의 `src/core/types.ts`가, realtime 모델/effort 타입은
-wp10의 `src/voice/protocol.ts`가 단독으로 소유한다. wp9과 wp13은 다시 선언하지 않고 import한다.
+`src/voice/protocol.ts`가 단독으로 소유한다(소유 단계는 D14에 따라 wp9). wp10과 wp13은 다시 선언하지 않고 import한다.
 `src/surfaces/index.ts`의 named export 목록은 wp11이 문서에 명시한다.
 
 ## 추가 결정 (A 감사 3회차)
@@ -221,6 +222,26 @@ wp13의 브라우저 voice 범위는 STT와 realtime뿐이다. wp14의 webapp �
 | wp11 | wp7, wp10 (패키지 산출물) |
 | wp12 | wp6, wp8, wp9, wp10, wp11 |
 | wp13 | wp7, wp9, wp10 |
-| wp14 | wp13 |
+| wp14 | wp8, wp11, wp12, wp13 |
 | wp15 | wp14 |
 | wp16 | wp15 |
+
+## 근본 원인 조치 (A 감사 4회차)
+
+### D19. 단계 간 API 이름은 `004_module_contracts.md`가 단독으로 정한다
+
+감사가 네 번 돌았고 매번 다른 자리에서 이름이 어긋났다. `executeXaiFetch`/`xaiFetch`,
+`decodeSse`/`decodeServerSentEvents`, `classifyRetry`/`classifyReplay`, `ClientSecretResponse`/`EphemeralClientSecret`.
+개별 수정으로는 끝나지 않는다. 12개 문서를 병렬로 쓰면서 각자가 이웃 단계의 공개 API 이름을 지어냈기 때문이다.
+
+`004_module_contracts.md`가 모든 cross-module export의 이름과 시그니처를 단독으로 정한다.
+단계 문서가 그와 다르면 단계 문서가 틀린 것이다. 새 cross-module export는 004에 먼저 추가하고 단계 문서가 참조한다.
+
+### D20. wp8과 wp6의 transport seam은 두 층이다
+
+wp8은 이미 취득한 bearer를 넘기려 했고 wp6의 `xaiFetch`는 내부에서 다시 취득했다. 둘 다 옳은 요구다.
+`executeXaiFetch(input, { bearer, fetchImpl })`를 하위 seam으로 두고, `xaiFetch`가 bearer 해석과 401 replay를 얹어 그것을 호출한다.
+
+### D21. `deployment-key`는 `resolveUpstreamBase`에 넘기지 않는다
+
+`resolveUpstreamBase`는 `PublicApiAuthKind`만 받는다. deployment-key는 호출 전에 분기해 전용 클라이언트로 보낸다.

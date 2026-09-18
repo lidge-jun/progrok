@@ -9,7 +9,7 @@ wp5–wp13의 공개 경계에 있어야 하며, 없다면 소유 단계로 되�
 
 진입 조건은 다음과 같다.
 
-- 직접 선행 단계는 wp13이며, wp5–wp12 산출물은 wp13까지 완료된 transitive precondition으로 취급한다.
+- 직접 선행 단계는 D18 갱신본에 따라 wp8, wp11, wp12, wp13이다. 그 네 단계의 산출물이 모두 완료되지 않으면 wp14를 시작하지 않는다.
 - `src/auth/`, `src/transport/`, `src/wire/`, `src/voice/`, `src/surfaces/`,
   `src/proxy/`, `src/web/`가 구현돼 있다.
 - wp5 소유 `src/auth/token-manager.ts`와 wp11 소유 `src/surfaces/index.ts`가 각 소유 단계에서 구현·export돼 있다. wp14는 두 모듈을 생성하거나 시그니처를 재정의하지 않고 검증 코드에서만 import한다.
@@ -162,17 +162,16 @@ describe("TokenManager", () => {
 아래 import 대상과 시그니처는 wp5의 선행 계약이다. wp14는 이 파일을 만들거나 구현을 보강하지 않는다.
 
 ```ts
-export interface TokenManagerDependencies {
-  now(): number;
-  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
-  load(): TokenData | null;
-  save(input: SaveTokenInput): Promise<void>;
-}
-
-export function createTokenManager(
-  dependencies: TokenManagerDependencies,
-): { getValidBearer(signal?: AbortSignal): Promise<string> };
+import {
+  createTokenManager,
+  getValidBearerSnapshot,
+  withBearer401Replay,
+} from "../src/auth/token-manager.js";
 ```
+
+주입 상세는 wp5의 `TokenManagerDependencies`를 따르며 wp14가 축약 시그니처를 다시
+선언하지 않는다. snapshot 검증은 `getValidBearerSnapshot({ signal })`, 401 단일 replay는
+`withBearer401Replay(run)`으로 수행한다.
 
 ### MODIFY — `tests/transport.test.ts`
 
@@ -180,9 +179,8 @@ export function createTokenManager(
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { resolveUpstreamUrl } from "../src/transport/base-url.js";
-import { buildUpstreamHeaders } from "../src/transport/headers.js";
 import { classifyReplay } from "../src/transport/retry.js";
-import { xaiFetch } from "../src/transport/fetch.js";
+import { executeXaiFetch, xaiFetch } from "../src/transport/fetch.js";
 
 describe("transport", () => {
   it("routes every public API and Voice path to api.x.ai", () => {});
@@ -190,13 +188,13 @@ describe("transport", () => {
   it("drops hop-by-hop and caller authorization headers", () => {});
   it("never places bearer values in typed errors", () => {});
   it("classifies replayability by method and idempotency key", () => {
-    assert.equal(classifyReplay("GET", new Headers()), "idempotent");
-    assert.equal(classifyReplay("HEAD", new Headers()), "idempotent");
-    assert.equal(classifyReplay("OPTIONS", new Headers()), "idempotent");
-    assert.equal(classifyReplay("POST", new Headers()), "never");
+    assert.equal(classifyReplay("GET", new Headers()), "replayable");
+    assert.equal(classifyReplay("HEAD", new Headers()), "replayable");
+    assert.equal(classifyReplay("OPTIONS", new Headers()), "replayable");
+    assert.equal(classifyReplay("POST", new Headers()), "not-replayable");
     assert.equal(
       classifyReplay("POST", new Headers({ "idempotency-key": "request-1" })),
-      "explicit-idempotency-key",
+      "replayable",
     );
   });
   it("retries a pre-header network failure once", async () => {});
@@ -208,20 +206,47 @@ describe("transport", () => {
 `classifyReplay(method, headers): ReplayClass`에는 method와 `Headers`만 전달한다.
 `phase`와 `aborted`는 transport 실행·재시도 테스트의 상태이며 분류기 입력으로 만들지 않는다.
 
+### NEW — `tests/helpers/async-stream.ts`
+
+```ts
+export function byteStream(chunks: readonly Uint8Array[]): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk);
+      controller.close();
+    },
+  });
+}
+
+export async function collect<T>(source: AsyncIterable<T>): Promise<T[]> {
+  const values: T[] = [];
+  for await (const value of source) values.push(value);
+  return values;
+}
+```
+
 ### NEW — `tests/wire-sse.test.ts`
 
 ```ts
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { decodeSse } from "../src/wire/sse.js";
+import { decodeServerSentEvents } from "../src/wire/sse.js";
+import { byteStream, collect } from "./helpers/async-stream.js";
 
-describe("decodeSse", () => {
-  it("decodes a UTF-8 code point split across byte chunks", async () => {});
+describe("decodeServerSentEvents", () => {
+  it("decodes a UTF-8 code point split across byte chunks", async () => {
+    const bytes = new TextEncoder().encode("data: 한글\n\n");
+    const frames = await collect(decodeServerSentEvents(byteStream([
+      bytes.slice(0, 7),
+      bytes.slice(7),
+    ])));
+    assert.equal(frames.length, 1);
+  });
   it("joins multi-line data and ignores comments", async () => {});
   it("accepts CRLF and LF frame boundaries", async () => {});
   it("flushes the final complete frame without a trailing blank line", async () => {});
   it("emits a typed protocol error for invalid event framing", async () => {});
-  it("stops after the first terminal event", async () => {});
+  it("stops at stream EOF without emitting a phantom frame", async () => {});
 });
 ```
 
@@ -233,46 +258,58 @@ fixture의 expected event는 제품 parser로 생성하지 않고 literal로 적
 ```ts
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { reduceChatChunk } from "../src/wire/chat-stream.js";
+import { decodeServerSentEvents } from "../src/wire/sse.js";
+import { reduceChatStream } from "../src/wire/chat-stream.js";
+import { byteStream, collect } from "./helpers/async-stream.js";
 
-describe("reduceChatChunk", () => {
-  it("maps role, content, reasoning_content and finish_reason", () => {});
-  it("assembles interleaved tool-call indexes without cross-talk", () => {});
-  it("rejects an unknown wire shape instead of casting it", () => {});
-  it("treats the first finish signal as terminal", () => {});
+describe("reduceChatStream", () => {
+  it("maps role, content, reasoning_content and finish_reason", async () => {
+    const frames = decodeServerSentEvents(byteStream([
+      new TextEncoder().encode("data: {\"choices\":[]}\n\n"),
+    ]));
+    const events = await collect(reduceChatStream(frames));
+    assert.ok(Array.isArray(events));
+  });
+  it("assembles interleaved tool-call indexes without cross-talk", async () => {});
+  it("rejects an unknown wire shape instead of casting it", async () => {});
+  it("treats the first finish signal as terminal", async () => {});
 });
 ```
+
+`byteStream`과 `collect`는 `tests/helpers/async-stream.ts`의 test helper를 쓴다. reducer에 단일
+chunk를 직접 넘기지 않고 `decodeServerSentEvents()`가 만든 `AsyncIterable<SseFrame>` 전체를
+넘긴 뒤 결과 `AsyncIterable<AdapterEvent>`를 `for await`로 소비한다.
 
 ### NEW — `tests/wire-responses-stream.test.ts`
 
 ```ts
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { reduceResponseEvent } from "../src/wire/responses-stream.js";
+import { decodeServerSentEvents } from "../src/wire/sse.js";
+import { reduceResponsesStream } from "../src/wire/responses-stream.js";
+import { byteStream, collect } from "./helpers/async-stream.js";
 
-describe("reduceResponseEvent", () => {
-  it("maps text, reasoning, citation and usage events", () => {});
-  it("preserves xAI context_details and cost_in_usd_ticks", () => {});
-  it("assembles function and MCP argument deltas", () => {});
-  it("surfaces response.failed and response.incomplete as typed errors", () => {});
-  it("ignores EOF as success when no terminal event arrived", () => {});
+describe("reduceResponsesStream", () => {
+  it("maps text, reasoning, citation and usage events", async () => {
+    const frames = decodeServerSentEvents(byteStream([
+      new TextEncoder().encode("data: {\"type\":\"response.completed\"}\n\n"),
+    ]));
+    const events = await collect(reduceResponsesStream(frames));
+    assert.ok(Array.isArray(events));
+  });
+  it("preserves xAI context_details and cost_in_usd_ticks", async () => {});
+  it("assembles function and MCP argument deltas", async () => {});
+  it("surfaces response.failed and response.incomplete as typed errors", async () => {});
+  it("ignores EOF as success when no terminal event arrived", async () => {});
 });
 ```
 
-### NEW — `tests/wire-tool-calls.test.ts`
+이 suite도 frame/event 단건 reducer를 가정하지 않는다. SSE byte stream을 decode한 async
+frame stream을 `reduceResponsesStream()`에 연결하고 terminal까지 async iteration한다.
 
-```ts
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
-import { ToolCallAssembler } from "../src/wire/tool-calls.js";
-
-describe("ToolCallAssembler", () => {
-  it("assembles fragmented JSON arguments by call id", () => {});
-  it("keeps concurrently interleaved calls independent", () => {});
-  it("rejects duplicate terminal events", () => {});
-  it("returns a typed invalid-json error with no raw secret-bearing body", () => {});
-});
-```
+tool-call 조립은 별도 public `ToolCallAssembler`를 가정하지 않는다. fragmented JSON,
+interleaved call, duplicate terminal, invalid JSON redaction은 위
+`reduceChatStream`/`reduceResponsesStream` async suite의 literal event sequence로 검증한다.
 
 ### MODIFY — `tests/voice-rest.test.ts`
 
@@ -297,8 +334,8 @@ describe("Voice REST", () => {
 ```ts
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createSttSession } from "../src/voice/ws-client.js";
-import { reduceRealtimeEvent } from "../src/voice/realtime.js";
+import { createRealtimeClient } from "../src/voice/realtime.js";
+import { STT_EVENTS } from "../src/voice/protocol.js";
 
 describe("Voice WebSocket", () => {
   it("encodes bearer auth for server-side clients", async () => {});
@@ -314,6 +351,31 @@ describe("Voice WebSocket", () => {
 
 WebSocket test server는 port 0을 사용한다. timer sleep 대신 `once(server, "listening")`,
 message promise, close promise를 사용한다.
+`createSttSession`이나 `reduceRealtimeEvent` 같은 004에 없는 public export를 만들지 않는다.
+realtime case는 `createRealtimeClient()`의 event iterator로 검증하고, STT event 이름은
+`STT_EVENTS`를 오라클로 사용해 wp10이 이미 소유한 fake-socket seam에서 검증한다.
+
+### MODIFY — `tests/rest-surfaces.test.ts`
+
+public client가 없는 Responses 경로는 client 호출 테스트가 아니라 registry 값 테스트로 둔다.
+
+```ts
+import { SURFACE_REGISTRY } from "../src/surfaces/registry.js";
+
+describe("surface registry", () => {
+  it("registers Responses compact and input-items with their exact contracts", () => {
+    assert.deepEqual(
+      SURFACE_REGISTRY.filter((item) =>
+        item.path === "/v1/responses/compact"
+        || item.path === "/v1/responses/{response_id}/input_items"),
+      [
+        { method: "POST", path: "/v1/responses/compact", family: "responses", transport: "json", evidence: "inventory" },
+        { method: "GET", path: "/v1/responses/{response_id}/input_items", family: "responses", transport: "json", evidence: "openapi-only" },
+      ],
+    );
+  });
+});
+```
 
 ### NEW — `tests/surfaces.test.ts`
 
@@ -339,11 +401,9 @@ import {
 
 describe("REST surfaces", () => {
   it("re-exports the Responses WebSocket connector and contract types", () => {});
-  it("serializes responses, compact and input_items paths", async () => {});
   it("treats deferred chat HTTP 202 as queued, not error", async () => {});
   it("preserves multipart and binary bodies without JSON parsing", async () => {});
   it("covers batches, files, collections, embeddings, skills and models", async () => {});
-  it("relays an unknown future /v1 path through the validated passthrough", async () => {});
   it("never sends management-api credentials to api.x.ai", async () => {});
 });
 ```
@@ -366,7 +426,7 @@ it("proxy has no path whitelist — all /v1/* paths are forwarded", () => {
 After:
 
 ```ts
-import type { ProxyUpstreamFetch } from "../src/proxy/relay.js";
+import type { ProxyAppDependencies } from "../src/proxy/server.js";
 
 it("forwards an unknown /v1 path with method, query and body intact", async () => {
   const fake = await startFakeXai(() => ({
@@ -374,12 +434,14 @@ it("forwards an unknown /v1 path with method, query and body intact", async () =
     headers: { "content-type": "application/octet-stream" },
     chunks: [Buffer.from([0, 1, 2, 255])],
   }));
-  const fetchUpstream: ProxyUpstreamFetch = async (request) => {
-    return fetch(new URL(request.pathWithQuery, fake.baseUrl), {
-      method: request.method,
-      headers: { ...request.headers, authorization: `Bearer ${request.bearer}` },
-      body: request.body,
-      signal: request.signal,
+  const fetchUpstream: ProxyAppDependencies["fetchUpstream"] = async (input, deps) => {
+    const headers = new Headers(input.headers);
+    headers.set("authorization", `Bearer ${deps.bearer}`);
+    return fetch(new URL(input.pathWithQuery, fake.baseUrl), {
+      method: input.method,
+      headers,
+      body: input.body,
+      signal: input.signal,
     });
   };
   const app = createProxyApp({
@@ -485,10 +547,11 @@ assert(names.includes("webapp.test.ts"));
 ```ts
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
-import { getValidBearer } from "../src/auth/token-store.js";
+import WebSocket from "ws";
+import { getValidBearerSnapshot } from "../src/auth/token-manager.js";
 import { createTtsClient } from "../src/voice/tts.js";
 import { createSttClient } from "../src/voice/stt.js";
-import { createSttSession } from "../src/voice/ws-client.js";
+import { mintClientSecret } from "../src/voice/client-secrets.js";
 import { createRealtimeClient } from "../src/voice/realtime.js";
 
 type SmokeName = "tts" | "stt_batch" | "stt_stream" | "realtime_client_secret";
@@ -528,14 +591,15 @@ async function main(): Promise<void> {
     throw new Error("Set PROGROK_LIVE_SMOKE=1 to authorize paid live smoke calls.");
   }
   const startedAt = new Date().toISOString();
-  const bearer = await getValidBearer();
+  const { bearer } = await getValidBearerSnapshot();
   const results: SmokeResult[] = [];
 
   // 1. TTS: fixed harmless sentence -> PCM bytes; record type/size/hash only.
   // 2. Batch STT: submit generated audio; assert non-empty text in memory only.
-  // 3. Streaming STT: send PCM as binary frames, then finalize/audio.done;
+  // 3. Streaming STT: use a script-local raw WebSocket with the bearer,
+  //    send PCM as binary frames, then finalize/audio.done;
   //    accept speech_final partial as terminal and record event name only.
-  // 4. realtime client_secret: assert value is non-empty and expires_at is future;
+  // 4. realtime client_secret: call mintClientSecret(), assert value is non-empty and expires_at is future;
   //    never return or log value. Optionally open and close one realtime session.
 
   void bearer; // consumed only by clients; never interpolated into logs.

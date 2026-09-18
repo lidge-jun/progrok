@@ -42,10 +42,10 @@ device-code.ts ─────┘                         ▲
 token-store.ts facade ─> token-manager.ts ───┘
         ▲
         │
-bearer-session.ts <─ WP6 transport/fetch.ts
+token-manager.ts <─ WP6 transport/fetch.ts
 ```
 
-`token-client.ts`는 OAuth HTTP와 재시도만 소유한다. `token-manager.ts`는 주입 가능한 만료 판단, refresh singleflight, terminal negative cache를 소유한다. `token-store.ts`는 디스크 형식, 세대 fence와 기존 `getValidBearer`/`getValidBearerSnapshot` 호환 facade만 소유한다. `bearer-session.ts`는 401 한 번 재생 규칙만 소유한다.
+`token-client.ts`는 OAuth HTTP와 재시도만 소유한다. `token-manager.ts`는 주입 가능한 만료 판단, refresh singleflight, terminal negative cache, bearer snapshot과 401 one-shot replay를 소유한다. `token-store.ts`는 디스크 형식, 세대 fence와 기존 `getValidBearer` 호환 facade만 소유한다.
 
 참고 구현에서 가져오는 불변식은 다음으로 한정한다.
 
@@ -91,8 +91,7 @@ export interface TokenData {
 | 상태 | 경로 | 책임 |
 |---|---|---|
 | NEW | `src/auth/token-client.ts` | token endpoint 요청, typed 오류, bounded retry |
-| NEW | `src/auth/token-manager.ts` | 주입 가능한 만료 판단, refresh singleflight, terminal negative cache |
-| NEW | `src/auth/bearer-session.ts` | bearer snapshot과 401 one-shot replay |
+| NEW | `src/auth/token-manager.ts` | 주입 가능한 만료 판단, refresh singleflight, terminal negative cache, bearer snapshot과 401 one-shot replay |
 | MODIFY | `src/auth/constants.ts` | refresh/retry 상수의 단일 소유자 추가 |
 | MODIFY | `src/auth/discovery.ts` | `unknown` 파싱과 정확한 endpoint allow-list |
 | MODIFY | `src/auth/pkce.ts` | 직접 fetch를 공용 token client로 교체 |
@@ -237,35 +236,30 @@ export function refreshXaiToken(
 
 실제 구현에서는 abort listener를 resolve 시 제거해 listener 누수를 막는다. `AbortSignal.any`의 Node 18 지원 범위가 빌드 타깃과 충돌하면 같은 동작의 작은 listener 조합 함수를 이 파일 안에 둔다. 새 의존성은 추가하지 않는다.
 
-### 6.2 NEW `src/auth/bearer-session.ts`
+### 6.2 NEW `src/auth/token-manager.ts` — 공개 snapshot과 401 replay
 
 ```ts
-import { getValidBearerSnapshot, type BearerSnapshot } from "./token-store.js";
+export interface BearerSnapshot { bearer: string; expiresAt: number; generation: number }
 
-export interface StatusResponse { status: number }
+export function getValidBearerSnapshot(opts?: { forceRefresh?: boolean; rejectedAccessToken?: string; signal?: AbortSignal }): Promise<BearerSnapshot> {
+  return defaultTokenManager.getValidBearerSnapshot(opts);
+}
 
-export async function withBearer401Replay<R extends StatusResponse>(
-  send: (bearer: BearerSnapshot) => Promise<R>,
-  options: {
-    signal?: AbortSignal;
-    discard?: (response: R) => void | Promise<void>;
-  } = {},
-): Promise<R> {
-  const firstBearer = await getValidBearerSnapshot({ signal: options.signal });
-  const firstResponse = await send(firstBearer);
-  if (firstResponse.status !== 401) return firstResponse;
+export async function withBearer401Replay<T>(run: (bearer: string) => Promise<T>): Promise<T> {
+  const firstBearer = await getValidBearerSnapshot();
+  const firstResponse = await run(firstBearer.bearer);
+  if ((firstResponse as { status?: unknown }).status !== 401) return firstResponse;
 
-  await options.discard?.(firstResponse);
+  if (firstResponse instanceof Response) await firstResponse.body?.cancel();
   const replayBearer = await getValidBearerSnapshot({
     forceRefresh: true,
-    rejectedAccessToken: firstBearer.token,
-    signal: options.signal,
+    rejectedAccessToken: firstBearer.bearer,
   });
-  return send(replayBearer); // 두 번째 401은 그대로 반환한다.
+  return run(replayBearer.bearer); // 두 번째 401은 그대로 반환한다.
 }
 ```
 
-이 함수는 429/5xx나 stream 오류를 다루지 않는다. WP6이 `discard`로 첫 401 body를 cancel하고 이 함수를 transport 바깥쪽에 한 번만 배치한다.
+이 함수는 429/5xx나 stream 오류를 다루지 않는다. 첫 응답이 `Response`이면 replay 전에 401 body를 cancel하며, WP6은 이 함수를 transport 바깥쪽에 한 번만 배치한다.
 
 ### 6.3 NEW `src/auth/token-manager.ts`
 
@@ -287,9 +281,13 @@ interface RefreshFlight {
   promise: Promise<string>;
 }
 
-export function createTokenManager(
-  dependencies: TokenManagerDependencies,
-): { getValidBearer(signal?: AbortSignal): Promise<string> } {
+interface TokenManager {
+  getValidBearer(signal?: AbortSignal): Promise<string>;
+  getValidBearerSnapshot(opts?: { forceRefresh?: boolean; rejectedAccessToken?: string; signal?: AbortSignal }): Promise<BearerSnapshot>;
+}
+
+export function createTokenManager(deps?: TokenManagerDependencies): TokenManager {
+  const dependencies = deps ?? defaultTokenManagerDependencies;
   const flights = new Map<string, RefreshFlight>();
   const terminalFailures = new Map<string, number>();
 
@@ -299,11 +297,17 @@ export function createTokenManager(
     return resolveValidBearer({ dependencies, flights, terminalFailures, signal });
   }
 
-  return { getValidBearer };
+  async function getValidBearerSnapshot(
+    opts: { forceRefresh?: boolean; rejectedAccessToken?: string; signal?: AbortSignal } = {},
+  ): Promise<BearerSnapshot> {
+    return resolveValidBearerSnapshot({ dependencies, flights, terminalFailures, ...opts });
+  }
+
+  return { getValidBearer, getValidBearerSnapshot };
 }
 ```
 
-같은 파일의 비공개 `resolveValidBearer`는 6.8의 1–7 순서를 구현하고 `refreshXaiToken`에 `dependencies.fetch`와 `signal`을 전달한다. `finally`에서는 자신이 넣은 promise와 현재 map 값이 같은 경우에만 flight를 삭제한다. production의 `token-store.ts`는 모듈 단위 기본 manager 한 개를 만들고 기존 `getValidBearer(): Promise<string>`를 그 manager에 위임한다. WP6가 기대하는 `getValidBearerSnapshot(options?)`와 `withBearer401Replay` 이름은 각각 `token-store.ts`와 `bearer-session.ts`에 그대로 둔다.
+같은 파일의 비공개 `resolveValidBearer`는 6.8의 1–7 순서를 구현하고 `refreshXaiToken`에 `dependencies.fetch`와 `signal`을 전달한다. `finally`에서는 자신이 넣은 promise와 현재 map 값이 같은 경우에만 flight를 삭제한다. production의 `token-store.ts`는 모듈 단위 기본 manager 한 개를 만들고 기존 `getValidBearer(): Promise<string>`를 그 manager에 위임한다. WP6가 기대하는 `getValidBearerSnapshot(opts?)`와 `withBearer401Replay`는 `token-manager.ts`에서 export한다.
 
 이 모듈은 bearer의 목적 host를 선택하거나 직접 추론 요청을 보내지 않는다. WP6 transport가 OAuth 요청을 기본적으로 `https://api.x.ai/v1`에 보내며, `https://cli-chat-proxy.grok.com/v1`은 명시적 opt-in 전용 클라이언트에서만 선택할 수 있다.
 
@@ -447,29 +451,22 @@ throw new Error("Device code expired or was denied. Please try again.");
 
 현재 저장은 `src/auth/token-store.ts:46-72`에서 새 객체를 만들어 unknown 키를 버리고 직접 `writeFileSync`한다. refresh는 `src/auth/token-store.ts:92-149`에서 동시성 fence 없이 바로 저장한다.
 
-변경 후 핵심 공개 API:
+변경 후 기존 store 호환 API:
 
 ```ts
-export interface BearerSnapshot {
-  token: string;
-  accountKey: string;
-  generation: string;
-}
-export interface GetValidBearerOptions {
+interface GetValidBearerOptions {
   forceRefresh?: boolean;
   rejectedAccessToken?: string;
   signal?: AbortSignal;
-  deps?: TokenStoreDeps;
 }
 export function loadTokens(): TokenData | null;
 export function saveTokens(input: SaveTokenInput): Promise<void>;
 export function deleteTokens(): void;
 export function getValidBearer(options?: GetValidBearerOptions): Promise<string>;
-export function getValidBearerSnapshot(options?: GetValidBearerOptions): Promise<BearerSnapshot>;
 export function saveTokensFromOAuthPayload(payload: OAuthTokenPayload, context: { tokenEndpoint: string }): Promise<void>;
 ```
 
-세대와 계정 키는 디스크에 쓰지 않는다.
+공개 snapshot의 `generation`은 프로세스가 관측한 credential fingerprint가 바뀔 때 증가하는 숫자이며, 계정 키와 private fingerprint는 디스크에 쓰지 않는다. 저장값에 `expiresAt`이 없으면 snapshot에서는 `Number.POSITIVE_INFINITY`를 사용하되 파일에는 만료시간을 꾸며 쓰지 않는다.
 
 ```ts
 function credentialGeneration(tokens: TokenData): string {
@@ -538,7 +535,7 @@ manager의 비공개 `resolveValidBearer`와 이를 쓰는 `getValidBearerSnapsh
 - 429의 `Retry-After: 0.01`은 재시도하고, 61초는 sleep 없이 오류를 반환한다.
 - terminal 세 오류는 30초 동안 두 번째 요청을 막지만 파일을 삭제하지 않는다.
 - 500/네트워크는 최대 3회, timeout/caller abort는 재시도하지 않는다.
-- `withBearer401Replay`는 첫 401에만 discard/refresh/send를 한 번 수행하고 두 번째 401을 그대로 반환한다.
+- `withBearer401Replay`는 첫 401 `Response` body만 cancel하고 refresh/run을 한 번 수행하며 두 번째 401을 그대로 반환한다.
 - 거부 토큰 A 뒤 디스크가 B로 바뀌었으면 refresh 없이 B로 replay한다.
 - PKCE loopback/manual과 device-code가 모두 동일 `saveTokensFromOAuthPayload` 경로를 사용한다.
 

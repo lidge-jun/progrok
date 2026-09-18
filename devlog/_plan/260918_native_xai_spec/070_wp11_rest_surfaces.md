@@ -52,21 +52,16 @@ responses-ws.ts ── ws + auth bearer ── wire/responses-stream.ts
 wp6 완료 시 `src/transport/fetch.ts`는 다음 최소 계약을 제공해야 한다. 이름이 다르게 구현됐다면 wp11 코딩 전에 wp6 문서를 먼저 이 계약으로 정정한다.
 
 ```ts
+export interface XaiFetchInput { pathWithQuery: string; method: string; headers: Headers; body?: BodyInit | null; signal?: AbortSignal }
+
 export interface XaiTransport {
-  request(
-    path: string,
-    init?: RequestInit,
-    policy?: { replayable?: boolean },
-  ): Promise<Response>;
+  fetch(input: XaiFetchInput): Promise<Response>;
 }
 
-export function createXaiTransport(options?: {
-  signal?: AbortSignal;
-  timeoutMs?: number;
-}): XaiTransport;
+export function createXaiTransport(opts?: { fetchImpl?: typeof fetch }): XaiTransport;
 ```
 
-`request()`는 `/v1` 상대 경로만 받고, bearer·base URL·manual redirect·401 한 번 refresh를 소유한다. 표면 클라이언트는 bearer를 직접 읽거나 retry loop를 만들지 않는다.
+`fetch()`는 `XaiFetchInput.pathWithQuery`로 `/v1` 상대 경로를 받고, bearer·base URL·manual redirect·401 한 번 refresh를 소유한다. 표면 클라이언트는 bearer를 직접 읽거나 retry loop를 만들지 않는다.
 
 wp11 구현 전 precondition은 다음과 같다.
 
@@ -186,9 +181,14 @@ export async function requestJson<T>(
   path: string,
   init: RequestInit,
   decode: Decoder<T>,
-  policy?: { replayable?: boolean },
 ): Promise<T> {
-  const response = await transport.request(path, init, policy);
+  const response = await transport.fetch({
+    pathWithQuery: path,
+    method: init.method ?? "GET",
+    headers: new Headers(init.headers),
+    body: init.body,
+    signal: init.signal ?? undefined,
+  });
   if (!response.ok) throw await readError(response);
   const wire: unknown = await response.json();
   return decode(wire);
@@ -199,7 +199,13 @@ export async function requestBytes(
   path: string,
   init: RequestInit = {},
 ): Promise<{ bytes: Uint8Array; contentType: string | null }> {
-  const response = await transport.request(path, init);
+  const response = await transport.fetch({
+    pathWithQuery: path,
+    method: init.method ?? "GET",
+    headers: new Headers(init.headers),
+    body: init.body,
+    signal: init.signal ?? undefined,
+  });
   if (!response.ok) throw await readError(response);
   return {
     bytes: new Uint8Array(await response.arrayBuffer()),
@@ -212,7 +218,13 @@ export async function requestVoid(
   path: string,
   init: RequestInit,
 ): Promise<void> {
-  const response = await transport.request(path, init);
+  const response = await transport.fetch({
+    pathWithQuery: path,
+    method: init.method ?? "GET",
+    headers: new Headers(init.headers),
+    body: init.body,
+    signal: init.signal ?? undefined,
+  });
   if (!response.ok) throw await readError(response);
   await response.body?.cancel();
 }
@@ -860,7 +872,7 @@ export class VideosClient {
     return requestJson(this.transport, `/videos/${operation}`, { method: "POST", ...jsonBody(request) }, (wire) => {
       const raw = expectObject(wire, "video start");
       return { requestId: expectString(raw.request_id, "video start.request_id") };
-    }, { replayable: false });
+    });
   }
   poll(requestId: string): Promise<VideoPollResponse> {
     return requestJson(this.transport, `/videos/${encodeURIComponent(requestId)}`, {}, (wire) => {
@@ -879,7 +891,7 @@ export class VideosClient {
 }
 ```
 
-submit은 비멱등이므로 transport가 네트워크 reset이나 5xx를 자동 재실행하지 않게 `request(path, init, { replayable: false })`를 전달해야 한다. poll/list/get 같은 GET만 wp6 기본 retry를 허용한다. 이 세 번째 인자는 wp6 `XaiTransport` 계약의 일부이며 wp11이 별도 retry option을 만들지 않는다.
+submit은 비멱등이므로 POST method와 headers를 그대로 `XaiTransport.fetch()`에 전달하고, wp6의 `classifyReplay(method, headers)`가 재실행 불가로 분류하게 한다. poll/list/get 같은 GET만 wp6 기본 retry를 허용하며 wp11은 별도 retry option을 만들지 않는다.
 
 ## 테스트 설계
 

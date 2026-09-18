@@ -62,7 +62,7 @@ WebSocket upgrade는 이번 Express HTTP 단계에서 새로 구현하지 않는
 |---|---|---|
 | NEW | `src/proxy/route-policy.ts` | native/json-relay/opaque-relay 순수 판정 |
 | NEW | `src/proxy/body.ts` | 모든 메서드 공통 100MB bounded body read |
-| NEW | `src/proxy/relay.ts` | 요청/응답 헤더 필터와 backpressure relay, wp6 연결 |
+| NEW | `src/proxy/relay.ts` | 요청/응답 헤더 필터와 backpressure relay |
 | NEW | `src/proxy/render-chat.ts` | `AdapterEvent`를 Chat SSE로 직렬화 |
 | NEW | `src/proxy/render-responses.ts` | `AdapterEvent`를 Responses SSE로 직렬화 |
 | NEW | `src/proxy/native-stream.ts` | reducer 선택, 첫 이벤트 preflight, renderer 구동 |
@@ -159,34 +159,12 @@ export async function readBoundedBody(
 ```ts
 import { once } from "node:events";
 import type { Response as ExpressResponse } from "express";
-import { executeXaiFetch } from "../transport/fetch.js";
 
 export const HOP_BY_HOP_HEADERS = new Set([
   "host", "content-length", "connection", "keep-alive",
   "proxy-authenticate", "proxy-authorization", "te", "trailers",
   "transfer-encoding", "upgrade", "authorization",
 ]);
-
-export interface ProxyUpstreamRequest {
-  method: string;
-  pathWithQuery: string;
-  headers: Record<string, string>;
-  body?: Uint8Array;
-  bearer: string;
-  signal: AbortSignal;
-}
-
-export type ProxyUpstreamFetch = (request: ProxyUpstreamRequest) => Promise<Response>;
-
-export const defaultProxyUpstreamFetch: ProxyUpstreamFetch = (request) =>
-  executeXaiFetch({
-    method: request.method,
-    pathWithQuery: request.pathWithQuery,
-    headers: { ...request.headers, Authorization: `Bearer ${request.bearer}` },
-    body: request.body,
-    signal: request.signal,
-    replay: "never", // 프록시의 임의 메서드/body는 재실행 가능하다고 추정하지 않는다.
-  });
 
 export function filterRequestHeaders(
   headers: Record<string, string | string[] | undefined>,
@@ -231,7 +209,7 @@ export async function relayUpstreamResponse(
 }
 ```
 
-wp6의 `executeXaiFetch`가 이 문서의 exact input을 제공해야 한다. 재시도 정책은 `replay: "never"`에서 body를 재전송하지 않으며, 응답 헤더 이후나 stream 중간 실패는 절대 재시도하지 않는다.
+wp6의 `executeXaiFetch`가 프록시의 exact upstream seam이다. 프록시는 bearer를 두 번째 인자로 전달하고, replay 가능성은 wp6의 `classifyReplay(method, headers)`가 판정한다. 응답 헤더 이후나 stream 중간 실패는 절대 재시도하지 않는다.
 
 ## 7. NEW — protocol renderer
 
@@ -628,40 +606,39 @@ try {
 
 ```ts
 import express, { type Request, type Response } from "express";
-import { PROXY_DEFAULT_HOST, PROXY_DEFAULT_PORT, XAI_API_BASE_URL } from "../auth/constants.js";
-import { getValidBearer } from "../auth/token-store.js";
+import { PROXY_DEFAULT_HOST, PROXY_DEFAULT_PORT } from "../auth/constants.js";
+import { getValidBearerSnapshot } from "../auth/token-manager.js";
+import { executeXaiFetch } from "../transport/fetch.js";
 import { log } from "../utils/logger.js";
 import { readBoundedBody, PayloadTooLargeError } from "./body.js";
 import { prepareGrokRequestObject } from "./composer-inject.js";
 import { serveNativeStream } from "./native-stream.js";
 import { decideProxyRoute } from "./route-policy.js";
 import {
-  defaultProxyUpstreamFetch,
   filterRequestHeaders,
   relayUpstreamResponse,
-  type ProxyUpstreamFetch,
 } from "./relay.js";
 
 export interface ProxyAppDependencies {
-  getBearer: () => Promise<string>;
-  fetchUpstream: ProxyUpstreamFetch;
+  getBearer(): Promise<string>;
+  fetchUpstream: typeof executeXaiFetch;
 }
 
 const DEFAULT_DEPS: ProxyAppDependencies = {
-  getBearer: getValidBearer,
-  fetchUpstream: defaultProxyUpstreamFetch,
+  getBearer: async () => (await getValidBearerSnapshot()).bearer,
+  fetchUpstream: executeXaiFetch,
 };
 
 export function createProxyApp(
-  overrides: Partial<ProxyAppDependencies> = {},
-): express.Application {
-  const deps = { ...DEFAULT_DEPS, ...overrides };
+  deps?: Partial<ProxyAppDependencies>,
+): express.Express {
+  const resolvedDeps = { ...DEFAULT_DEPS, ...deps };
   const app = express();
   app.get("/health", (_req: Request, res: Response) => {
     res.json({ status: "ok", upstream: "xAI Grok", proxy: "progrok" });
   });
   app.all("/v1/*", (req: Request, res: Response) => {
-    void handleProxy(req, res, deps);
+    void handleProxy(req, res, resolvedDeps);
   });
   return app;
 }
@@ -709,11 +686,10 @@ async function handleProxy(
     const upstream = await deps.fetchUpstream({
       method: req.method,
       pathWithQuery: `/v1${relPath}${query}`,
-      headers: filterRequestHeaders(req.headers),
+      headers: new Headers(filterRequestHeaders(req.headers)),
       body: forwardBody.length > 0 ? new Uint8Array(forwardBody) : undefined,
-      bearer,
       signal: controller.signal,
-    });
+    }, { bearer });
     if (decision.kind === "native-chat" || decision.kind === "native-responses") {
       const model = typeof decision.json.model === "string" ? decision.json.model : "unknown";
       const handled = await serveNativeStream({
@@ -769,11 +745,13 @@ before(async () => {
 변경 후에는 매 테스트가 deterministic fake upstream을 주입한다.
 
 ```ts
-const calls: ProxyUpstreamRequest[] = [];
+import type { XaiFetchInput } from "../src/transport/fetch.js";
+
+const calls: Array<{ input: XaiFetchInput; bearer: string }> = [];
 const app = createProxyApp({
   getBearer: async () => "test-bearer",
-  fetchUpstream: async (request) => {
-    calls.push(request);
+  fetchUpstream: async (input, { bearer }) => {
+    calls.push({ input, bearer });
     return new globalThis.Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: { "content-type": "application/json" },
@@ -793,7 +771,7 @@ const app = createProxyApp({
 
 - `getBearer` rejection은 status 401과 현재 exact shape `auth_error`다.
 - upstream fetch rejection은 status 502와 현재 exact shape `upstream_error`다.
-- incoming `Authorization`, `Host`, `Content-Length`는 upstream에 전달되지 않고 injected bearer만 transport input으로 간다.
+- incoming `Authorization`, `Host`, `Content-Length`는 upstream에 전달되지 않고 `test-bearer`는 `executeXaiFetch`의 두 번째 인자로만 간다.
 - upstream `content-encoding`, `content-length`, hop-by-hop header는 downstream에 복사되지 않는다.
 
 ### `tests/composer-inject.test.ts`
