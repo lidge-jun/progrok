@@ -1,0 +1,5 @@
+.case { margin-block: 1rem; }
+.case h2 { margin-bottom: 0.4rem; color: var(--fg-muted); font-size: 0.6875rem; letter-spacing: 0.07em; text-transform: uppercase; }
+body { overflow: auto; }
+.panel { height: auto; overflow: visible; max-width: 60rem; margin-inline: auto; }
+

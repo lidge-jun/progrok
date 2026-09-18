@@ -2,10 +2,12 @@
 // Not part of the shipped product. See devlog/_plan/260918_web_ui_redesign/070_verification.md
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { extname, join, resolve } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(process.argv[2] ?? "dist/public");
 const PORT = Number(process.argv[3] ?? 18747);
+const HARNESS_DIR = dirname(fileURLToPath(import.meta.url));
 const TYPES = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -38,6 +40,8 @@ let catalogFailuresLeft = CATALOG_FAILURE === "once"
   : CATALOG_FAILURE === "1"
   ? Number.POSITIVE_INFINITY
   : 0;
+
+let videoPolls = 0;
 
 function json(res, status, body) {
   const payload = JSON.stringify(body);
@@ -92,10 +96,28 @@ const server = createServer(async (req, res) => {
     return json(res, 200, { data: [{ url: pixel, revised_prompt: "mock" }] });
   }
   if (url.pathname === "/v1/videos/generations") {
-    return json(res, 200, { id: "vid_mock_1", status: "queued", progress: 0 });
+    videoPolls = 0;
+    return json(res, 200, { request_id: "vid_mock_1", status: "pending", progress: 0 });
   }
   if (url.pathname.startsWith("/v1/videos/")) {
-    return json(res, 200, { id: "vid_mock_1", status: "processing", progress: 0.42 });
+    videoPolls += 1;
+    if (videoPolls < 3) {
+      return json(res, 200, { id: "vid_mock_1", status: "pending", progress: videoPolls * 0.3 });
+    }
+    videoPolls = 0;
+    const clip =
+      "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=";
+    return json(res, 200, {
+      request_id: "vid_mock_1",
+      status: "done",
+      progress: 1,
+      video: { url: clip },
+    });
+  }
+  if (url.pathname === "/states.html" || url.pathname === "/states.css") {
+    const file = await readFile(join(HARNESS_DIR, url.pathname.slice(1)));
+    res.writeHead(200, { "content-type": TYPES[extname(url.pathname)] });
+    return res.end(file);
   }
   if (url.pathname === "/v1/responses" && req.method === "POST") {
     res.writeHead(200, {
