@@ -80,6 +80,55 @@ describe("module boundaries", () => {
     }
   });
 
+  // The layer check below only looks at edges that cross a layer, so these
+  // same-layer leaves need their own assertion: a leaf that imports the module
+  // it was extracted from puts the cycle straight back.
+  it("does not let the voice panel import the controller back", () => {
+    const source = readFileSync("src/web/client/voice-panel.ts", "utf8");
+    assert.doesNotMatch(source, /from "\.\/voice\.js"/, "voice-panel would create a cycle");
+  });
+
+  it("keeps the voice panel free of transport and audio types", () => {
+    const source = readFileSync("src/web/client/voice-panel.ts", "utf8");
+    assert.doesNotMatch(
+      source,
+      /\b(WebSocket|MediaStream|AudioContext)\b/,
+      "the panel renders DOM; sockets and audio graphs belong to the controller",
+    );
+  });
+
+  it("keeps the controller out of the DOM", () => {
+    const source = readFileSync("src/web/client/voice.ts", "utf8");
+    assert.doesNotMatch(
+      source,
+      /this\.el\./,
+      "VoicePanel owns every VoiceElements read and write",
+    );
+  });
+
+  it("does not let the tool call leaves import the assembler back", () => {
+    for (const file of ["src/wire/tool-call-wire.ts", "src/wire/pending-call-registry.ts"]) {
+      const source = readFileSync(file, "utf8");
+      assert.doesNotMatch(source, /from "\.\/tool-calls\.js"/, `${file} would create a cycle`);
+    }
+  });
+
+  // Match on the resolved module, not on the source text. ToolCallWireError also
+  // appears in the import line, so a source regex stays green even when the
+  // re-export is deleted and every existing consumer stops compiling.
+  it("keeps the tool call wire contract importable from its original path", async () => {
+    const mod = await import("../src/wire/tool-calls.js");
+    const exported = mod as Record<string, unknown>;
+    for (const name of ["ToolCallAssembler", "ToolCallWireError"]) {
+      assert.equal(
+        typeof exported[name],
+        "function",
+        `${name} must stay exported from tool-calls.js for chat-stream, responses-stream and the tests`,
+      );
+    }
+    assert.equal(typeof exported.DEFAULT_MAX_TOOL_CALL_BYTES, "number");
+  });
+
   it("holds the layer dependency direction", () => {
     const violations: string[] = [];
     for (const file of walk(SRC)) {
@@ -94,4 +143,3 @@ describe("module boundaries", () => {
     assert.deepEqual(violations, [], "new cross-layer edge; add it to ALLOWED or route through an existing layer");
   });
 });
-

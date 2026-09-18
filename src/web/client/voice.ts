@@ -9,73 +9,23 @@ import {
   type SttServerEvent,
 } from "../../voice/protocol.js";
 import { mintClientSecret } from "./api.js";
-import type { VoiceMode, VoiceStatus } from "./contracts.js";
+import type { VoiceMode } from "./contracts.js";
 import {
   decodeBase64Pcm,
   PcmPlaybackQueue,
 } from "./pcm-playback.js";
-import { createVoiceMeter, type VoiceMeter } from "./voice-meter.js";
+import type { VoiceMeter } from "./voice-meter.js";
+import { VoicePanel, type VoiceElements } from "./voice-panel.js";
 import { buildSessionUpdate, describeMediaError } from "./voice-session.js";
 import { buildVoiceSocketSpec } from "./voice-socket.js";
+export type { VoiceElements } from "./voice-panel.js";
 export {
   buildVoiceSocketSpec,
   type VoiceSocketSpec,
 } from "./voice-socket.js";
 
-const STATUS_COPY: Record<VoiceStatus, string> = {
-  idle: "Microphone is idle",
-  "requesting-permission": "Waiting for microphone permission",
-  "minting-secret": "Creating a one-use connection secret",
-  connecting: "Connecting to xAI Voice",
-  listening: "Listening",
-  responding: "Preparing a reply",
-  speaking: "Grok is speaking",
-  stopped: "Voice stopped",
-  failed: "Voice connection failed",
-};
-
-const EVENT_LOG_LIMIT = 30;
-const FOLLOW_THRESHOLD_PX = 48;
-
-export interface VoiceElements {
-  mode: HTMLSelectElement;
-  model: HTMLInputElement;
-  voice: HTMLSelectElement;
-  start: HTMLButtonElement;
-  finish: HTMLButtonElement;
-  stop: HTMLButtonElement;
-  mute: HTMLButtonElement;
-  status: HTMLElement;
-  userTranscript: HTMLElement;
-  assistantTranscript: HTMLElement;
-  assistantTurn: HTMLElement;
-  inputMeter: HTMLElement;
-  outputMeter: HTMLElement;
-  elapsedRow: HTMLElement;
-  elapsed: HTMLElement;
-  lastEventRow: HTMLElement;
-  lastEvent: HTMLElement;
-  transport: HTMLElement;
-  endpointRow: HTMLElement;
-  endpoint: HTMLElement;
-  rateRow: HTMLElement;
-  rate: HTMLElement;
-  deviceRow: HTMLElement;
-  device: HTMLElement;
-  networkRow: HTMLElement;
-  network: HTMLElement;
-  events: HTMLElement;
-}
-
-function followBottom(element: HTMLElement, update: () => void): void {
-  const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
-  const following = distance <= FOLLOW_THRESHOLD_PX;
-  update();
-  if (following) element.scrollTop = element.scrollHeight;
-}
-
 export class VoiceController {
-  #status: VoiceStatus = "idle";
+  readonly #panel: VoicePanel;
   #socket?: WebSocket;
   #stream?: MediaStream;
   #context?: AudioContext;
@@ -89,40 +39,41 @@ export class VoiceController {
   #stoppingStt = false;
   #sttTerminal = false;
   #drainTimer?: number;
-  #elapsedTimer?: number;
-  #startedAt = 0;
   #connectionAbort?: AbortController;
   #generation = 0;
-  #available = false;
   #muted = false;
 
-  constructor(private readonly el: VoiceElements) {}
+  constructor(el: VoiceElements) {
+    this.#panel = new VoicePanel(el);
+  }
 
   init(): void {
-    this.#available = window.isSecureContext &&
+    const available = window.isSecureContext &&
       Boolean(navigator.mediaDevices?.getUserMedia) &&
       "AudioWorkletNode" in window;
-    this.el.start.disabled = !this.#available;
-    this.el.status.dataset.state = "idle";
-    this.el.status.textContent = this.#available
-      ? STATUS_COPY.idle
-      : "Voice requires localhost or HTTPS with microphone and AudioWorklet support.";
-    this.el.start.addEventListener("click", () => void this.start());
-    this.el.finish.addEventListener("click", () => this.finalizeUtterance());
-    this.el.stop.addEventListener("click", () => void this.stop());
-    this.el.mute.addEventListener("click", () => this.toggleMute());
-    this.el.mode.addEventListener("change", () => {
-      void this.stop(false);
-      this.syncControls();
+    this.#panel.init(available);
+    this.#panel.bindControls({
+      onStart: () => void this.start(),
+      onFinish: () => this.finalizeUtterance(),
+      onStop: () => void this.stop(),
+      onToggleMute: () => this.toggleMute(),
+      onModeChange: () => {
+        void this.stop(false);
+        this.#panel.syncControls();
+      },
     });
-    window.addEventListener("online", () => this.renderNetwork());
-    window.addEventListener("offline", () => this.renderNetwork());
+    window.addEventListener("online", () => {
+      this.#panel.renderNetwork(Boolean(this.#stream));
+    });
+    window.addEventListener("offline", () => {
+      this.#panel.renderNetwork(Boolean(this.#stream));
+    });
     window.addEventListener("beforeunload", () => void this.stop(false));
-    this.syncControls();
+    this.#panel.syncControls();
   }
 
   async start(): Promise<void> {
-    if (!this.#available) {
+    if (!this.#panel.available) {
       this.fail("Voice requires localhost or HTTPS with microphone and AudioWorklet support.");
       return;
     }
@@ -132,24 +83,20 @@ export class VoiceController {
     this.#connectionAbort = abort;
     this.#sttTerminal = false;
     this.#muted = false;
-    this.el.userTranscript.textContent = "";
-    this.el.assistantTranscript.textContent = "";
-    delete this.el.userTranscript.dataset.final;
-    delete this.el.assistantTurn.dataset.interrupted;
-    this.el.events.replaceChildren();
-    this.renderMute();
+    this.#panel.resetForSession();
+    this.#panel.renderMute(Boolean(this.#stream), this.#muted);
 
     try {
-      this.setStatus("requesting-permission");
+      this.#panel.setStatus("requesting-permission");
       this.#stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true },
         video: false,
       });
       if (generation !== this.#generation) return;
-      const mode = this.el.mode.value as VoiceMode;
-      this.beginSessionClock();
-      this.renderDevice();
-      this.renderNetwork();
+      const mode = this.#panel.mode;
+      this.#panel.beginSessionClock();
+      this.#panel.renderDevice(this.#stream.getAudioTracks()[0]?.label ?? "");
+      this.#panel.renderNetwork(Boolean(this.#stream));
       const socket = await this.openFreshSocket(mode, abort.signal);
       if (generation !== this.#generation) {
         socket.close();
@@ -174,9 +121,9 @@ export class VoiceController {
         if (this.#socket !== socket) return;
         this.#socket = undefined;
         void this.stopMedia();
-        if (this.#status === "stopped" || this.#status === "failed") return;
+        if (this.#panel.status === "stopped" || this.#panel.status === "failed") return;
         if (mode === "stt" && this.#sttTerminal && event.code === 1006) {
-          this.setStatus("stopped");
+          this.#panel.setStatus("stopped");
           return;
         }
         this.fail(`Voice connection closed (${event.code}).`);
@@ -184,7 +131,7 @@ export class VoiceController {
     } catch (error) {
       if (generation !== this.#generation) return;
       if (abort.signal.aborted) {
-        this.setStatus("stopped");
+        this.#panel.setStatus("stopped");
       } else {
         this.fail(describeMediaError(error));
       }
@@ -200,28 +147,28 @@ export class VoiceController {
     this.#connectionAbort = undefined;
     const socket = this.#socket;
     if (socket?.readyState === WebSocket.OPEN) {
-      if (this.el.mode.value === "stt" && drainStt) {
+      if (this.#panel.mode === "stt" && drainStt) {
         this.#stoppingStt = true;
         this.sendJson({ type: "audio.done" } satisfies SttClientControl);
         this.cancelPlayback();
         await this.stopMedia();
-        this.setStatus("stopped");
+        this.#panel.setStatus("stopped");
         this.#drainTimer = window.setTimeout(() => this.closeSocket(), 2_000);
         return;
       }
-      if (this.el.mode.value === "realtime") {
+      if (this.#panel.mode === "realtime") {
         this.sendJson({ type: "response.cancel" } satisfies RealtimeClientEvent);
       }
     }
     this.closeSocket();
     this.cancelPlayback();
     await this.stopMedia();
-    if (this.#status !== "idle") this.setStatus("stopped");
+    if (this.#panel.status !== "idle") this.#panel.setStatus("stopped");
   }
 
   finalizeUtterance(): void {
     if (
-      this.el.mode.value === "stt" &&
+      this.#panel.mode === "stt" &&
       this.#socket?.readyState === WebSocket.OPEN
     ) {
       this.sendJson({ type: "finalize" } satisfies SttClientControl);
@@ -233,106 +180,37 @@ export class VoiceController {
     if (!track) return;
     this.#muted = !this.#muted;
     track.enabled = !this.#muted;
-    this.renderMute();
-  }
-
-  private renderMute(): void {
-    const active = Boolean(this.#stream);
-    this.el.mute.hidden = !active;
-    this.el.mute.setAttribute("aria-pressed", String(this.#muted));
-    this.el.mute.setAttribute(
-      "aria-label",
-      this.#muted
-        ? "Unmute microphone. Muted input still streams silence."
-        : "Mute microphone",
-    );
-    const use = this.el.mute.querySelector("use");
-    use?.setAttribute("href", this.#muted ? "#i-mic-off" : "#i-mic");
-    if (this.#muted) this.el.status.dataset.muted = "true";
-    else delete this.el.status.dataset.muted;
-  }
-
-  private beginSessionClock(): void {
-    this.#startedAt = Date.now();
-    this.el.elapsedRow.hidden = false;
-    this.renderElapsed();
-    this.#elapsedTimer = window.setInterval(() => this.renderElapsed(), 1_000);
-  }
-
-  private renderElapsed(): void {
-    const seconds = Math.max(0, Math.round((Date.now() - this.#startedAt) / 1000));
-    const minutes = Math.floor(seconds / 60);
-    this.el.elapsed.textContent = `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
-  }
-
-  private stopSessionClock(): void {
-    if (this.#elapsedTimer !== undefined) {
-      window.clearInterval(this.#elapsedTimer);
-      this.#elapsedTimer = undefined;
-    }
-  }
-
-  private renderDevice(): void {
-    const label = this.#stream?.getAudioTracks()[0]?.label ?? "";
-    this.el.deviceRow.hidden = label.length === 0;
-    this.el.device.textContent = label;
-    this.el.transport.hidden = false;
-  }
-
-  private renderNetwork(): void {
-    if (!this.#stream && this.el.transport.hidden) return;
-    this.el.networkRow.hidden = false;
-    this.el.network.textContent = navigator.onLine ? "online" : "offline";
-  }
-
-  private recordEvent(type: string): void {
-    const stamp = new Date().toLocaleTimeString([], { hour12: false });
-    this.el.lastEventRow.hidden = false;
-    this.el.lastEvent.textContent = type;
-    const row = document.createElement("li");
-    const name = document.createElement("span");
-    name.textContent = type;
-    const time = document.createElement("span");
-    time.textContent = stamp;
-    row.append(name, time);
-    followBottom(this.el.events, () => {
-      this.el.events.append(row);
-      while (this.el.events.childElementCount > EVENT_LOG_LIMIT) {
-        this.el.events.firstElementChild?.remove();
-      }
-    });
+    this.#panel.renderMute(Boolean(this.#stream), this.#muted);
   }
 
   private async openFreshSocket(
     mode: VoiceMode,
     signal: AbortSignal,
   ): Promise<WebSocket> {
-    this.setStatus("minting-secret");
+    this.#panel.setStatus("minting-secret");
     const secret = await mintClientSecret(signal);
     const spec = buildVoiceSocketSpec(mode, secret, {
-      model: this.el.model.value.trim() || DEFAULT_REALTIME_MODEL,
+      model: this.#panel.model || DEFAULT_REALTIME_MODEL,
       ...(mode === "realtime" && this.#conversationId
         ? { conversationId: this.#conversationId }
         : {}),
     });
-    this.setStatus("connecting");
-    this.el.transport.hidden = false;
-    this.el.endpointRow.hidden = false;
-    this.el.endpoint.textContent = new URL(spec.url).host;
+    this.#panel.setStatus("connecting");
+    this.#panel.renderEndpoint(new URL(spec.url).host);
     return new WebSocket(spec.url, spec.protocols);
   }
 
   private async onOpen(mode: VoiceMode, socket: WebSocket): Promise<void> {
     if (this.#socket !== socket || !this.#stream) return;
-    if (mode === "realtime") this.sendJson(buildSessionUpdate(this.el.voice.value));
+    if (mode === "realtime") this.sendJson(buildSessionUpdate(this.#panel.voice));
     const rate = mode === "stt" ? 16000 : 24000;
     const context = new AudioContext();
     this.#context = context;
     this.#playback = new PcmPlaybackQueue(
       context,
-      () => this.setStatus("speaking"),
+      () => this.#panel.setStatus("speaking"),
       () => {
-        if (this.#status === "speaking") this.setStatus("listening");
+        if (this.#panel.status === "speaking") this.#panel.setStatus("listening");
       },
     );
     await context.audioWorklet.addModule("/assets/pcm-worklet.js");
@@ -357,13 +235,12 @@ export class VoiceController {
     this.#silentSink = context.createGain();
     this.#silentSink.gain.value = 0;
     this.#worklet.connect(this.#silentSink).connect(context.destination);
-    this.#meter = createVoiceMeter(this.el.inputMeter, this.el.outputMeter);
+    this.#meter = this.#panel.createMeter();
     this.#meter.attachInput(this.#inputAnalyser);
     this.#meter.attachOutput(this.#playback.analyser);
-    this.el.rateRow.hidden = false;
-    this.el.rate.textContent = `${rate} Hz send`;
-    this.renderMute();
-    this.setStatus("listening");
+    this.#panel.renderRate(rate);
+    this.#panel.renderMute(Boolean(this.#stream), this.#muted);
+    this.#panel.setStatus("listening");
   }
 
   private onMessage(
@@ -371,7 +248,7 @@ export class VoiceController {
     event: MessageEvent<string | ArrayBuffer>,
   ): void {
     if (event.data instanceof ArrayBuffer) {
-      this.recordEvent("audio(binary)");
+      this.#panel.recordEvent("audio(binary)");
       if (mode === "realtime") this.#playback?.enqueue(event.data, 24000);
       return;
     }
@@ -382,32 +259,32 @@ export class VoiceController {
     if (mode === "stt") {
       const parsed = tryParseSttServerEvent(event.data);
       if (!parsed) {
-        this.recordEvent(safeEventLabel(event.data));
+        this.#panel.recordEvent(safeEventLabel(event.data));
         return;
       }
-      this.recordEvent(parsed.type);
+      this.#panel.recordEvent(parsed.type);
       this.onSttEvent(parsed);
       return;
     }
     const parsed = tryParseRealtimeServerEvent(event.data);
     if (!parsed) {
-      this.recordEvent(safeEventLabel(event.data));
+      this.#panel.recordEvent(safeEventLabel(event.data));
       return;
     }
-    this.recordEvent(parsed.type);
+    this.#panel.recordEvent(parsed.type);
     this.onRealtimeEvent(parsed);
   }
 
   private onSttEvent(event: SttServerEvent): void {
     if (event.type === "transcript.partial") {
-      this.writeUserTranscript(event.text);
+      this.#panel.writeUserTranscript(event.text);
       if (event.speech_final) {
         this.#sttTerminal = true;
-        this.el.userTranscript.dataset.final = "true";
+        this.#panel.markUserFinal(true);
       }
     } else if (event.type === "transcript.done") {
       this.#sttTerminal = true;
-      if (event.text) this.writeUserTranscript(event.text);
+      if (event.text) this.#panel.writeUserTranscript(event.text);
       if (this.#stoppingStt) this.closeSocket();
     } else if (event.type === "error") {
       this.fail(event.message);
@@ -425,49 +302,31 @@ export class VoiceController {
     } else if (event.type === "input_audio_buffer.speech_started") {
       const wasPlaying = Boolean(this.#playback?.active);
       this.cancelPlayback();
-      if (wasPlaying) this.el.assistantTurn.dataset.interrupted = "true";
-      this.setStatus("listening");
+      if (wasPlaying) this.#panel.markInterrupted(true);
+      this.#panel.setStatus("listening");
     } else if (
       event.type === "conversation.item.input_audio_transcription.updated" ||
       event.type === "conversation.item.input_audio_transcription.completed"
     ) {
-      this.writeUserTranscript(event.transcript);
+      this.#panel.writeUserTranscript(event.transcript);
     } else if (event.type === "response.created") {
-      delete this.el.assistantTurn.dataset.interrupted;
-      this.el.assistantTranscript.textContent = "";
-      if (this.#status === "listening") this.setStatus("responding");
+      this.#panel.markInterrupted(false);
+      this.#panel.resetAssistantTranscript();
+      if (this.#panel.status === "listening") this.#panel.setStatus("responding");
     } else if (event.type === "response.output_audio.delta") {
       this.#playback?.enqueue(decodeBase64Pcm(event.delta), 24000);
     } else if (event.type === "response.output_audio_transcript.delta") {
-      this.appendAssistantTranscript(event.delta);
+      this.#panel.appendAssistantTranscript(event.delta);
     } else if (event.type === "response.output_audio_transcript.done") {
-      this.writeAssistantTranscript(event.transcript);
+      this.#panel.writeAssistantTranscript(event.transcript);
     } else if (event.type === "response.done") {
-      if (!this.#playback?.active) this.setStatus("listening");
+      if (!this.#playback?.active) this.#panel.setStatus("listening");
     } else if (event.type === "response.cancelled") {
       this.cancelPlayback();
-      this.setStatus("stopped");
+      this.#panel.setStatus("stopped");
     } else if (event.type === "error") {
       this.fail(event.error.message);
     }
-  }
-
-  private writeUserTranscript(text: string): void {
-    followBottom(this.el.userTranscript, () => {
-      this.el.userTranscript.textContent = text;
-    });
-  }
-
-  private writeAssistantTranscript(text: string): void {
-    followBottom(this.el.assistantTranscript, () => {
-      this.el.assistantTranscript.textContent = text;
-    });
-  }
-
-  private appendAssistantTranscript(delta: string): void {
-    followBottom(this.el.assistantTranscript, () => {
-      this.el.assistantTranscript.textContent += delta;
-    });
   }
 
   private sendJson(event: SttClientControl | RealtimeClientEvent): void {
@@ -495,7 +354,7 @@ export class VoiceController {
   }
 
   private async stopMedia(): Promise<void> {
-    this.stopSessionClock();
+    this.#panel.stopSessionClock();
     this.#meter?.resetOutput();
     this.#meter?.dispose();
     this.#playback?.dispose();
@@ -514,36 +373,16 @@ export class VoiceController {
     this.#context = undefined;
     this.#playback = undefined;
     this.#muted = false;
-    this.renderMute();
+    this.#panel.renderMute(Boolean(this.#stream), this.#muted);
     if (context && context.state !== "closed") {
       await context.close().catch(() => undefined);
     }
-  }
-
-  private syncControls(): void {
-    const stt = this.el.mode.value === "stt";
-    this.el.model.disabled = stt;
-    this.el.voice.disabled = stt;
-    this.el.finish.hidden = !stt;
-    const active = this.#status !== "idle" &&
-      this.#status !== "stopped" &&
-      this.#status !== "failed";
-    this.el.start.disabled = active || !this.#available;
-    this.el.stop.disabled = !active;
-    this.el.finish.disabled = !stt || this.#status !== "listening";
-  }
-
-  private setStatus(status: VoiceStatus, detail?: string): void {
-    this.#status = status;
-    this.el.status.dataset.state = status;
-    this.el.status.textContent = detail ?? STATUS_COPY[status];
-    this.syncControls();
   }
 
   private fail(message: string): void {
     this.closeSocket();
     this.cancelPlayback();
     void this.stopMedia();
-    this.setStatus("failed", message);
+    this.#panel.setStatus("failed", message);
   }
 }
