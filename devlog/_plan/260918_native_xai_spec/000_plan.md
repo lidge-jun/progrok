@@ -154,3 +154,29 @@ wp16의 major 재판정 조건에서 제외한다. 3.0.0 판정 근거는 D6이�
 ### D9. `ws` 의존성은 wp10이 추가한다
 
 wp11은 같은 변경을 `NO CHANGE — precondition`으로 표기한다.
+
+## 추가 결정 (A 감사 2회차 + 라이브 실측)
+
+### D10. ephemeral client secret은 연결 1회용이다
+
+실측으로 확정했다(001 부록 2). 시크릿 하나가 WebSocket 연결 하나를 연다.
+`/v1/stt`와 `/v1/realtime` 모두 같은 방식으로 동작하며, 엔드포인트별 차등은 없다.
+
+따라서 브라우저 코드는 **연결할 때마다 새로 발급**한다. 재접속도 새 발급이다. 시크릿을 캐시하거나 재사용하지 않는다.
+wp10은 "streaming STT/TTS는 bearer 전용, ephemeral은 realtime 전용"이라고 쓴 부분을 삭제한다. 사실이 아니다.
+전달 방식은 `Sec-WebSocket-Protocol: xai-client-secret.<token>` 하나뿐이다. Bearer 헤더로는 실패한다.
+
+### D11. `createProxyApp` 주입 계약은 wp8이 소유한다
+
+`Partial<ProxyAppDependencies>`이며 키는 `getBearer`와 `fetchUpstream`이다. wp14는 이 형태를 그대로 쓴다.
+
+### D12. 재시도 분류 export는 `classifyReplay` 하나다
+
+`classifyRetry`는 존재하지 않는다. wp14의 오라클을 wp6의 실제 시그니처
+`classifyReplay(method, headers): ReplayClass`에 맞춘다.
+
+### D13. 타입 중복 선언 금지
+
+canonical `ResponsesRequest`는 wp7의 `src/core/types.ts`가, realtime 모델/effort 타입은
+wp10의 `src/voice/protocol.ts`가 단독으로 소유한다. wp9과 wp13은 다시 선언하지 않고 import한다.
+`src/surfaces/index.ts`의 named export 목록은 wp11이 문서에 명시한다.

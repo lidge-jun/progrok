@@ -13,8 +13,8 @@ wp5–wp14에서 실제로 구현되고 검증된 표면만 공개 문서에 반
 |---|---|---|
 | HTTP REST | `http://127.0.0.1:18645/v1/*` → `https://api.x.ai/v1/*` | progrok이 `~/.progrok/auth.json`에서 주입 |
 | Responses WS | `wss://api.x.ai/v1/responses` 직접 연결 | server-side bearer |
-| Voice WS | `wss://api.x.ai/v1/realtime`, `wss://api.x.ai/v1/stt`, `wss://api.x.ai/v1/tts` 직접 연결 | server-side bearer 또는 browser `xai-client-secret.<token>` subprotocol |
-| 웹앱 | `http://127.0.0.1:18646`; REST는 same-origin, Voice WS는 xAI 직접 연결 | same-origin `POST /v1/realtime/client_secrets`로 ephemeral token을 발급하며 OAuth 값을 브라우저에 직렬화하지 않음 |
+| Voice WS | `wss://api.x.ai/v1/realtime`, `wss://api.x.ai/v1/stt`, `wss://api.x.ai/v1/tts` 직접 연결 | 세 endpoint 모두 server-side bearer; browser ephemeral subprotocol은 `/realtime`과 `/stt`에서 실측 확인, `/tts`는 미확인 |
+| 웹앱 | `http://127.0.0.1:18646`; REST는 same-origin, Voice WS는 xAI 직접 연결 | `/realtime`·`/stt` 연결마다 same-origin `POST /v1/realtime/client_secrets`로 새 1회용 secret을 발급하며 OAuth 값을 브라우저에 직렬화하지 않음 |
 
 ima2-gen v3.16.1은 더 이상 progrok package나 프록시 process를 번들·실행하지 않는다.
 두 프로젝트의 유일한 외부 호환 계약은 `~/.progrok/auth.json`의 경로와 스키마다.
@@ -73,14 +73,16 @@ binary/multipart passthroughs
 
 ```md
 | Responses WebSocket | `wss://api.x.ai/v1/responses` | Direct typed Responses session with server-side bearer auth. |
-| Voice WebSockets | `wss://api.x.ai/v1/realtime`, `wss://api.x.ai/v1/stt`, `wss://api.x.ai/v1/tts` | Direct realtime speech, streaming transcription, and streaming synthesis. Browser clients use an ephemeral subprotocol token. |
+| Voice WebSockets | `wss://api.x.ai/v1/realtime`, `wss://api.x.ai/v1/stt`, `wss://api.x.ai/v1/tts` | Direct realtime speech, streaming transcription, and streaming synthesis with server-side bearer auth. Browser ephemeral auth is verified for realtime and STT only; mint a new one-use secret for every connection and reconnect. |
 | Local web app | `http://127.0.0.1:18646` | Same-origin HTTP plus direct xAI Voice WebSockets without exposing OAuth tokens to browser code. |
 ```
 
 `Proxy Coverage`의 “WebSocket endpoints are not proxied” 계약은 유지하되 local relay가
 없고 Node/browser client가 xAI에 직접 연결한다고 명시한다. browser 흐름은 same-origin
-`POST /v1/realtime/client_secrets` → ephemeral token → direct `wss://api.x.ai` 순서로
-적는다. `How It Works` 도식에는 canonical IR, typed event, protocol renderer 단계를 넣는다.
+`POST /v1/realtime/client_secrets` → 새 1회용 ephemeral token → direct `/realtime` 또는
+`/stt` socket 순서로 적는다. 연결과 재연결마다 새 secret을 발급하고 캐시·재사용하지
+않으며, `/tts`의 browser ephemeral 인증은 실측되지 않았다고 명시한다. `How It Works`
+도식에는 canonical IR, typed event, protocol renderer 단계를 넣는다.
 
 `Relationship ...` 절 끝에 다음 사실을 추가한다.
 
@@ -120,10 +122,12 @@ After:
    `speech_final`이 최종 transcript이고 `transcript.done.text`가 비어 있을 수 있다는
    실측 주의.
 5. `## Streaming TTS WebSocket`: query와 `text.delta`/`text.done`, binary/audio event.
-6. `## Browser authentication`: same-origin `POST /v1/realtime/client_secrets`로
-   backend-minted client secret을 받고 direct xAI socket에
-   `xai-client-secret.<token>` subprotocol로 전달한다. OAuth/API key/client secret 값을
-   URL query에 넣지 않는다.
+6. `## Browser authentication`: `/realtime`과 `/stt` 연결마다 same-origin
+   `POST /v1/realtime/client_secrets`로 새 backend-minted client secret을 받고 direct
+   xAI socket에 `xai-client-secret.<token>` subprotocol로 한 번만 전달한다. 재연결에도
+   새 secret을 발급하며 캐시·재사용하지 않는다. `/tts`의 browser ephemeral 인증은
+   실측되지 않았으므로 server-side bearer만 문서화한다. OAuth/API key/client secret
+   값을 URL query에 넣지 않는다.
 
 Voice model snippet은 다음으로 교체한다.
 
@@ -150,9 +154,11 @@ After:
 progrok's WebSocket clients connect directly to `wss://api.x.ai/v1/responses`,
 `wss://api.x.ai/v1/realtime`, `wss://api.x.ai/v1/stt`, and
 `wss://api.x.ai/v1/tts`; the localhost HTTP proxy does not
-relay WebSocket upgrades. Browser Voice clients first mint a short-lived secret
-through `POST http://127.0.0.1:18645/v1/realtime/client_secrets`, then use the
-`xai-client-secret.<token>` subprotocol on the direct xAI socket.
+relay WebSocket upgrades. Browser realtime and STT clients mint a new one-use
+secret through `POST http://127.0.0.1:18645/v1/realtime/client_secrets` for every
+connection and reconnect, then use the `xai-client-secret.<token>` subprotocol
+once on the direct xAI socket. Do not cache or reuse it. Browser ephemeral auth
+for TTS is not verified; use server-side bearer auth there.
 ```
 
 실제 사용 pattern을 추가한다.
@@ -172,6 +178,9 @@ ws.addEventListener("open", () => ws.send(JSON.stringify({
   session: { voice: "eve", resumption: { enabled: true } },
 })));
 ```
+
+이 pattern은 socket 생성 함수 안에서 실행해 연결과 재연결마다 secret을 새로 발급한다.
+발급한 secret은 한 연결에서 소진되므로 캐시하거나 다음 socket에 재사용하지 않는다.
 
 모델 표의 `-fast-1.0`/`-think-fast-1.0`을 제거하고 alias/pinned 2.0을 분리한다.
 가격 숫자는 삭제하고 “runtime catalog and xAI account terms are authoritative”로
@@ -241,7 +250,7 @@ const title = 'Realtime Voice';
   <pre><code>{`{"type":"session.update","session":{"voice":"eve","resumption":{"enabled":true}}}`}</code></pre>
   <p>Document audio formats, VAD, resumption, pronunciation replacement, tools, function calls, MCP, DTMF, cancellation, and ping/pong.</p>
   <h2>Browser-direct authentication</h2>
-  <p>The local web app mints a short-lived client secret through same-origin <code>POST /v1/realtime/client_secrets</code>, then passes it as <code>xai-client-secret.&lt;token&gt;</code> on the direct xAI socket. Never expose the OAuth refresh token.</p>
+  <p>The local web app mints a new one-use client secret through same-origin <code>POST /v1/realtime/client_secrets</code> for every connection and reconnect, then passes it once as <code>xai-client-secret.&lt;token&gt;</code> on the direct xAI socket. Never cache or reuse the secret, and never expose the OAuth refresh token.</p>
 </DocsLayout>
 ```
 
@@ -256,9 +265,11 @@ const title = 'Streaming TTS and STT';
   <h1>Streaming TTS and STT</h1>
   <h2>STT</h2>
   <p>Send binary audio frames directly to <code>wss://api.x.ai/v1/stt</code>, then <code>finalize</code> and <code>audio.done</code>.</p>
+  <p>Browser clients mint a new one-use ephemeral secret for every STT connection and reconnect. Never cache or reuse it.</p>
   <p>Treat a partial event with <code>speech_final=true</code> as final even when <code>transcript.done.text</code> is empty.</p>
   <h2>TTS</h2>
   <p>Connect directly to <code>wss://api.x.ai/v1/tts</code> and configure voice, language, codec, sample rate, latency optimization, speed, normalization, and timestamps in the query string.</p>
+  <p>Use server-side bearer authentication for TTS; browser ephemeral authentication has not been verified.</p>
 </DocsLayout>
 ```
 
@@ -273,8 +284,8 @@ const title = 'Local Web App';
   <h1>Local Web App</h1>
   <pre><code>{`progrok chat
 # open http://127.0.0.1:18646`}</code></pre>
-  <p>The web app uses same-origin local HTTP for text Responses and client-secret minting, then connects Voice directly to <code>wss://api.x.ai</code>.</p>
-  <p>OAuth access and refresh tokens are never serialized into HTML, JavaScript, storage, or browser logs. The ephemeral client secret exists only in memory and the WebSocket subprotocol.</p>
+  <p>The web app uses same-origin local HTTP for text Responses and one-use client-secret minting, then connects realtime Voice and STT directly to <code>wss://api.x.ai</code>. It mints a new secret for every connection and reconnect and never reuses one.</p>
+  <p>OAuth access and refresh tokens are never serialized into HTML, JavaScript, storage, or browser logs. The ephemeral client secret exists only in memory and one WebSocket subprotocol handshake. TTS browser ephemeral authentication is not claimed without live proof.</p>
 </DocsLayout>
 ```
 
@@ -282,12 +293,12 @@ const title = 'Local Web App';
 
 | 경로 | Before | After |
 |---|---|---|
-| `site/src/pages/docs/voice/overview.astro` | “WebSocket endpoints are not proxied” | REST proxy, direct xAI WS, browser ephemeral flow를 표로 비교 |
+| `site/src/pages/docs/voice/overview.astro` | “WebSocket endpoints are not proxied” | REST proxy, direct xAI WS, `/realtime`·`/stt`의 연결별 1회용 browser ephemeral flow, `/tts` bearer-only 문서 범위를 표로 비교 |
 | `site/src/pages/docs/voice/tts.astro` | REST만 설명 | REST와 direct `wss://api.x.ai/v1/tts` 링크, object `output_format` 유지 |
 | `site/src/pages/docs/voice/stt.astro` | streaming은 progrok 미지원 | direct `wss://api.x.ai/v1/stt` query/event/final 규칙 링크 |
 | `site/src/pages/docs/cli/chat.astro` | “web-based chat UI” 한 문장 | text SSE, Responses WS, realtime voice, 보안 경계, URL 설명 |
 | `site/src/pages/docs/cli/proxy.astro` | HTTP `/v1/*`만 | HTTP relay와 direct xAI WS client를 구분하고 local WS upgrade가 없음을 명시 |
-| `site/src/pages/docs/concepts/oauth-bridge.astro` | WS를 proxy하지 않음 | OAuth는 server-side에 남고 webapp은 same-origin client-secret mint 후 direct xAI WS 사용 |
+| `site/src/pages/docs/concepts/oauth-bridge.astro` | WS를 proxy하지 않음 | OAuth는 server-side에 남고 webapp은 `/realtime`·`/stt` 연결마다 새 1회용 client secret을 mint한 뒤 direct xAI WS 사용; `/tts` ephemeral은 미확인 |
 | `site/src/pages/docs/advanced/smoke-matrix.astro` | WS는 external setup 없어 미검증 | wp14의 STT streaming/client-secret 결과, 날짜, artifact field를 기록 |
 
 ### MODIFY — 모델과 계약 오류가 있는 사이트 페이지
@@ -335,7 +346,7 @@ rg -n 'ima2-gen v3\.16\.1.*no longer bundles|only share.*~/.progrok/auth\.json' 
 ## 완료 조건
 
 - README, API reference, packaged skill, site가 같은 HTTP/direct-WS/webapp URL을 말한다.
-- 네 direct `wss://api.x.ai/v1/...` endpoint와 browser ephemeral auth 흐름이 copy-paste 가능한 예제를 가진다.
+- 네 direct `wss://api.x.ai/v1/...` endpoint와 `/realtime`·`/stt`의 연결별 1회용 browser ephemeral auth 흐름이 copy-paste 가능한 예제를 가진다. `/tts`는 server-side bearer만 보장한다.
 - `grok-voice-think-fast-1.0`, `grok-voice-fast-1.0`, `gpt-4o`, local WS URL/relay 문구가
   공개 문서에서 0건이다.
 - `grok-voice-latest`는 rolling alias, `grok-voice-think-fast-2.0`은 production pin으로

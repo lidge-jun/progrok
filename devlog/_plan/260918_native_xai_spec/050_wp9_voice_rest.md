@@ -701,9 +701,7 @@ Create 성공은 201, read/update/delete는 200이다. reference는 최대 120�
 import {
   createVoiceHttpClient, expectRecord, expectString, jsonBody, type VoiceClientOptions,
 } from "./http.js";
-
-export type RealtimeVoiceModel = "grok-voice-latest" | "grok-voice-think-fast-2.0";
-export type RealtimeReasoningEffort = "high" | "none";
+import type { RealtimeReasoningEffort, RealtimeVoiceModel } from "./protocol.js";
 
 export interface CreateClientSecretRequest {
   expires_after?: { seconds: number };
@@ -816,7 +814,7 @@ npm run build
 - STT가 file/url을 동시에 받지 않고, file multipart part가 항상 마지막이다.
 - STT의 diarize/keyterm/multichannel/vad_threshold와 response words/channels가 타입 및 테스트에 있다.
 - custom voice의 create/list/get/update/delete/audio 모든 요청·응답 타입과 함수가 있다.
-- client secret TTL/model/reasoning 타입과 `value`/`expires_at` decoder가 있다.
+- client secret TTL과 `value`/`expires_at` decoder가 있고, model/reasoning 타입은 wp10의 `src/voice/protocol.ts`에서 import한다.
 - POST mutation은 자동 retry되지 않고 GET만 wp6 idempotent retry를 사용한다.
 - focused test, typecheck, 전체 test, build가 모두 exit 0이다.
 - `auth.json`, CLI 명령, `/health`, `/v1/*` relay 계약에 breaking change가 없다.

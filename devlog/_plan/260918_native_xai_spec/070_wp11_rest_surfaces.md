@@ -102,6 +102,26 @@ DELETE는 없다. `src/commands/image.ts`, `src/commands/video.ts`, `src/command
 
 wp10 완료 결과로 `package.json`에 `ws: ^8.18.3`, `@types/ws: ^8.18.1`이 있고 `package-lock.json`이 동기화돼 있어야 한다. wp11은 두 파일을 수정하지 않으며 `npm install ws`도 실행하지 않는다. 항목이 없거나 lock이 맞지 않으면 wp11 변경으로 보충하지 말고 wp10 precondition 실패로 중단한다.
 
+## NEW — public boundary
+
+### `src/surfaces/index.ts`
+
+wp14가 검증 코드에서 import할 named client export는 아래 아홉 개로 고정한다.
+
+```ts
+export { BatchesClient } from "./batches.js";
+export { CollectionsSearchClient } from "./collections.js";
+export { EmbeddingsClient } from "./embeddings.js";
+export { FilesClient } from "./files.js";
+export { ImagesClient } from "./images.js";
+export { MiscClient } from "./misc.js";
+export { ModelsClient } from "./models.js";
+export { SkillsClient } from "./skills.js";
+export { VideosClient } from "./videos.js";
+```
+
+`createSurfaceClient()` 같은 aggregate factory는 만들지 않는다. 각 client는 해당 모듈이 선언한 이름을 그대로 re-export한다.
+
 ## NEW — 공통 경계
 
 ### `src/surfaces/client.ts`

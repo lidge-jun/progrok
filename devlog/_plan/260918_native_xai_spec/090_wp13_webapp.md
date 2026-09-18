@@ -75,7 +75,7 @@ pcm-worklet.ts는 AudioWorklet 전용 entry이며 app bundle을 import하지 않
 
 | 항목 | 판정 |
 |---|---|
-| 보호 자산 | 장기 OAuth access/refresh token, 5분짜리 ephemeral token, 마이크 audio, transcript, 생성 media URL |
+| 보호 자산 | 장기 OAuth access/refresh token, 연결 1회용 ephemeral token, 마이크 audio, transcript, 생성 media URL |
 | 진입점 | same-origin REST, direct xAI WS, `localStorage`, microphone permission, media prompt/form |
 | 신뢰 경계 | browser ↔ local progrok, local progrok ↔ xAI REST, browser ↔ xAI WS |
 | 공격자 | 악성 웹페이지, LAN에서 노출된 `--host 0.0.0.0` listener, XSS payload가 포함된 model output, 탈취된 짧은 token |
@@ -89,14 +89,14 @@ STT와 realtime 모두 아래 순서를 지킨다. 두 socket을 동시에 열�
 
 1. 사용자가 `Start`를 눌러 microphone 권한을 승인한다.
 2. browser가 same-origin `POST /v1/realtime/client_secrets`에 `{"expires_after":{"seconds":300}}`을 보낸다. local proxy가 서버 쪽 OAuth를 주입한다.
-3. 응답 `{ value, expires_at }`은 함수 지역/`VoiceController` 메모리에만 둔다. `localStorage`, `sessionStorage`, URL, DOM, console에 쓰지 않는다.
+3. 응답 `{ value, expires_at }`은 함수 지역에만 두고 WebSocket 생성 직후 참조를 버린다. `VoiceController` 필드에 캐시하지 않으며 `localStorage`, `sessionStorage`, URL, DOM, console에 쓰지 않는다. `expires_at`이 남았다는 이유로 재사용하지 않는다.
 4. browser는 custom Authorization header를 시도하지 않는다. 정확히 다음 생성자를 사용한다.
 
 ```ts
 new WebSocket(url, [`xai-client-secret.${secret.value}`]);
 ```
 
-5. `close` 후 재연결할 때 기존 secret을 재사용하지 않고 2번부터 다시 수행한다.
+5. 시크릿 하나는 WebSocket 연결 하나에만 쓴다. handshake 실패를 포함해 `close` 후 재연결할 때 기존 secret을 재사용하지 않고 2번부터 다시 수행한다.
 6. Realtime session resumption은 secret과 별개다. 메모리의 `conversation_id`만 query에 넣고, 새 secret으로 연결한 뒤 `session.update`에서 `resumption.enabled: true`를 다시 보낸다.
 
 STT URL:
@@ -485,12 +485,6 @@ export interface ChatSession {
   messages: ChatMessage[];
 }
 
-export interface ResponsesRequest {
-  model: string;
-  input: Array<{ role: "user" | "assistant"; content: string }>;
-  stream: true;
-}
-
 export interface EphemeralClientSecret {
   value: string;
   expires_at: number;
@@ -530,9 +524,9 @@ import type {
   EphemeralClientSecret,
   ImageResult,
   ModelRecord,
-  ResponsesRequest,
   VideoJob,
 } from "./contracts.js";
+import type { ResponsesRequest } from "../../core/types.js";
 
 const LOCAL_HEADERS = {
   Authorization: "Bearer progrok-local",
@@ -1211,15 +1205,8 @@ export class VoiceController {
     try {
       this.setStatus("requesting-permission");
       this.#stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 }, video: false });
-      this.setStatus("minting-secret");
-      const secret = await mintClientSecret();
       const mode = this.el.mode.value as VoiceMode;
-      const spec = buildVoiceSocketSpec(mode, secret, {
-        model: this.el.model.value.trim() || "grok-voice-think-fast-2.0",
-        conversationId: mode === "realtime" ? this.#conversationId : undefined,
-      });
-      this.setStatus("connecting");
-      const socket = new WebSocket(spec.url, spec.protocols);
+      const socket = await this.openFreshSocket(mode);
       this.#socket = socket;
       socket.binaryType = "arraybuffer";
       socket.addEventListener("open", () => void this.onOpen(mode));
@@ -1262,6 +1249,17 @@ export class VoiceController {
     if (this.el.mode.value === "stt" && this.#socket?.readyState === WebSocket.OPEN) {
       this.sendJson({ type: "finalize" } satisfies SttClientControl);
     }
+  }
+
+  private async openFreshSocket(mode: VoiceMode): Promise<WebSocket> {
+    this.setStatus("minting-secret");
+    const secret = await mintClientSecret();
+    const spec = buildVoiceSocketSpec(mode, secret, {
+      model: this.el.model.value.trim() || "grok-voice-think-fast-2.0",
+      conversationId: mode === "realtime" ? this.#conversationId : undefined,
+    });
+    this.setStatus("connecting");
+    return new WebSocket(spec.url, spec.protocols);
   }
 
   private async onOpen(mode: VoiceMode): Promise<void> {
@@ -1406,7 +1404,7 @@ export class VoiceController {
 }
 ```
 
-token을 포함할 수 있는 `WebSocket` object, protocol, error event는 console에 출력하지 않는다.
+token을 포함할 수 있는 `WebSocket` object, protocol, error event는 console에 출력하지 않는다. 최초 연결과 resumption 재접속은 모두 `openFreshSocket()`을 호출한다. 이 메서드는 호출할 때마다 새 secret을 발급하고 정확히 한 `WebSocket` 생성에만 사용하므로 `expires_at` 기반 캐시나 재사용 경로를 두지 않는다.
 
 ### 5.9 `src/web/client/pcm-worklet.ts` — NEW
 
@@ -1979,7 +1977,7 @@ viewport는 1440×900, 1024×768, 768×1024, 390×844에서 확인한다. keyboa
 | 사용자 Abort | partial text 유지, `stopped` | 새 prompt 또는 재전송 가능 |
 | stream EOF without terminal | `failed` | 성공으로 추정 금지 |
 | microphone 거부 | Voice `failed`, Chat/Media 정상 | browser permission 안내 |
-| client secret 실패/만료 | socket 생성 전 실패 또는 새 secret mint 후 reconnect | 장기 OAuth 요청/표시 금지 |
+| client secret 실패/소진/만료 | socket 생성 전 실패 또는 연결마다 새 secret mint 후 reconnect | 기존 secret 재사용과 장기 OAuth 요청/표시 금지 |
 | WS 1006 | 현재 transcript 보존, `failed` | 사용자가 Start; realtime은 conversation id로 resume |
 | video failed/expired | 실제 upstream message와 status | 같은 request id 무한 poll 금지 |
 | video timeout | 10분 후 abort, request id 표시 | 사용자가 다시 제출하거나 API로 직접 조회 |
@@ -1989,6 +1987,7 @@ viewport는 1440×900, 1024×768, 768×1024, 390×844에서 확인한다. keyboa
 - [ ] 파일 매니페스트의 NEW/MODIFY/DELETE가 정확히 반영되고 담당 외 파일을 건드리지 않았다.
 - [ ] browser가 long-lived OAuth token을 받거나 저장하지 않는다.
 - [ ] STT/realtime WebSocket은 `xai-client-secret.<token>` subprotocol을 쓰며 token이 URL/log/storage에 없다.
+- [ ] 최초 연결과 모든 재접속은 새 ephemeral secret을 발급하고, 이미 연결에 사용한 secret이나 `expires_at`이 남은 secret을 재사용하지 않는다.
 - [ ] `/v1/models`가 모델 선택의 유일한 권위이고 static fallback이 없다.
 - [ ] Responses stream이 text, provider-supplied reasoning summary, 일반화된 tool lifecycle, terminal failure를 구분한다.
 - [ ] 사용자가 중단한 partial response와 실패한 response가 다른 상태로 남는다.
@@ -2004,6 +2003,7 @@ viewport는 1440×900, 1024×768, 768×1024, 390×844에서 확인한다. keyboa
 ## 12. 고정된 선행 계약과 구현 중 재확인할 경계
 
 - wp10의 `src/voice/protocol.ts`가 `ephemeralProtocols`, `parseRealtimeServerEvent`, `parseSttServerEvent`, `RealtimeClientEvent`, `RealtimeServerEvent`, `SttClientControl`, `SttServerEvent`를 browser-safe export한다. wp13은 이 계약을 그대로 import하며 event 이름·decoder·client control을 다시 선언하지 않는다.
+- wp7의 `src/core/types.ts`가 `ResponsesRequest`를 export한다. wp13의 `api.ts`는 이를 직접 import하며 browser 전용 중복 DTO를 선언하지 않는다.
 - wp8의 `createProxyApp()` signature가 달라지면 `src/web/server.ts`만 조정한다. browser는 계속 same-origin `/v1/*`만 호출한다.
 - 라이브 realtime server가 binary output transport를 거부하면 JSON `response.output_audio.delta` base64 경로로 바꾸되, browser OAuth/ephemeral 경계는 바꾸지 않는다.
 - `/v1/models`에 media model이 나오지 않고 전용 model endpoint만 권위로 확정되면 Media selector만 `/v1/image-generation-models`와 `/v1/video-generation-models`로 분리한다. Chat selector의 `/v1/models` 권위는 유지한다.

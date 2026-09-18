@@ -29,6 +29,8 @@
 4. `audio.done` 뒤 1006 close가 관측됐다. `speech_final` 또는 `transcript.done`을 이미 받았다면 `completed-with-transport-close`로 분류하고, terminal 전에 1006이면 실패다.
 5. `finalize`는 현재 utterance만 확정하고 socket을 유지한다. `audio.done`은 전체 input 종료이며 `transcript.done` 뒤 연결이 닫힌다.
 6. stream commit 이후 network close를 자동 retry하지 않는다.
+7. ephemeral client secret은 `/v1/stt`와 `/v1/realtime` 양쪽에서 동작하며, 시크릿 하나당 WebSocket 연결 하나인 1회용이다. `Sec-WebSocket-Protocol: xai-client-secret.<token>`으로만 전달하고 `Authorization: Bearer <ephemeral>`로 보내면 1002로 실패한다.
+8. realtime WebSocket은 OAuth Bearer 헤더로도 직접 연결된다. server-side Node client는 OAuth bearer를, browser는 연결마다 새 ephemeral client secret을 쓴다.
 
 ## 2. 구조 결정
 
@@ -51,8 +53,8 @@ voice/sip.ts                         (SIP REST + webhook wire types)
 - `ws-client.ts`는 socket lifecycle, byte budget, auth handshake, STT/TTS reducer/session만 소유하고 wire 계약과 decoder는 `protocol.ts`에서 import한다.
 - `realtime.ts`는 S2S reducer/client/session만 소유하고 wire 계약과 decoder는 `protocol.ts`에서 import한다.
 - `sip.ts`는 `/v2/phone-numbers`, call control, incoming webhook wire 타입만 소유한다.
-- browser에서는 custom Authorization header를 만들 수 없으므로 ephemeral token을 `Sec-WebSocket-Protocol`에만 넣는다.
-- server-side Node 연결은 OAuth bearer header를 쓴다. token을 URL query에 넣지 않는다.
+- browser의 STT/realtime 연결은 custom Authorization header 대신 연결마다 새 ephemeral client secret을 발급해 `Sec-WebSocket-Protocol: xai-client-secret.<token>`에만 넣는다. 시크릿은 한 WebSocket 연결 뒤 재사용하지 않는다.
+- server-side Node STT/TTS/realtime 연결은 OAuth bearer header를 쓴다. realtime도 OAuth bearer로 직접 연결된다는 실측을 따른다. token을 URL query에 넣지 않는다.
 - automatic reconnect는 없다. realtime resumption만 caller가 `conversation_id`를 명시해 새 socket으로 수행한다.
 
 거절한 대안:
@@ -821,7 +823,7 @@ export async function createTtsSession(
 
 `TtsClientEvent`, `StreamingAudioTimestamps`, `TtsServerEvent`는 `protocol.ts`가 소유한다. Node session 구현은 type-only import만 사용하며 wp13 browser code도 같은 타입을 직접 import한다.
 
-STT/TTS streaming은 bearer auth만 쓴다. ephemeral subprotocol은 realtime browser 연결에만 노출한다.
+server-side Node의 STT/TTS streaming은 OAuth bearer를 쓴다. browser의 STT와 realtime은 연결마다 새로 발급한 ephemeral client secret을 `Sec-WebSocket-Protocol: xai-client-secret.<token>`으로 전달하며, 같은 시크릿을 두 번째 연결에 재사용하지 않는다. `/v1/stt`와 `/v1/realtime` 모두 이 ephemeral 방식이 실측됐다. realtime은 server-side Node에서 OAuth Bearer 헤더로도 직접 연결된다. streaming TTS의 ephemeral 지원은 실측하지 않았으므로 주장하지 않는다.
 
 ## 10. NEW `src/voice/realtime.ts`
 
@@ -1252,7 +1254,8 @@ live evidence에는 status, content type, byte count/hash, terminal event만 남
 - terminal 증거 없는 1006과 protocol shape 오류는 실패다.
 - TTS는 text.delta/text.done과 audio.delta/audio.done을 처리하고 한 socket에서 다음 utterance를 허용한다.
 - realtime은 pinned 2.0 기본, alias opt-in, session.update, VAD, binary/json audio, tools, force_message, resumption, DTMF, ping/pong을 타입과 테스트로 가진다.
-- ephemeral secret은 subprotocol에만 있고 URL/log에 없다. SIP call_id와 함께 쓸 수 없다.
+- ephemeral secret은 `/v1/stt`와 `/v1/realtime`에서 연결 1회용이며 subprotocol에만 있고 URL/log에 없다. 재접속은 새 secret을 쓰고 SIP call_id와 함께 쓸 수 없다.
+- realtime은 server-side Node에서 OAuth Bearer 헤더로 직접 연결하고 browser에서는 매 연결 새 ephemeral secret을 쓴다.
 - phone registration, refer, hangup의 모든 요청/응답 타입과 error status가 검증된다.
 - automatic reconnect와 post-commit replay가 없다.
 - 로컬 WS upgrade/relay route가 없고 모든 Voice WebSocket production URL은 `wss://api.x.ai` 직결이다.

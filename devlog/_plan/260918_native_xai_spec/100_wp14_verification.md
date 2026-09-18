@@ -188,15 +188,24 @@ describe("transport", () => {
   it("keeps cli-chat-proxy behind explicit opt-in", () => {});
   it("drops hop-by-hop and caller authorization headers", () => {});
   it("never places bearer values in typed errors", () => {});
+  it("classifies replayability by method and idempotency key", () => {
+    assert.equal(classifyReplay("GET", new Headers()), "idempotent");
+    assert.equal(classifyReplay("HEAD", new Headers()), "idempotent");
+    assert.equal(classifyReplay("OPTIONS", new Headers()), "idempotent");
+    assert.equal(classifyReplay("POST", new Headers()), "never");
+    assert.equal(
+      classifyReplay("POST", new Headers({ "idempotency-key": "request-1" })),
+      "explicit-idempotency-key",
+    );
+  });
   it("retries a pre-header network failure once", async () => {});
   it("does not retry 4xx, aborts, or failures after headers commit", async () => {});
   it("propagates abort to the active fetch", async () => {});
 });
 ```
 
-`classifyRetry`의 입력은 서로 다른 값으로 만든다. 예를 들어
-`phase: "before_headers"`, `phase: "streaming"`, `aborted: true`가 모두 같은 기본값을
-공유하지 않아야 한다.
+`classifyReplay(method, headers): ReplayClass`에는 method와 `Headers`만 전달한다.
+`phase`와 `aborted`는 transport 실행·재시도 테스트의 상태이며 분류기 입력으로 만들지 않는다.
 
 ### NEW — `tests/wire-sse.test.ts`
 
@@ -352,20 +361,29 @@ it("proxy has no path whitelist — all /v1/* paths are forwarded", () => {
 After:
 
 ```ts
+import type { ProxyUpstreamFetch } from "../src/proxy/relay.js";
+
 it("forwards an unknown /v1 path with method, query and body intact", async () => {
   const fake = await startFakeXai(() => ({
     status: 207,
     headers: { "content-type": "application/octet-stream" },
     chunks: [Buffer.from([0, 1, 2, 255])],
   }));
-  const transportFetch: typeof globalThis.fetch = async (input, init) => {
-    const upstream = new URL(String(input));
-    return fetch(new URL(`${upstream.pathname}${upstream.search}`, fake.baseUrl), init);
+  const fetchUpstream: ProxyUpstreamFetch = async (request) => {
+    return fetch(new URL(request.pathWithQuery, fake.baseUrl), {
+      method: request.method,
+      headers: { ...request.headers, authorization: `Bearer ${request.bearer}` },
+      body: request.body,
+      signal: request.signal,
+    });
   };
-  const app = createProxyApp({ transport: { fetch: transportFetch } });
+  const app = createProxyApp({
+    getBearer: async () => "test-bearer",
+    fetchUpstream,
+  });
   // local app on port 0, POST /v1/future/path?a=1&a=2 with binary body
   // assert fake.requests[0] exact method/path/search/body
-  // assert upstream authorization is the temporary wp5 fixture bearer and caller placeholder is absent
+  // assert upstream authorization is Bearer test-bearer and caller placeholder is absent
   // assert response status 207 and bytes [0, 1, 2, 255]
   await fake.close();
 });

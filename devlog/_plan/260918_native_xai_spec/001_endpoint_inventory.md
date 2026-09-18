@@ -164,3 +164,30 @@ batches, files, collections(`POST /v1/documents/search`), skills(OpenAPI 전용)
 4. `X-XAI-Token-Auth: xai-grok-cli`는 `GET /models`에서는 있으나 없으나 200이었다. 인증 요소가 아니라 레인 표시자에 가깝다.
 5. `GET /v1/me`는 OAuth 토큰으로 실제 동작한다. ima2-gen CHANGELOG가 "xAI documents only /v1/me as accepting OAuth tokens"라고
    적었지만, 실측상 OAuth 토큰은 models/tokenize/chat/responses/tts/stt/realtime에서도 모두 200을 받았다.
+
+## 부록 2: ephemeral client secret의 실제 수명 (2026-09-18 라이브)
+
+문서는 만료 시간(기본 600초, 최대 3600초)만 말한다. 실측 결과 그보다 강한 제약이 있다.
+
+**ephemeral client secret은 1회용이다. 시크릿 하나당 WebSocket 연결 하나다.**
+
+교차 실험:
+
+| 시나리오 | 결과 |
+|---|---|
+| 새 시크릿으로 `/v1/stt` 연결 | OPEN, `transcript.created` |
+| **같은** 시크릿으로 `/v1/stt` 재연결 | CLOSE 1002 |
+| 새 시크릿으로 `/v1/realtime` 연결 | OPEN, `session.created`, `conversation.created`, `ping` |
+| **같은** 시크릿으로 `/v1/realtime` 재연결 | CLOSE 1002 |
+| 시크릿 2개를 각각 하나씩, stt와 realtime에 | 둘 다 OPEN |
+
+처음에는 "STT는 ephemeral을 받고 realtime은 거부한다"로 보였는데, 순서를 바꾸자 정확히 반대로 뒤집혔다.
+엔드포인트별 차이가 아니라 소진 여부의 문제였다.
+
+부수 사실:
+
+- 시크릿을 `Authorization: Bearer`로 보내면 실패한다(1002). `Sec-WebSocket-Protocol: xai-client-secret.<token>`만 동작한다.
+- 발급 바디는 `{}`로 충분하다. `session.type`이나 `model`을 넣어도 발급되며, realtime 연결 시 `session.updated`가 추가로 온다.
+- realtime WS는 OAuth Bearer 헤더로도 직접 붙는다. `grok-voice-latest`와 `grok-voice-think-fast-2.0` 둘 다 `session.created`를 받았다.
+  앞서 `POST /v1/realtime/sessions`가 403 "Team is not authorized"를 냈던 것은 그 REST 경로에 한정된 이야기이고, WS 접속과는 무관하다.
+- `wss://api.x.ai/v1/tts`도 Bearer로 OPEN된다.
