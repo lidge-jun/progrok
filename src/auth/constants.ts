@@ -24,6 +24,10 @@ export const XAI_DEVICE_CODE_POLL_INTERVAL_MS = 5 * 1000;
 
 // Token refresh
 export const TOKEN_REFRESH_SKEW_MS = 2 * 60 * 1000;
+export const XAI_TOKEN_MAX_ATTEMPTS = 3;
+export const XAI_TOKEN_RETRY_AFTER_CAP_MS = 60 * 1000;
+export const XAI_REFRESH_FLIGHT_STALE_MS = 2 * 60 * 1000;
+export const XAI_TERMINAL_FAILURE_TTL_MS = 30 * 1000;
 
 // API
 export const XAI_API_BASE_URL = "https://api.x.ai/v1";

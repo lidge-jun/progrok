@@ -4,11 +4,11 @@ import {
   XAI_OAUTH_CLIENT_ID,
   XAI_OAUTH_SCOPE,
   XAI_OAUTH_REDIRECT_URI,
-  XAI_OAUTH_FETCH_TIMEOUT_MS,
 } from "./constants.js";
 import { fetchOIDCDiscovery } from "./discovery.js";
 import { startCallbackServer } from "./callback-server.js";
-import { saveTokens, type OAuthTokenResponse } from "./token-store.js";
+import { postXaiToken } from "./token-client.js";
+import { saveTokensFromOAuthPayload } from "./token-store.js";
 import { openUrl } from "../utils/open-url.js";
 import { log } from "../utils/logger.js";
 
@@ -24,35 +24,46 @@ interface PKCEOptions {
   manualPaste?: boolean;
 }
 
-function extractCodeFromInput(input: string): string | null {
+function extractCodeFromInput(
+  input: string,
+): { code: string; state?: string } | null {
   const trimmed = input.trim();
   // Full callback URL: http://127.0.0.1:56121/callback?code=XXX&state=YYY
   try {
     const url = new URL(trimmed);
     const code = url.searchParams.get("code");
-    if (code) return code;
+    const state = url.searchParams.get("state");
+    if (code) return { code, ...(state === null ? {} : { state }) };
   } catch { /* not a URL */ }
   // Query fragment: ?code=XXX&state=YYY
   if (trimmed.startsWith("?")) {
     const params = new URLSearchParams(trimmed.slice(1));
     const code = params.get("code");
-    if (code) return code;
+    const state = params.get("state");
+    if (code) return { code, ...(state === null ? {} : { state }) };
   }
   // Bare code (no whitespace, no = sign typically)
-  if (trimmed.length > 10 && !trimmed.includes(" ")) return trimmed;
+  if (trimmed.length > 10 && !trimmed.includes(" ")) {
+    return { code: trimmed };
+  }
   return null;
 }
 
-async function promptForCode(): Promise<string> {
+async function promptForCode(expectedState: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve, reject) => {
     rl.question("\n  Paste the callback URL or authorization code: ", (answer) => {
       rl.close();
-      const code = extractCodeFromInput(answer);
-      if (!code) {
+      const result = extractCodeFromInput(answer);
+      if (!result) {
         reject(new Error("Could not extract authorization code from input."));
+      } else if (
+        result.state !== undefined &&
+        result.state !== expectedState
+      ) {
+        reject(new Error("OAuth callback state did not match."));
       } else {
-        resolve(code);
+        resolve(result.code);
       }
     });
   });
@@ -83,7 +94,7 @@ export async function loginWithPKCE(options: PKCEOptions = {}): Promise<void> {
       `\nAfter approving, paste the callback URL or the authorization code shown on the page.`,
     );
     await openUrl(authorizeUrl.toString());
-    code = await promptForCode();
+    code = await promptForCode(state);
   } else {
     log.info("Opening browser for xAI login...");
     log.dim(
@@ -97,31 +108,14 @@ export async function loginWithPKCE(options: PKCEOptions = {}): Promise<void> {
 
   log.info("Exchanging authorization code...");
 
-  const tokenRes = await fetch(discovery.tokenEndpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      client_id: XAI_OAUTH_CLIENT_ID,
-      code,
-      redirect_uri: XAI_OAUTH_REDIRECT_URI,
-      code_verifier: pkce.verifier,
-    }),
-    signal: AbortSignal.timeout(XAI_OAUTH_FETCH_TIMEOUT_MS),
+  const tokens = await postXaiToken(discovery.tokenEndpoint, {
+    grant_type: "authorization_code",
+    client_id: XAI_OAUTH_CLIENT_ID,
+    code,
+    redirect_uri: XAI_OAUTH_REDIRECT_URI,
+    code_verifier: pkce.verifier,
   });
-
-  if (!tokenRes.ok) {
-    const err = await tokenRes.text();
-    throw new Error(`Token exchange failed: ${err}`);
-  }
-
-  const tokens = (await tokenRes.json()) as OAuthTokenResponse;
-
-  await saveTokens({
-    accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token,
-    expiresIn: tokens.expires_in,
-    idToken: tokens.id_token,
+  await saveTokensFromOAuthPayload(tokens, {
     tokenEndpoint: discovery.tokenEndpoint,
   });
 
