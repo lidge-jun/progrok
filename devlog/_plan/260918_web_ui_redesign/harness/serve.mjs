@@ -21,7 +21,6 @@ const MODELS = [
   { id: "grok-4.5", object: "model", created: 0, owned_by: "xai" },
   { id: "grok-composer-2.5-fast", object: "model", created: 0, owned_by: "xai" },
   { id: "grok-build-0.1", object: "model", created: 0, owned_by: "xai" },
-  { id: "grok-code-fast-1", object: "model", created: 0, owned_by: "xai" },
   { id: "grok-imagine-image-2.0", object: "model", created: 0, owned_by: "xai" },
   { id: "grok-imagine-video-1.5", object: "model", created: 0, owned_by: "xai" },
 ];

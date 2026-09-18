@@ -242,3 +242,50 @@ export function parseRealtimeServerEvent(text: string): RealtimeServerEvent {
     default: throw new VoiceProtocolError("invalid_event", `unsupported realtime event type: ${type}`);
   }
 }
+
+/**
+ * Best-effort event-type label for logging. The wire value is untrusted, so it
+ * is restricted to a short identifier-safe slice and never echoed verbatim.
+ */
+export function safeEventLabel(text: string): string {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return "unsupported";
+  }
+  const type = raw && typeof raw === "object" && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>).type
+    : undefined;
+  if (typeof type !== "string") return "unsupported";
+  const cleaned = type.replace(/[^a-zA-Z0-9._-]/g, "");
+  return cleaned.length === 0 ? "unsupported" : `unsupported:${cleaned.slice(0, 48)}`;
+}
+
+/**
+ * Tolerant wrappers for the browser client. A frame this build cannot model is
+ * not a reason to end a live call: the strict parsers stay available for the
+ * CLI and the contract tests, while these return null so the read loop can keep
+ * running. Mirrors the codex realtime client, which logs an unsupported frame
+ * and continues instead of tearing the socket down.
+ */
+export function tryParseRealtimeServerEvent(
+  text: string,
+): RealtimeServerEvent | null {
+  try {
+    return parseRealtimeServerEvent(text);
+  } catch (error) {
+    if (error instanceof VoiceProtocolError) return null;
+    throw error;
+  }
+}
+
+export function tryParseSttServerEvent(text: string): SttServerEvent | null {
+  try {
+    return parseSttServerEvent(text);
+  } catch (error) {
+    if (error instanceof VoiceProtocolError) return null;
+    throw error;
+  }
+}
+

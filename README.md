@@ -318,7 +318,6 @@ only.
 | `grok-4.6` | Default chat, tools, search, vision | 500K | Also available through common Grok aliases. |
 | `grok-build-0.1` | Fast agentic coding | 256K | Good default for Grok Build-style coding tools through the OAuth proxy. |
 | `grok-composer-2.5-fast` | Agentic code composition | TBD | Live on `/v1/chat/completions`; supports `reasoning_content`. May need team-level access and may not appear in `/v1/models`. |
-| `grok-code-fast-1` | Low-cost code completion | TBD | Cheapest coding tier. |
 | `grok-4.20-0309-reasoning` | Deep reasoning | 200K+ | Legacy reasoning model. |
 | `grok-4.20-0309-non-reasoning` | Lower-latency text | 200K+ | Legacy non-reasoning model. |
 | `grok-4.20-multi-agent-0309` | Deep research | 200K+ | Supports high and xhigh effort. |

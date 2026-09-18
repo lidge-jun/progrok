@@ -311,7 +311,6 @@ entry point.
 | `grok-4.6` (default) | Chat, agentic tools, search, vision | 500K | $2.00 / $6.00 |
 | `grok-build-0.1` | Fast agentic coding | 256K | $1.00 / $2.00 |
 | `grok-composer-2.5-fast` | Agentic code composition | TBD | Live on chat/completions; supports reasoning_content. May need team access |
-| `grok-code-fast-1` | Low-cost code completion | TBD | $0.20 / $1.50 |
 | `grok-4.20-0309-reasoning` | Deep reasoning (legacy) | 200K+ | $1.25 / $2.50 |
 | `grok-4.20-0309-non-reasoning` | Fast, no thinking (legacy) | 200K+ | $1.25 / $2.50 |
 | `grok-4.20-multi-agent-0309` | Deep research (4/16 agents, beta) | 200K+ | $1.25 / $2.50 |

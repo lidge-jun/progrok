@@ -1,7 +1,8 @@
 import {
   DEFAULT_REALTIME_MODEL,
-  parseRealtimeServerEvent,
-  parseSttServerEvent,
+  safeEventLabel,
+  tryParseRealtimeServerEvent,
+  tryParseSttServerEvent,
   type RealtimeClientEvent,
   type RealtimeServerEvent,
   type SttClientControl,
@@ -387,19 +388,27 @@ export class VoiceController {
       if (mode === "realtime") this.#playback?.enqueue(event.data, 24000);
       return;
     }
-    try {
-      if (mode === "stt") {
-        const parsed = parseSttServerEvent(event.data);
-        this.recordEvent(parsed.type);
-        this.onSttEvent(parsed);
-      } else {
-        const parsed = parseRealtimeServerEvent(event.data);
-        this.recordEvent(parsed.type);
-        this.onRealtimeEvent(parsed);
+    // A frame this build cannot model is not a reason to end a live call. Log
+    // the sanitised type and keep reading, the way the codex realtime client
+    // drops an unsupported frame and continues. Only a server-sent error event
+    // fails the session.
+    if (mode === "stt") {
+      const parsed = tryParseSttServerEvent(event.data);
+      if (!parsed) {
+        this.recordEvent(safeEventLabel(event.data));
+        return;
       }
-    } catch {
-      this.fail("Voice API returned an invalid event.");
+      this.recordEvent(parsed.type);
+      this.onSttEvent(parsed);
+      return;
     }
+    const parsed = tryParseRealtimeServerEvent(event.data);
+    if (!parsed) {
+      this.recordEvent(safeEventLabel(event.data));
+      return;
+    }
+    this.recordEvent(parsed.type);
+    this.onRealtimeEvent(parsed);
   }
 
   private onSttEvent(event: SttServerEvent): void {
@@ -584,4 +593,3 @@ export class VoiceController {
     this.setStatus("failed", message);
   }
 }
-
