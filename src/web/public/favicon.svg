@@ -1,5 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#111315"/>
-  <path d="M19 49V15h15c9 0 15 5 15 13 0 9-6 14-16 14h-6v7H19Zm8-14h7c5 0 8-2 8-7 0-4-3-6-8-6h-7v13Z" fill="#f3f5f7"/>
-  <rect x="45" y="44" width="6" height="6" fill="#67a7ff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="progrok">
+  <style>
+    .mark { fill: none; stroke: #16a085; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+    .node { fill: #16a085; }
+    @media (prefers-color-scheme: dark) {
+      .mark { stroke: #22b795; }
+      .node { fill: #22b795; }
+    }
+  </style>
+  <circle class="node" cx="6" cy="21" r="3"/>
+  <circle class="node" cx="26" cy="21" r="3"/>
+  <path class="mark" d="M9.6 21H13v-9h6v9h3.4"/>
 </svg>
+

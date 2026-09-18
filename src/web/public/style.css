@@ -294,16 +294,10 @@ input:disabled, select:disabled, textarea:disabled { color: var(--fg-disabled); 
   text-decoration: none;
 }
 .brand__mark {
-  display: grid;
-  place-items: center;
-  width: 1.375rem;
-  height: 1.375rem;
-  border-radius: 6px;
-  background: var(--accent);
-  color: var(--accent-fg);
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-weight: 700;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+  color: var(--accent);
 }
 #session-list {
   display: grid;
@@ -557,12 +551,11 @@ input:disabled, select:disabled, textarea:disabled { color: var(--fg-disabled); 
   min-height: 0;
   padding: 0.7rem 0.85rem;
   border: 1px solid var(--border);
-  border-left-width: 2px;
   border-radius: var(--r-panel);
   background: var(--surface);
 }
-.turn[data-speaker="assistant"] { border-left-color: var(--accent); }
-.turn[data-speaker="user"] { border-left-color: var(--border-strong); }
+.turn h3 { color: var(--fg-muted); }
+.turn[data-speaker="assistant"] h3 { color: var(--accent-hover); }
 .transcript {
   min-height: 0;
   overflow-y: auto;
