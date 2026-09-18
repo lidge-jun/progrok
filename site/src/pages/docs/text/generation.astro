@@ -10,13 +10,13 @@ const title = 'Text Generation';
   -H 'Authorization: Bearer anything' \
   -H 'Content-Type: application/json' \
   -d '{
-  "model": "grok-4.3",
+  "model": "grok-4.6",
   "input": [
     {"role": "user", "content": "Explain quantum computing in one paragraph."}
   ]
 }'`}</code></pre>
 <h2>Parameters</h2>
-<p><code>model</code> — Model ID (e.g. <code>grok-4.3</code>).</p>
+<p><code>model</code> — Model ID (e.g. <code>grok-4.6</code>).</p>
 <p><code>input</code> — Array of message objects with <code>role</code> and <code>content</code>.</p>
 <p><code>temperature</code> — Sampling temperature (0–2, default 1).</p>
 <p><code>max_output_tokens</code> — Maximum tokens in the response.</p>

@@ -14,7 +14,7 @@ import {
   openVoiceSocket,
 } from "../src/voice/ws-client.js";
 import {
-  PINNED_REALTIME_MODEL,
+  DEFAULT_REALTIME_MODEL,
   REALTIME_MODEL_ALIAS,
   createRealtimeClient,
   reduceRealtimeEvent,
@@ -289,7 +289,7 @@ describe("Voice WebSocket", () => {
         "input_audio_buffer.dtmf_event_received", "response.done",
       ]);
       await pong;
-      assert.equal(new URL(requestUrl, origin).searchParams.get("model"), PINNED_REALTIME_MODEL);
+      assert.equal(new URL(requestUrl, origin).searchParams.get("model"), DEFAULT_REALTIME_MODEL);
       assert.equal(REALTIME_MODEL_ALIAS, "grok-voice-latest");
       assert(received.some((event) => event === "binary"));
       assert(received.some((event) => event !== "binary" && event.type === "session.update"));

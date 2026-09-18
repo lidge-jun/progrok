@@ -143,7 +143,7 @@ describe("auth public compatibility", () => {
     assert.equal(constants.XAI_OAUTH_CALLBACK_PORT, 56121);
     assert.equal(constants.PROXY_DEFAULT_PORT, 18645);
     assert.equal(constants.CHAT_DEFAULT_PORT, 18646);
-    assert.equal(constants.DEFAULT_MODEL, "grok-4.3");
+    assert.equal(constants.DEFAULT_MODEL, "grok-4.6");
     assert.equal(constants.TOKEN_REFRESH_SKEW_MS, 120_000);
     assert.equal(constants.XAI_TOKEN_MAX_ATTEMPTS, 3);
     assert.equal(constants.XAI_TOKEN_RETRY_AFTER_CAP_MS, 60_000);

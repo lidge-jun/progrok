@@ -1,5 +1,5 @@
 export const XAI_VOICE_WS_ORIGIN = "wss://api.x.ai" as const;
-export const PINNED_REALTIME_MODEL = "grok-voice-think-fast-2.0" as const;
+export const DEFAULT_REALTIME_MODEL = "grok-voice-latest" as const;
 export const REALTIME_MODEL_ALIAS = "grok-voice-latest" as const;
 export const XAI_EPHEMERAL_PROTOCOL_PREFIX = "xai-client-secret." as const;
 

@@ -25,7 +25,7 @@ import { log } from "../utils/logger.js";
  * Every transform is fail-safe: on any non-applicable case or parse error the
  * original body is returned untouched and the proxy is never broken. The
  * composer-specific transforms (1-3) never touch non-composer models such as
- * grok-4.3 (which DOES support reasoning effort).
+ * grok-4.6 (which DOES support reasoning effort).
  */
 
 const DISCIPLINE_MARKER = "[progrok:tool-discipline]";

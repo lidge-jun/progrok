@@ -19,7 +19,7 @@ export const COMMAND_NAMES = [
 export type CommandName = (typeof COMMAND_NAMES)[number];
 
 /** Pinned operational default, not a claim about the live model catalog. */
-export const DEFAULT_LIVE_MODEL = "grok-voice-think-fast-2.0";
+export const DEFAULT_LIVE_MODEL = "grok-voice-latest";
 
 export interface CommandManifestEntry {
   name: CommandName;

@@ -92,7 +92,7 @@ describe("capabilities schema v2", () => {
     assert.equal(capabilities.modelCatalog.status, "offline");
     assert.deepEqual(capabilities.models, []);
     assert.deepEqual(capabilities.voiceModels, []);
-    assert.equal(capabilities.recommendations.liveDefaultModel, "grok-voice-think-fast-2.0");
+    assert.equal(capabilities.recommendations.liveDefaultModel, "grok-voice-latest");
   });
 
   it("does not retain Voice 1.0 model literals", () => {

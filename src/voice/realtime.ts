@@ -5,7 +5,7 @@ import {
   type VoiceWsDeps,
 } from "./ws-client.js";
 import {
-  PINNED_REALTIME_MODEL,
+  DEFAULT_REALTIME_MODEL,
   parseRealtimeServerEvent,
   type RealtimeClientEvent,
   type RealtimeConversationItem,
@@ -15,7 +15,7 @@ import {
   type RealtimeVoiceModel,
 } from "./protocol.js";
 
-export { PINNED_REALTIME_MODEL, REALTIME_MODEL_ALIAS } from "./protocol.js";
+export { DEFAULT_REALTIME_MODEL, REALTIME_MODEL_ALIAS } from "./protocol.js";
 export type {
   RealtimeClientEvent,
   RealtimeConversationItem,
@@ -202,7 +202,7 @@ export function createRealtimeClient(opts: RealtimeOptions): RealtimeClient {
     throw new RangeError("SIP call_id sessions require server-side bearer authentication");
   }
   const query = new URLSearchParams();
-  if (!opts.callId) query.set("model", opts.model ?? PINNED_REALTIME_MODEL);
+  if (!opts.callId) query.set("model", opts.model ?? DEFAULT_REALTIME_MODEL);
   if (opts.callId) query.set("call_id", opts.callId);
   if (opts.conversationId) query.set("conversation_id", opts.conversationId);
   if (opts.reasoningEffort) query.set("reasoning.effort", opts.reasoningEffort);

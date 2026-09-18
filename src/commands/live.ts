@@ -29,10 +29,13 @@ function collectEvent(value: string, previous: string[]): string[] {
 type LiveClientEvent = Exclude<RealtimeClientEvent, { type: "pong" }>;
 
 function parseRealtimeModel(value: string): RealtimeVoiceModel {
-  if (value !== "grok-voice-think-fast-2.0" && value !== "grok-voice-latest") {
-    throw new Error("--model must be grok-voice-think-fast-2.0 or grok-voice-latest");
+  const model = value.trim();
+  if (!model.startsWith("grok-voice-")) {
+    throw new Error(
+      "--model must be a grok-voice-* identifier, for example grok-voice-latest",
+    );
   }
-  return value;
+  return model;
 }
 
 function parseReasoningEffort(value: string): RealtimeReasoningEffort {

@@ -68,7 +68,7 @@ After `progrok login`, the stored OAuth session powers every surface below:
 | Current search | `progrok search` | Grok Responses with web search, X search, citations, JSON output, and optional reasoning effort. |
 | Image workflows | `progrok image` | Imagine generation and editing with local reference files and output handling. |
 | Video workflows | `progrok video` | Async video submission, polling, progress display, and download handling. |
-| Coding models | `grok-build-0.1`, `grok-composer-2.5` through the proxy | Grok Build and Composer coding work from clients that can point at a local OpenAI-compatible endpoint. |
+| Coding models | `grok-build-0.1`, `grok-composer-2.5-fast` through the proxy | Grok Build and Composer coding work from clients that can point at a local OpenAI-compatible endpoint. |
 | Agent discovery | `progrok capabilities --json` | Machine-readable ports, commands, models, endpoints, and auth requirements. |
 | Voice CLI | `progrok tts`, `progrok stt`, `progrok live` | REST synthesis/transcription and a direct Realtime NDJSON bridge using the same OAuth session. |
 | Responses WebSocket | `wss://api.x.ai/v1/responses` | Direct typed Responses session with server-side bearer auth. |
@@ -100,7 +100,7 @@ progrok proxy
 curl http://127.0.0.1:18645/v1/chat/completions \
   -H "Authorization: Bearer anything" \
   -H "Content-Type: application/json" \
-  -d '{"model":"grok-4.3","messages":[{"role":"user","content":"Hello"}]}'
+  -d '{"model":"grok-4.6","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
 The proxy replaces the placeholder `Authorization` value with your stored xAI
@@ -132,7 +132,7 @@ client = OpenAI(
 )
 
 result = client.chat.completions.create(
-    model="grok-4.3",
+    model="grok-4.6",
     messages=[{"role": "user", "content": "Explain MCP in 5 bullets"}],
 )
 
@@ -315,10 +315,10 @@ only.
 
 | Model | Best for | Context | Notes |
 | --- | --- | --- | --- |
-| `grok-4.3` | Default chat, tools, search, vision | 1M | Also available through common Grok aliases. |
+| `grok-4.6` | Default chat, tools, search, vision | 500K | Also available through common Grok aliases. |
 | `grok-build-0.1` | Fast agentic coding | 256K | Good default for Grok Build-style coding tools through the OAuth proxy. |
-| `grok-composer-2.5-fast` | Agentic code composition (fast) | TBD | Live on `/v1/chat/completions`; supports `reasoning_content`. Not listed in `/v1/models` yet. |
-| `grok-composer-2.5` | Agentic code composition | TBD | Requires team-level access; may not be visible to all accounts yet. |
+| `grok-composer-2.5-fast` | Agentic code composition | TBD | Live on `/v1/chat/completions`; supports `reasoning_content`. May need team-level access and may not appear in `/v1/models`. |
+| `grok-code-fast-1` | Low-cost code completion | TBD | Cheapest coding tier. |
 | `grok-4.20-0309-reasoning` | Deep reasoning | 200K+ | Legacy reasoning model. |
 | `grok-4.20-0309-non-reasoning` | Lower-latency text | 200K+ | Legacy non-reasoning model. |
 | `grok-4.20-multi-agent-0309` | Deep research | 200K+ | Supports high and xhigh effort. |

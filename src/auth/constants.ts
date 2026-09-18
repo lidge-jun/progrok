@@ -31,7 +31,7 @@ export const XAI_TERMINAL_FAILURE_TTL_MS = 30 * 1000;
 
 // API
 export const XAI_API_BASE_URL = "https://api.x.ai/v1";
-export const DEFAULT_MODEL = "grok-4.3";
+export const DEFAULT_MODEL = "grok-4.6";
 
 /** Default model for `progrok search` (multi-agent + web/x tools). */
 export const SEARCH_DEFAULT_MODEL = "grok-4.20-multi-agent-0309";

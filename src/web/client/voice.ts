@@ -1,5 +1,5 @@
 import {
-  PINNED_REALTIME_MODEL,
+  DEFAULT_REALTIME_MODEL,
   parseRealtimeServerEvent,
   parseSttServerEvent,
   type RealtimeClientEvent,
@@ -322,7 +322,7 @@ export class VoiceController {
     this.setStatus("minting-secret");
     const secret = await mintClientSecret(signal);
     const spec = buildVoiceSocketSpec(mode, secret, {
-      model: this.el.model.value.trim() || PINNED_REALTIME_MODEL,
+      model: this.el.model.value.trim() || DEFAULT_REALTIME_MODEL,
       ...(mode === "realtime" && this.#conversationId
         ? { conversationId: this.#conversationId }
         : {}),

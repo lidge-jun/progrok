@@ -172,7 +172,7 @@ async function generateAction(prompt: string, opts: VideoOptions): Promise<void>
       throw new Error("Reference-to-video duration is capped at 10 seconds.");
     }
     if (opts.model?.includes("1.5") && !opts.image) {
-      throw new Error("grok-imagine-video-1.5-preview live-smoke supports image-to-video only; prompt-only T2V and reference_images are rejected by xAI.");
+      throw new Error("grok-imagine-video-1.5 live-smoke supports image-to-video only; prompt-only T2V and reference_images are rejected by xAI.");
     }
 
     const body: Record<string, unknown> = {

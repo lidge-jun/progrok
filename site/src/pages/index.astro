@@ -37,7 +37,7 @@ progrok proxy
 curl http://127.0.0.1:18645/v1/chat/completions \\
   -H "Authorization: Bearer anything" \\
   -H "Content-Type: application/json" \\
-  -d '{"model":"grok-4.3","messages":[{"role":"user","content":"Hello"}]}'`}</code></pre>
+  -d '{"model":"grok-4.6","messages":[{"role":"user","content":"Hello"}]}'`}</code></pre>
     </div>
   </section>
 
@@ -104,7 +104,7 @@ client = OpenAI(
 )
 
 result = client.chat.completions.create(
-    model="grok-4.3",
+    model="grok-4.6",
     messages=[{"role": "user", "content": "Explain MCP in 5 bullets"}],
 )
 

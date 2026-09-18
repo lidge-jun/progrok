@@ -3,7 +3,7 @@ name: progrok
 description: "Activate an xAI OAuth session as a local Grok proxy and CLI tool surface. Use when you need Grok models (chat, reasoning, search, images, video, voice, RAG) from OpenAI-compatible clients or agent tools. Requires a SuperGrok subscription + `progrok login` once."
 metadata:
   {
-    "triggers": ["grok", "xai", "progrok", "grok-4", "grok-4.3", "x search", "grok search", "grok image", "grok video", "grok tts", "grok stt", "grok voice", "imagine api"],
+    "triggers": ["grok", "xai", "progrok", "grok-4", "grok-4.6", "x search", "grok search", "grok image", "grok video", "grok tts", "grok stt", "grok voice", "imagine api"],
     "requires": { "bins": ["progrok"] }
   }
 ---
@@ -51,7 +51,7 @@ progrok search "latest Node.js LTS version"      # web + X, AI summary + sources
 progrok search "Tesla earnings reaction" --web   # web only
 progrok search "what's trending in AI" --x        # X (Twitter) only
 progrok search "react 19 release notes" --json   # {answer, citations, queries, usage}
-progrok search "quantum news" --model grok-4.3    # pick the model
+progrok search "quantum news" --model grok-4.6    # pick the model
 ```
 
 Output is an AI summary with inline `[[n]](url)` citations plus a deduplicated
@@ -65,7 +65,7 @@ alone drops links. JSON shape: `{ answer, citations[], queries[], usage }`.
 curl http://127.0.0.1:18645/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer anything" \
-  -d '{"model": "grok-4.3", "messages": [{"role": "user", "content": "Hello"}]}'
+  -d '{"model": "grok-4.6", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
 ### Pattern 2: Responses API with tools
@@ -74,7 +74,7 @@ curl http://127.0.0.1:18645/v1/chat/completions \
 curl http://127.0.0.1:18645/v1/responses \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "grok-4.3",
+    "model": "grok-4.6",
     "input": [{"role": "user", "content": "What are people saying about Tesla on X?"}],
     "tools": [{"type": "x_search"}, {"type": "web_search"}],
     "stream": true
@@ -271,7 +271,7 @@ collections uses the Management API on `management-api.x.ai` — not proxied.)
 from openai import OpenAI
 client = OpenAI(base_url="http://127.0.0.1:18645/v1", api_key="anything")
 resp = client.chat.completions.create(
-    model="grok-4.3",
+    model="grok-4.6",
     messages=[{"role": "user", "content": "Hello"}],
 )
 ```
@@ -308,10 +308,10 @@ entry point.
 
 | Model | Best for | Context | Price (in/out per 1M) |
 |-------|----------|---------|-----------------------|
-| `grok-4.3` (default) | Chat, agentic tools, search, vision | 1M | $1.25 / $2.50 |
+| `grok-4.6` (default) | Chat, agentic tools, search, vision | 500K | $2.00 / $6.00 |
 | `grok-build-0.1` | Fast agentic coding | 256K | $1.00 / $2.00 |
-| `grok-composer-2.5-fast` | Agentic code composition (fast) | TBD | Live on chat/completions; supports reasoning_content |
-| `grok-composer-2.5` | Agentic code composition | TBD | Team access required |
+| `grok-composer-2.5-fast` | Agentic code composition | TBD | Live on chat/completions; supports reasoning_content. May need team access |
+| `grok-code-fast-1` | Low-cost code completion | TBD | $0.20 / $1.50 |
 | `grok-4.20-0309-reasoning` | Deep reasoning (legacy) | 200K+ | $1.25 / $2.50 |
 | `grok-4.20-0309-non-reasoning` | Fast, no thinking (legacy) | 200K+ | $1.25 / $2.50 |
 | `grok-4.20-multi-agent-0309` | Deep research (4/16 agents, beta) | 200K+ | $1.25 / $2.50 |
@@ -336,7 +336,7 @@ identifier when reproducibility matters.
 
 ### Reasoning effort
 
-`grok-4.3` has configurable reasoning incl. a non-reasoning mode. The `4.20`
+`grok-4.6` has configurable reasoning incl. a non-reasoning mode. The `4.20`
 reasoning line accepts `reasoning.effort` of `low`/`high`. For
 `grok-4.20-multi-agent`, `effort` selects agent count: `low`/`medium` → 4
 agents, `high`/`xhigh` → 16 agents (Responses API only; no function calling).
@@ -368,7 +368,7 @@ agents, `high`/`xhigh` → 16 agents (Responses API only; no function calling).
 curl http://127.0.0.1:18645/v1/responses \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "grok-4.3",
+    "model": "grok-4.6",
     "input": [{"role": "user", "content": "Latest AI releases"}],
     "tools": [{"type": "web_search"}],
     "text": {"format": {"type": "json_schema", "name": "results",

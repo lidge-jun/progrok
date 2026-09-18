@@ -65,7 +65,7 @@ OpenAI-compatible chat + image understanding. Supports `stream`, `tools`,
 ```bash
 curl http://127.0.0.1:18645/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "grok-4.3", "messages": [{"role": "user", "content": "Hello"}]}'
+  -d '{"model": "grok-4.6", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
 ### POST /v1/responses
@@ -79,7 +79,7 @@ for multi-turn. Responses are stored 30 days (`store: true`).
 curl http://127.0.0.1:18645/v1/responses \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "grok-4.3",
+    "model": "grok-4.6",
     "input": [{"role": "user", "content": "What is happening on X today?"}],
     "tools": [{"type": "web_search"}, {"type": "x_search"}],
     "stream": true

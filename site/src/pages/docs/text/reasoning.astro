@@ -8,14 +8,14 @@ const title = 'Reasoning';
 <p>Control how much reasoning the model performs before answering using the <code>reasoning_effort</code> parameter. Higher effort produces more thorough answers at the cost of latency.</p>
 <table>
 <tr><th>Model</th><th>Effort Levels</th></tr>
-<tr><td>grok-4.3</td><td>none, low, medium, high</td></tr>
+<tr><td>grok-4.6</td><td>none, low, medium, high</td></tr>
 <tr><td>multi-agent</td><td>low, medium, high, xhigh</td></tr>
 </table>
 <pre><code>{`curl -X POST http://localhost:18645/v1/responses \
   -H 'Authorization: Bearer anything' \
   -H 'Content-Type: application/json' \
   -d '{
-  "model": "grok-4.3",
+  "model": "grok-4.6",
   "input": [
     {"role": "user", "content": "Prove the irrationality of sqrt(2)."}
   ],

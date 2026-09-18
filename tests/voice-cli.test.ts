@@ -56,7 +56,7 @@ describe("Voice CLI", () => {
     assert.equal(stt.options.some((option) => option.long === "--model"), false);
     assert.equal(
       live.options.find((option) => option.long === "--model")?.defaultValue,
-      "grok-voice-think-fast-2.0",
+      "grok-voice-latest",
     );
   });
 
@@ -229,7 +229,7 @@ describe("Voice CLI", () => {
       signal: AbortSignal;
     };
     assert.deepEqual(options.auth, { kind: "oauth" });
-    assert.equal(options.model, "grok-voice-think-fast-2.0");
+    assert.equal(options.model, "grok-voice-latest");
     assert(options.signal instanceof AbortSignal);
     assert.deepEqual(liveCalls.at(-1)?.args, []);
     assert.deepEqual(stdout, [JSON.stringify(liveServerEvents[0]) + "\n"]);
