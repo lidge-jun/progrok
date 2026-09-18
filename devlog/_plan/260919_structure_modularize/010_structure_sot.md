@@ -75,3 +75,52 @@ commands ──> 거의 전부
 - `npm run typecheck`, `node scripts/run-tests.mjs` (문서만 추가하므로 회귀 없음 확인)
 - 문서 내 상대 링크가 실제 파일을 가리키는지 확인
 
+
+---
+
+# 감사 반영 (wp10 A-phase fold)
+
+## O1. 일회용 secret 계약 근거 정정
+
+`src/voice/protocol.ts`는 타입과 파서다. 연결당 발급이 실제로 일어나는 곳은
+`src/web/client/voice.ts`의 `openFreshSocket()`이다 — `mintClientSecret()` 호출 후
+`buildVoiceSocketSpec()`로 subprotocol 을 만든다. 근거를 그쪽으로 바꾼다.
+
+## O2. 아직 없는 테스트를 근거로 쓰지 않는다
+
+`tests/module-boundaries.test.ts`는 wp11에서 신설한다. 존재하지 않는 파일을
+"계약 근거"로 적으면 거짓이다. `20_contracts.md`에서는 레이어 방향을
+**현재 상태(순환 포함)로 기술**하고, 테스트는 wp11 완료 후 근거로 추가한다.
+
+## O3. 문서 수 정정
+
+`devlog/_plan/260918_web_ui_redesign/`의 Markdown 은 **24개**다(15개 아님).
+`harness/` 하위 파일은 문서가 아니므로 제외하고 센 수치다.
+
+## O4. commands 간선 명시
+
+`commands`가 참조하는 레이어는 실측 7개: `auth`, `chat`, `proxy`, `surfaces`,
+`transport`, `utils`, `voice`. "거의 전부"라는 모호한 서술을 이 목록으로 대체한다.
+
+## O5. 경계 테스트의 허용·금지 간선 사전 명시
+
+wp11 테스트가 무엇을 통과시키고 무엇을 막는지 지금 정한다.
+
+**허용(현재 실측 간선)**
+
+```
+auth      -> utils
+utils     -> auth            (알려진 순환, 해소 시 제거)
+transport -> auth, utils
+wire      -> core
+surfaces  -> transport, core, wire, auth
+proxy     -> core, wire, utils, auth, transport
+voice     -> transport, utils, auth
+web       -> utils, proxy, auth, voice, core
+chat      -> auth, web
+commands  -> auth, chat, proxy, surfaces, transport, utils, voice
+```
+
+**금지**: 위 목록에 없는 모든 레이어 간선. 새로 생기면 테스트가 실패한다.
+`core`와 `utils`는 다른 레이어를 참조하지 않는다(단 `utils -> auth` 예외).
+
