@@ -90,8 +90,9 @@ npm install -g progrok
 # 1. Activate your xAI OAuth session.
 progrok login
 
-# SSH or remote machine:
-progrok login --device-code
+# `login` shows a URL and a code by default, which also works over SSH.
+# On a desktop you can let it open the browser instead:
+progrok login --browser
 
 # 2. Start the OpenAI-compatible local proxy.
 progrok proxy
@@ -151,12 +152,13 @@ export OPENAI_API_KEY=anything
 
 | Command | Use it for |
 | --- | --- |
-| `progrok login` | Browser OAuth login with your xAI account. |
-| `progrok login --device-code` | OAuth login for SSH, CI shells, or remote machines. |
+| `progrok login` | Device-code OAuth login: prints a URL and a code. Works over SSH. |
+| `progrok login --browser` | PKCE login that opens a browser and waits on `127.0.0.1:56121`. |
+| `progrok login --manual-paste` | PKCE login where you paste the callback code by hand. |
 | `progrok logout` | Remove stored local credentials. |
 | `progrok status` | Check whether a local OAuth session exists. |
 | `progrok proxy` | Start the local OpenAI-compatible proxy on `127.0.0.1:18645`. |
-| `progrok chat` | Open the local browser chat UI on `127.0.0.1:18646`. |
+| `progrok chat` | Open the local workspace on `127.0.0.1:18646`: chat, live voice, and media. |
 | `progrok models --detail` | List model aliases, pricing, context windows, and media models. |
 | `progrok search <query>` | Search web and X sources through Grok Responses tools. |
 | `progrok search <query> --web` | Restrict search to web sources. |
@@ -228,7 +230,7 @@ progrok video extend "Camera slowly pulls back revealing the full scene" \
 | Model | T2V | I2V | Ref2V | Edit | Extend |
 |-------|:---:|:---:|:-----:|:----:|:------:|
 | `grok-imagine-video` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `grok-imagine-video-1.5-preview` | ❌¹ | ✅ | ❌¹ | ❌ | ❌ |
+| `grok-imagine-video-1.5` | ❌¹ | ✅ | ❌¹ | ❌ | ❌ |
 
 ¹ xAI's model page describes text+image input, but live OAuth smoke returned
 `Text-to-video is not supported for this model` for prompt-only T2V and
@@ -263,7 +265,7 @@ stray `mode` field but treated the request as ordinary T2V.
 | `output.upload_url` | Passed with a public PUT endpoint; result `video.url` equals the upload URL |
 | `video_url` REST alias | Failed with `422 missing field video`; use `video: {url}` |
 | `1080p` | Failed for this team: `1080p video resolution is not available for your team` |
-| `grok-imagine-video-1.5-preview` | I2V passed; prompt-only T2V and Ref2V failed |
+| `grok-imagine-video-1.5` | I2V passed; prompt-only T2V and Ref2V failed |
 
 ### Video editing/extension constraints
 
@@ -313,20 +315,38 @@ only.
 
 ## Models
 
+Your account decides what `/v1/models` returns. The table below is what a
+SuperGrok session returned on 2026-09-19; treat `progrok models --json` as the
+source of truth, not this page.
+
 | Model | Best for | Context | Notes |
 | --- | --- | --- | --- |
-| `grok-4.6` | Default chat, tools, search, vision | 500K | Also available through common Grok aliases. |
+| `grok-4.6` | Default chat, tools, search, vision | 500K | `DEFAULT_MODEL`. Pricing below. |
+| `grok-4.5` | Previous frontier text model | 500K | Still served. |
+| `grok-4.3` | Older text model | 200K+ | Cheaper tier. |
 | `grok-build-0.1` | Fast agentic coding | 256K | Good default for Grok Build-style coding tools through the OAuth proxy. |
-| `grok-composer-2.5-fast` | Agentic code composition | TBD | Live on `/v1/chat/completions`; supports `reasoning_content`. May need team-level access and may not appear in `/v1/models`. |
 | `grok-4.20-0309-reasoning` | Deep reasoning | 200K+ | Legacy reasoning model. |
 | `grok-4.20-0309-non-reasoning` | Lower-latency text | 200K+ | Legacy non-reasoning model. |
 | `grok-4.20-multi-agent-0309` | Deep research | 200K+ | Supports high and xhigh effort. |
 | `grok-imagine-image` | Image generation and editing | - | $0.002/input image; $0.02/output image. |
+| `grok-imagine-image-2.0` | Current Imagine image model | - | Returned by the live catalog. |
 | `grok-imagine-image-quality` | Higher-quality image output | - | $0.01/input image; $0.05 (1K) or $0.07 (2K) output image. |
 | `grok-imagine-video` | Video: T2V, I2V, Ref2V, Edit, Extend | - | $0.002/input image, $0.01/input video sec; $0.05/sec (480p), $0.07/sec (720p). |
-| `grok-imagine-video-1.5-preview` | Video: I2V only in live smoke; no native T2V/Ref2V/Edit/Extend | - | $0.01/input image; $0.08/sec (480p), $0.14/sec (720p). |
-| `grok-voice-latest` | Rolling Voice alias | - | Resolve availability from the live catalog. |
-| `grok-voice-think-fast-2.0` | Reproducible Voice pin and `progrok live` default | - | Runtime catalog and xAI account terms are authoritative. |
+| `grok-imagine-video-1.5` | Video: I2V only in live smoke; no native T2V/Ref2V/Edit/Extend | - | $0.01/input image; $0.08/sec (480p), $0.14/sec (720p). |
+
+### Not in `/v1/models`
+
+These are reachable but the catalog does not list them, so `progrok models`
+will not show them.
+
+| Model | Best for | Notes |
+| --- | --- | --- |
+| `grok-composer-2.5-fast` | Agentic code composition | Live on `/v1/chat/completions`; supports `reasoning_content`. May need team-level access. |
+| `grok-voice-latest` | Rolling Voice alias, `progrok live` default | Realtime voice models are not catalog entries. Pin a dated build for reproducibility. |
+
+Text pricing for `grok-4.6` is $2.00 per 1M input tokens and $6.00 per 1M output
+tokens, from [docs.x.ai/developers/models](https://docs.x.ai/developers/models)
+as of 2026-09-19. progrok is not the source of truth for pricing; xAI can change it.
 
 Run the live metadata command before relying on a model in automation:
 
@@ -428,7 +448,8 @@ breaking boundary.
 
 ### `progrok status` says no session
 
-Run `progrok login` again. On remote machines, use `progrok login --device-code`.
+Run `progrok login` again. It prints a URL and a code, so it works over SSH as-is;
+add `--browser` on a desktop to open the browser instead.
 
 ### The proxy starts but clients fail
 

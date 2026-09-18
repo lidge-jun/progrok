@@ -8,7 +8,18 @@ const title = 'Local Web App';
 <pre><code>{`progrok chat
 # opens http://127.0.0.1:18646
 # same-origin HTTP API: http://127.0.0.1:18646/v1/*`}</code></pre>
-<p>The web app provides text Responses streaming, sessions, model switching, safe rendering of reasoning and tool results, image/video workflows, streaming STT, and realtime Voice.</p>
+<p><code>progrok chat</code> opens one workspace with three tabs. The top bar shows live runtime state: the served endpoint, how many models the catalog returned, and the model the chat tab is using. Those rows stay hidden until a value is actually observed.</p>
+<h2>Chat</h2>
+<p>Responses streaming with reasoning summaries and tool activity, browser-local sessions, and model switching. The conversation follows new output only while you are already at the bottom; scroll up to read and it keeps your place, then offers a <em>New response</em> control to return.</p>
+<h2>Voice</h2>
+<p>Live transcription (STT) and speech to speech (realtime). The status chip names one of nine states — idle, requesting permission, minting secret, connecting, listening, responding, speaking, stopped, failed — using colour, shape and text together rather than colour alone.</p>
+<p>Two level meters read real audio: the input meter taps an <code>AnalyserNode</code> parallel to the capture worklet, and the output meter taps a shared bus in the playback queue. They do not move without signal. Under <code>prefers-reduced-motion</code> the animation loop is never created.</p>
+<p>The console reports session elapsed time, the input device label, the send sample rate, browser network state, and a log of received event types. The event log records types and timestamps only — never payloads, transcripts, or secrets. Muting disables the microphone track; the worklet keeps streaming silence, and the UI says so rather than implying the upload stopped.</p>
+<h2>Media</h2>
+<p>Imagine image and video generation. Video jobs show real polling progress and stay cancellable. Each result carries a provenance caption with the model, the options actually submitted, the measured elapsed time, and the job id. The request is snapshotted at submit time, so changing a control mid-run cannot rewrite the caption.</p>
+<h2>Failure handling</h2>
+<p>A catalog failure is scoped to the panel that needs it. Chat and media each show their own inline error with a retry, and voice keeps working because it does not depend on <code>/v1/models</code>.</p>
+<p>A voice event this build cannot model is logged by type and ignored, and the call stays open. Only a server-sent <code>error</code> event fails the session.</p>
 <p>HTTP calls use the same origin. Realtime Voice and STT mint a new one-use client secret through same-origin <code>POST /v1/realtime/client_secrets</code> for every connection and reconnect, then connect directly to <code>wss://api.x.ai</code>.</p>
 <p>OAuth access and refresh tokens are never serialized into HTML, JavaScript, storage, or browser logs. The ephemeral client secret stays in memory and is sent once in the WebSocket subprotocol handshake. TTS browser ephemeral authentication is not claimed without live proof.</p>
 </DocsLayout>

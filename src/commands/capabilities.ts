@@ -126,6 +126,44 @@ export async function buildCapabilities(options: {
       host: PROXY_DEFAULT_HOST,
       port: CHAT_DEFAULT_PORT,
       url: `http://${PROXY_DEFAULT_HOST}:${CHAT_DEFAULT_PORT}`,
+      surfaces: [
+        {
+          name: "chat",
+          summary: "Streaming Grok chat over the same-origin proxy.",
+          features: [
+            "streaming",
+            "reasoning-summary",
+            "tool-calls",
+            "scroll-follow",
+            "panel-retry",
+          ],
+        },
+        {
+          name: "voice",
+          summary:
+            "Browser-direct xAI Voice using a one-use client secret per connection.",
+          features: [
+            "stt",
+            "realtime",
+            "input-meter",
+            "output-meter",
+            "mute",
+            "elapsed",
+            "transport-rows",
+            "event-log",
+          ],
+        },
+        {
+          name: "media",
+          summary: "Imagine image and video generation with request provenance.",
+          features: [
+            "image",
+            "video-polling",
+            "provenance-caption",
+            "cancel",
+          ],
+        },
+      ],
     },
     endpoints: SURFACE_REGISTRY,
     websockets,
@@ -134,7 +172,8 @@ export async function buildCapabilities(options: {
     voiceModels,
     recommendations: {
       liveDefaultModel: DEFAULT_LIVE_MODEL,
-      note: "Pinned operational default; not synthesized into the live catalog.",
+      note:
+        "Rolling alias used as the operational default; realtime voice models are not listed in /v1/models.",
     },
     videoNotes: VIDEO_NOTES,
     tools: [
@@ -153,6 +192,9 @@ export async function buildCapabilities(options: {
     limitations: [
       "The local proxy handles HTTP only; live and Responses WebSocket clients connect directly to api.x.ai.",
       "Collection management requires management-api.x.ai and a Management API key; progrok exposes only collection search.",
+      "Browser ephemeral auth is verified for realtime and STT only; TTS over a browser-minted secret is unverified.",
+      "Each voice WebSocket needs its own one-use client secret; secrets are not reused across reconnects.",
+      "The web app drops a voice event it cannot model, logging the type and keeping the call open; only a server error event fails the session.",
     ],
   };
 }

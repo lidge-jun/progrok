@@ -1,5 +1,42 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- The local web app is one workspace with Chat, Voice and Media tabs. The top
+  bar reports the served endpoint, the catalog model count and the active model,
+  and each row stays hidden until a value is observed.
+- Voice reports nine connection states through colour, shape and text, and draws
+  input and output level meters from real `AnalyserNode` data. Silence does not
+  move them, and `prefers-reduced-motion` skips the animation loop entirely.
+- Voice adds a mute toggle, session elapsed time, input device, send rate,
+  browser network state, and a log of received event types. The log records
+  types and timestamps only, never payloads, transcripts or secrets.
+- Chat follows new output only when the reader is already at the bottom, keeps
+  their position otherwise, and offers an explicit control to jump back.
+- A catalog failure is scoped to the panel that needs it, with its own retry.
+  Voice keeps working through it.
+- Media results carry a provenance caption: model, submitted options, measured
+  elapsed time and job id, snapshotted at submit time.
+- `capabilities --json` reports `webApp.surfaces` with per-tab feature lists.
+
+### Fixed
+
+- A live voice call no longer ends when the server sends an event this build
+  cannot model. The parser drops it, logs a sanitised type and keeps reading.
+  Only a server `error` event fails the session.
+
+### Changed
+
+- `DEFAULT_MODEL` is `grok-4.6`, and the realtime default is the rolling
+  `grok-voice-latest` alias. The constant is now `DEFAULT_REALTIME_MODEL`
+  because it no longer pins a dated build, and `live --model` accepts any
+  `grok-voice-*` identifier.
+- The Imagine video model is `grok-imagine-video-1.5`; the `-preview` suffix is gone.
+- Model tables match the catalog a live session returns, and `grok-composer-2.5`
+  is corrected to `grok-composer-2.5-fast`.
+
 ## [3.0.0] - 2026-09-18
 
 progrok stops being a proxy that swaps an Authorization header and becomes a

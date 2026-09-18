@@ -86,6 +86,18 @@ describe("capabilities schema v2", () => {
     assert.equal(capabilities.auth.file, AUTH_FILE);
     assert.equal(capabilities.webApp.url, "http://127.0.0.1:18646");
     assert.deepEqual(
+      capabilities.webApp.surfaces.map((surface) => surface.name),
+      ["chat", "voice", "media"],
+    );
+    for (const surface of capabilities.webApp.surfaces) {
+      assert.ok(surface.summary.length > 0, `${surface.name} needs a summary`);
+      assert.ok(
+        surface.features.length > 0 &&
+          surface.features.every((feature) => typeof feature === "string" && feature.length > 0),
+        `${surface.name} needs non-empty feature strings`,
+      );
+    }
+    assert.deepEqual(
       capabilities.websockets.map((entry) => entry.path).sort(),
       ["/v1/realtime", "/v1/responses", "/v1/stt", "/v1/tts"],
     );

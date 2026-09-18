@@ -562,17 +562,21 @@ from_date, to_date, max_search_results, return_citations }`.
 
 ## Authentication
 
-### PKCE flow (browser) — `progrok login`
+### Device-code flow (default) — `progrok login`
+
+Displays a URL + code; open it in any browser and enter the code. The CLI polls
+until authorized. This is the default because it works unchanged over SSH.
+
+### PKCE flow (browser) — `progrok login --browser`
 
 1. Opens `https://auth.x.ai/...` with a PKCE challenge.
 2. Log in with your xAI account (SuperGrok subscription required).
 3. Callback on `127.0.0.1:56121/callback`.
 4. Token exchanged and saved to `~/.progrok/auth.json`.
 
-### Device-code flow (SSH/remote) — `progrok login --device-code`
+### Manual paste — `progrok login --manual-paste`
 
-Displays a URL + code; open it in any browser and enter the code. The CLI polls
-until authorized.
+PKCE without the loopback listener: paste the authorization code by hand.
 
 ### Token storage — `~/.progrok/auth.json`
 
@@ -697,7 +701,7 @@ progrok video "Put this character in a quiet terminal workspace" \
   --ref character.png --ref workspace.png --duration 6
 
 # Video 1.5 preview (live-smoked I2V only)
-progrok video "Animate this scene" --model grok-imagine-video-1.5-preview --image photo.jpg
+progrok video "Animate this scene" --model grok-imagine-video-1.5 --image photo.jpg
 
 # Save to specific path
 progrok video "prompt" --output my-video.mp4
@@ -707,7 +711,7 @@ progrok video "prompt" --json
 ```
 
 Options:
-- `--model <id>` — `grok-imagine-video` (default) or `grok-imagine-video-1.5-preview`
+- `--model <id>` — `grok-imagine-video` (default) or `grok-imagine-video-1.5`
 - `--duration <s>` — 1-15 seconds (default: 5)
 - `--aspect <ratio>` — 16:9 (default), 9:16, 1:1, 4:3, 3:4, 3:2, 2:3
 - `--resolution <r>` — 480p (default) or 720p

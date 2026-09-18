@@ -9,7 +9,7 @@ SuperGrok이나 X 구독은 해뒀는데, 개발 도구에서 쓰려면 또 API 
 - `127.0.0.1:18645/v1/*`의 HTTP 프록시는 Chat/Responses SSE를 직접 파싱하고 다시 렌더링한다. 파일·오디오 같은 바이너리/멀티파트 경로는 검증된 릴레이로 보낸다.
 - Responses, realtime Voice, streaming STT/TTS는 로컬 프록시를 거치지 않고 `wss://api.x.ai/v1/*`에 직접 붙는 타입드 클라이언트를 제공한다.
 - `progrok tts`, `progrok stt`, `progrok live` 명령이 추가됐다. `live`는 마이크 앱이 아니라 Realtime 이벤트를 NDJSON stdin/stdout으로 연결하는 명령이다.
-- `progrok chat`은 `127.0.0.1:18646`에서 텍스트 SSE, 이미지·비디오, streaming STT, realtime Voice를 한 화면에 제공한다.
+- `progrok chat`은 `127.0.0.1:18646`에서 Chat·Voice·Media 세 탭의 워크스페이스를 연다. 톱바가 서빙 엔드포인트, 카탈로그 모델 수, 현재 모델을 실측값으로 표시하고, Voice 탭은 9가지 연결 상태와 실제 오디오에 반응하는 입출력 레벨 미터, 음소거, 경과 시간, 수신 이벤트 로그를 제공한다.
 - batches, files, collections search, embeddings, skills, models, images, videos와 Responses WebSocket을 다루는 타입드 surface client가 들어갔다.
 
 ## 2. 바로 써보기

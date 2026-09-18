@@ -29,7 +29,7 @@ use the same account-backed session through progrok's localhost API surface.
 ## Prerequisites
 
 ```bash
-progrok login          # one-time OAuth (browser; or --device-code for SSH)
+progrok login          # one-time OAuth (device code by default; --browser opens a browser)
 progrok status         # verify: "Status: Logged in"
 progrok proxy          # start the proxy on 127.0.0.1:18645
 ```
@@ -169,7 +169,7 @@ curl http://127.0.0.1:18645/v1/videos/abc-123
 
 **Model constraints:**
 - `grok-imagine-video`: T2V, I2V, Ref2V, Edit, Extend — all modes
-- `grok-imagine-video-1.5-preview`: live-smoked I2V only; prompt-only T2V and Ref2V return xAI 400 errors
+- `grok-imagine-video-1.5`: live-smoked I2V only; prompt-only T2V and Ref2V return xAI 400 errors
 - Media refs: `url`, `file_id`, data URI, or local file through the CLI
 - REST has no `mode` field; SDK mode strings are provider options only
 - `image` + `reference_images` is invalid
@@ -248,6 +248,15 @@ or client secrets in a WebSocket query parameter.
 progrok chat
 # opens http://127.0.0.1:18646
 ```
+
+One workspace with three tabs: Chat, Voice, Media. The top bar reports the
+served endpoint, the catalog model count, and the active chat model from
+observed values only. Voice shows nine connection states plus input/output
+level meters driven by real `AnalyserNode` data, mute, elapsed time, transport
+rows, and an event-type log that never records payloads. Media captions each
+result with the model, submitted options, measured elapsed time, and job id.
+A voice event the build cannot model is logged by type and ignored so the call
+stays open; only a server `error` event fails the session.
 
 The web app serves its HTTP `/v1/*` proxy on the same origin. Text uses
 Responses SSE; realtime Voice and streaming STT connect directly to xAI with a
