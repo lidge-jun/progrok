@@ -3,7 +3,7 @@
 ## 0. 문서 계약
 
 - 상태: 구현 전 diff-level PRD
-- 선행 단계: wp10(Voice WS/realtime과 browser-safe `src/voice/protocol.ts`) 완료, wp8의 네이티브 `createProxyApp()` 사용 가능
+- 선행 단계: wp7(core Responses 계약), wp9(browser-safe `src/voice/protocol.ts`와 client secret), wp10(Voice WS/realtime) 완료. 기존 네이티브 `createProxyApp()` 사용 가능
 - 구현 범위: 로컬 브라우저 앱, 브라우저용 빌드, 정적 자산 패키징, 웹앱 회귀 테스트
 - 제외 범위: 공개 문서/사이트/skill 동기화(wp15), 릴리스/푸시(wp16), SIP UI, custom voice 관리, 이미지·비디오 편집/연장 UI
 - 변경 금지: `~/.progrok/auth.json` 스키마, 장기 OAuth 토큰의 브라우저 노출, xAI WS를 로컬 서버가 중계하는 새 프록시
@@ -58,7 +58,7 @@ src/commands/chat.ts
 
 src/web/client/app.ts
   -> chat.ts -> api.ts -> same-origin /v1/responses, /v1/models
-  -> voice.ts -> ../../voice/protocol.ts (wp10의 event/control 타입과 parser)
+  -> voice.ts -> ../../voice/protocol.ts (wp9의 event/control/client-secret 타입과 parser)
              -> api.ts -> same-origin POST /v1/realtime/client_secrets
                         -> direct wss://api.x.ai/v1/stt|realtime
   -> media.ts -> api.ts -> same-origin image/video REST
@@ -485,11 +485,6 @@ export interface ChatSession {
   messages: ChatMessage[];
 }
 
-export interface EphemeralClientSecret {
-  value: string;
-  expires_at: number;
-}
-
 export type VoiceMode = "stt" | "realtime";
 export type VoiceStatus =
   | "idle"
@@ -521,12 +516,12 @@ wire payload 자체는 이 타입으로 cast하지 않는다. `api.ts`와 `respo
 
 ```ts
 import type {
-  EphemeralClientSecret,
   ImageResult,
   ModelRecord,
   VideoJob,
 } from "./contracts.js";
 import type { ResponsesRequest } from "../../core/types.js";
+import type { EphemeralClientSecret } from "../../voice/protocol.js";
 
 const LOCAL_HEADERS = {
   Authorization: "Bearer progrok-local",
@@ -1122,11 +1117,12 @@ export class ChatController {
 
 ```ts
 import { mintClientSecret } from "./api.js";
-import type { EphemeralClientSecret, VoiceMode, VoiceStatus } from "./contracts.js";
+import type { VoiceMode, VoiceStatus } from "./contracts.js";
 import {
   ephemeralProtocols,
   parseRealtimeServerEvent,
   parseSttServerEvent,
+  type EphemeralClientSecret,
   type RealtimeClientEvent,
   type RealtimeServerEvent,
   type SttClientControl,
@@ -1888,7 +1884,7 @@ describe("progrok web app", () => {
 });
 ```
 
-`src/web/client/voice.ts`는 wp10의 browser-safe `src/voice/protocol.ts`만 import한다. Node 전용 `ws-client.ts`나 `ws` package를 browser bundle에 넣지 않는다. import 시 browser global을 실행하지 않아야 이 Node test가 가능하므로 `window` 접근은 `VoiceController.init/start` 내부로 제한한다.
+`src/web/client/voice.ts`는 wp9의 browser-safe `src/voice/protocol.ts`만 import한다. Node 전용 `ws-client.ts`나 `ws` package를 browser bundle에 넣지 않는다. import 시 browser global을 실행하지 않아야 이 Node test가 가능하므로 `window` 접근은 `VoiceController.init/start` 내부로 제한한다.
 
 ## 8. 구현 순서
 
@@ -2002,8 +1998,8 @@ viewport는 1440×900, 1024×768, 768×1024, 390×844에서 확인한다. keyboa
 
 ## 12. 고정된 선행 계약과 구현 중 재확인할 경계
 
-- wp10의 `src/voice/protocol.ts`가 `ephemeralProtocols`, `parseRealtimeServerEvent`, `parseSttServerEvent`, `RealtimeClientEvent`, `RealtimeServerEvent`, `SttClientControl`, `SttServerEvent`를 browser-safe export한다. wp13은 이 계약을 그대로 import하며 event 이름·decoder·client control을 다시 선언하지 않는다.
+- wp9의 `src/voice/protocol.ts`가 `EphemeralClientSecret`, `ephemeralProtocols`, `parseRealtimeServerEvent`, `parseSttServerEvent`, `RealtimeClientEvent`, `RealtimeServerEvent`, `SttClientControl`, `SttServerEvent`를 browser-safe export한다. wp13은 모두 type-only/value import로 재사용하며 client secret 응답 타입·event 이름·decoder·client control을 다시 선언하지 않는다.
 - wp7의 `src/core/types.ts`가 `ResponsesRequest`를 export한다. wp13의 `api.ts`는 이를 직접 import하며 browser 전용 중복 DTO를 선언하지 않는다.
-- wp8의 `createProxyApp()` signature가 달라지면 `src/web/server.ts`만 조정한다. browser는 계속 same-origin `/v1/*`만 호출한다.
+- 기존 `createProxyApp()` signature가 달라지면 `src/web/server.ts`만 조정한다. browser는 계속 same-origin `/v1/*`만 호출한다.
 - 라이브 realtime server가 binary output transport를 거부하면 JSON `response.output_audio.delta` base64 경로로 바꾸되, browser OAuth/ephemeral 경계는 바꾸지 않는다.
 - `/v1/models`에 media model이 나오지 않고 전용 model endpoint만 권위로 확정되면 Media selector만 `/v1/image-generation-models`와 `/v1/video-generation-models`로 분리한다. Chat selector의 `/v1/models` 권위는 유지한다.

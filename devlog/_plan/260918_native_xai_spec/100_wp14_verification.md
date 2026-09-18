@@ -9,6 +9,7 @@ wp5–wp13의 공개 경계에 있어야 하며, 없다면 소유 단계로 되�
 
 진입 조건은 다음과 같다.
 
+- 직접 선행 단계는 wp13이며, wp5–wp12 산출물은 wp13까지 완료된 transitive precondition으로 취급한다.
 - `src/auth/`, `src/transport/`, `src/wire/`, `src/voice/`, `src/surfaces/`,
   `src/proxy/`, `src/web/`가 구현돼 있다.
 - wp5 소유 `src/auth/token-manager.ts`와 wp11 소유 `src/surfaces/index.ts`가 각 소유 단계에서 구현·export돼 있다. wp14는 두 모듈을 생성하거나 시그니처를 재정의하지 않고 검증 코드에서만 import한다.
@@ -329,9 +330,15 @@ import {
   ModelsClient,
   SkillsClient,
   VideosClient,
+  connectResponsesWebSocket,
+  type ResponsesWsCreate,
+  type ResponsesWsDeps,
+  type ResponsesWsError,
+  type ResponsesWsSession,
 } from "../src/surfaces/index.js";
 
 describe("REST surfaces", () => {
+  it("re-exports the Responses WebSocket connector and contract types", () => {});
   it("serializes responses, compact and input_items paths", async () => {});
   it("treats deferred chat HTTP 202 as queued, not error", async () => {});
   it("preserves multipart and binary bodies without JSON parsing", async () => {});
@@ -341,9 +348,7 @@ describe("REST surfaces", () => {
 });
 ```
 
-`src/surfaces/index.ts`의 위 re-export는 wp11 선행 계약이다. 존재하지 않는 aggregate
-`createSurfaceClient()`를 wp14에서 새로 만들지 않는다. 각 client에는 같은 fake
-`XaiTransport`를 constructor로 주입한다.
+`src/surfaces/index.ts`의 위 import 목록은 wp11 문서의 public boundary export 목록과 정확히 일치하는 선행 계약이다. `ResponsesWsCreate`, `ResponsesWsDeps`, `ResponsesWsError`, `ResponsesWsSession`은 compile-time boundary를 확인하고, `connectResponsesWebSocket`은 같은 index의 runtime named export임을 검증한다. 존재하지 않는 aggregate `createSurfaceClient()`를 wp14에서 새로 만들지 않는다. 각 REST client에는 같은 fake `XaiTransport`를 constructor로 주입한다.
 
 테이블 기반 case는 각 row에 `method`, `path`, `request`, `expectedStatus`를 literal로
 둔다. 구현의 route registry를 expected 목록으로 재사용하지 않는다.
@@ -407,16 +412,17 @@ describe("web app", () => {
   it("serves the app and immutable hashed assets", async () => {});
   it("does not serialize OAuth bearer or refresh tokens into HTML", async () => {});
   it("mints an ephemeral client secret through same-origin HTTP", async () => {});
-  it("builds a direct wss://api.x.ai socket with xai-client-secret subprotocol", () => {});
+  it("builds direct realtime/STT wss://api.x.ai sockets with xai-client-secret subprotocol", () => {});
   it("supports one text response while voice bypasses the local HTTP server", async () => {});
 });
 ```
 
 브라우저 렌더링 smoke는 wp13의 UI 테스트가 소유한다. WP14는 서버 계약과 secret
-비노출을 검증하고, Voice가 로컬 HTTP 서버를 거치지 않고
-`wss://api.x.ai/v1/realtime`, `wss://api.x.ai/v1/stt`, `wss://api.x.ai/v1/tts`에
-직접 연결하는지 확인한다. 별도 WebSocket relay/session/origin 검증 계층은 만들거나
-테스트하지 않는다.
+비노출을 검증하고, wp13의 browser Voice 범위인 realtime과 STT가 로컬 HTTP 서버를
+거치지 않고 `wss://api.x.ai/v1/realtime`, `wss://api.x.ai/v1/stt`에 직접 연결하는지
+확인한다. `/v1/tts` direct WebSocket assertion은 이 webapp 테스트에 추가하지 않으며,
+해당 검증은 wp10 소유 `tests/voice-ws.test.ts`에 남긴다. 별도 WebSocket
+relay/session/origin 검증 계층은 만들거나 테스트하지 않는다.
 
 ### MODIFY — `tests/cli-skill-contract.test.ts`
 

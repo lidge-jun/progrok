@@ -180,3 +180,47 @@ wp10은 "streaming STT/TTS는 bearer 전용, ephemeral은 realtime 전용"이라
 canonical `ResponsesRequest`는 wp7의 `src/core/types.ts`가, realtime 모델/effort 타입은
 wp10의 `src/voice/protocol.ts`가 단독으로 소유한다. wp9과 wp13은 다시 선언하지 않고 import한다.
 `src/surfaces/index.ts`의 named export 목록은 wp11이 문서에 명시한다.
+
+## 추가 결정 (A 감사 3회차)
+
+### D14. `src/voice/protocol.ts`의 소유자는 wp9으로 옮긴다
+
+3차 감사가 전방 의존성을 잡았다. wp9의 `client-secrets.ts`가 `./protocol.js`를 import하는데
+그 파일은 다음 단계인 wp10이 만들기로 돼 있었다. 그러면 wp9의 typecheck 게이트가 성립하지 않는다.
+
+`protocol.ts`는 이벤트 이름 상수와 타입만 담은 의존성 없는 모듈이다. voice 계열의 첫 단계인 wp9이 소유하는 편이 자연스럽다.
+wp10은 이를 precondition으로 두고 WS 클라이언트 구현만 맡는다. D13의 "realtime 타입 단독 소유"는 유지되며 소유 단계만 wp9으로 바뀐다.
+
+### D15. client secret 응답 타입도 하나다
+
+`POST /v1/realtime/client_secrets`의 응답 타입은 wp9이 `protocol.ts`에 canonical하게 둔다.
+wp13은 `EphemeralClientSecret`을 따로 선언하지 않고 type-only import한다.
+
+### D16. `src/surfaces/index.ts`는 REST 전용이 아니다
+
+단일 public boundary라고 선언한 이상 wp11 소유의 `connectResponsesWebSocket`도 함께 export한다.
+wp11과 wp14의 목록을 같이 갱신한다.
+
+### D17. `/tts` WS 검증은 wp10 소유다
+
+wp13의 브라우저 voice 범위는 STT와 realtime뿐이다. wp14의 webapp 테스트에서 `/tts` direct WS assertion을 뺀다.
+해당 검증은 wp10의 `tests/voice-ws.test.ts`에 남는다.
+
+### D18. 의존 표를 실제 계약에 맞춘다
+
+아래가 실제 의존 관계다. 위쪽 "작업 단계 지도" 표의 의존 열보다 이 표가 우선한다.
+
+| 단계 | 실제 선행 |
+|---|---|
+| wp5 | wp1 |
+| wp6 | wp5 |
+| wp7 | wp6 |
+| wp8 | wp7 |
+| wp9 | wp6, wp7 |
+| wp10 | wp9 |
+| wp11 | wp7, wp10 (패키지 산출물) |
+| wp12 | wp6, wp8, wp9, wp10, wp11 |
+| wp13 | wp7, wp9, wp10 |
+| wp14 | wp13 |
+| wp15 | wp14 |
+| wp16 | wp15 |

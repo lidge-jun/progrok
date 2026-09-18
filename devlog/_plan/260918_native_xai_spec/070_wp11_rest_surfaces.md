@@ -106,7 +106,7 @@ wp10 완료 결과로 `package.json`에 `ws: ^8.18.3`, `@types/ws: ^8.18.1`이 �
 
 ### `src/surfaces/index.ts`
 
-wp14가 검증 코드에서 import할 named client export는 아래 아홉 개로 고정한다.
+wp14가 검증 코드에서 import할 named public export는 아래 목록으로 고정한다. REST client와 Responses WebSocket connector/type 모두 이 단일 boundary를 통과한다.
 
 ```ts
 export { BatchesClient } from "./batches.js";
@@ -118,6 +118,13 @@ export { MiscClient } from "./misc.js";
 export { ModelsClient } from "./models.js";
 export { SkillsClient } from "./skills.js";
 export { VideosClient } from "./videos.js";
+export {
+  connectResponsesWebSocket,
+  type ResponsesWsCreate,
+  type ResponsesWsDeps,
+  type ResponsesWsError,
+  type ResponsesWsSession,
+} from "./responses-ws.js";
 ```
 
 `createSurfaceClient()` 같은 aggregate factory는 만들지 않는다. 각 client는 해당 모듈이 선언한 이름을 그대로 re-export한다.
@@ -938,6 +945,7 @@ npm test
 - 매니페스트의 NEW 파일만 생성됐고, `package.json`/`package-lock.json`은 wp10 결과에서 변경되지 않았다.
 - 모든 표면이 `SURFACE_REGISTRY`에 있고 근거 종류가 명시됐다.
 - OpenAPI-only 경로가 일반 공식 문서 경로로 잘못 표시되지 않았다.
+- `src/surfaces/index.ts`가 REST client 아홉 개와 `connectResponsesWebSocket`, `ResponsesWsCreate`, `ResponsesWsDeps`, `ResponsesWsError`, `ResponsesWsSession`을 단일 public boundary에서 export한다.
 - Responses WS가 `response.create`, `previous_response_id`, 25분 종료, serial turn을 테스트로 증명한다.
 - multipart와 binary가 JSON 공통 경로에 강제로 들어가지 않는다.
 - 비멱등 media submit은 자동 재시도되지 않는다.
