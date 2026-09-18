@@ -1,10 +1,10 @@
 import { Command } from "commander";
-import { getValidBearer } from "../auth/token-store.js";
 import {
-  XAI_API_BASE_URL,
   DEFAULT_IMAGE_MODEL,
   USD_TICKS_DIVISOR,
 } from "../auth/constants.js";
+import { ImagesClient } from "../surfaces/index.js";
+import { createXaiTransport } from "../transport/fetch.js";
 import { log } from "../utils/logger.js";
 import { writeFileSync } from "node:fs";
 import { fileToDataUri } from "../utils/media.js";
@@ -19,6 +19,30 @@ export interface ImageOptions {
   output?: string;
   json?: boolean;
   n?: string;
+}
+
+interface ImageOutput {
+  b64_json?: string;
+  url?: string;
+  revised_prompt?: string;
+}
+
+function decodeImageOutput(value: unknown): ImageOutput {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError("image result must be an object");
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    ...(typeof record.b64_json === "string" ? { b64_json: record.b64_json } : {}),
+    ...(typeof record.url === "string" ? { url: record.url } : {}),
+    ...(typeof record.revised_prompt === "string" ? { revised_prompt: record.revised_prompt } : {}),
+  };
+}
+
+function imageCostTicks(usage: unknown): number | undefined {
+  if (usage === null || typeof usage !== "object" || Array.isArray(usage)) return undefined;
+  const ticks = (usage as Record<string, unknown>).cost_in_usd_ticks;
+  return typeof ticks === "number" ? ticks : undefined;
 }
 
 
@@ -43,14 +67,11 @@ export function imageCommand(): Command {
     .option("--n <count>", "number of images", "1")
     .action(async (prompt: string, opts: ImageOptions) => {
       try {
-        const bearer = await getValidBearer();
         const refs = opts.ref ?? [];
         const n = parseIntOrThrow(opts.n ?? "1", "n", 1, 10);
         const isEdit = refs.length > 0;
 
-        const endpoint = isEdit ? "images/edits" : "images/generations";
-
-        const body: Record<string, unknown> = {
+        const request: Parameters<ImagesClient["create"]>[0] = {
           model: opts.model ?? DEFAULT_IMAGE_MODEL,
           prompt,
           n,
@@ -61,30 +82,13 @@ export function imageCommand(): Command {
 
         if (isEdit) {
           if (refs.length === 1) {
-            body.image = { type: "image_url", url: fileToDataUri(refs[0], "image") };
+            request.image = { type: "image_url", url: fileToDataUri(refs[0], "image") };
           } else {
-            body.images = refs.map((r) => ({ type: "image_url", url: fileToDataUri(r, "image") }));
+            request.images = refs.map((r) => ({ type: "image_url", url: fileToDataUri(r, "image") }));
           }
         }
 
-        const res = await fetch(`${XAI_API_BASE_URL}/${endpoint}`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${bearer}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(body),
-        });
-
-        if (!res.ok) {
-          const errBody = await res.text();
-          throw new Error(`HTTP ${res.status}: ${errBody.slice(0, 300)}`);
-        }
-
-        const data = (await res.json()) as {
-          data: { b64_json?: string; url?: string; revised_prompt?: string }[];
-          usage?: { cost_in_usd_ticks?: number };
-        };
+        const data = await new ImagesClient(createXaiTransport()).create(request);
 
         if (opts.json) {
           console.log(JSON.stringify(data, null, 2));
@@ -92,7 +96,7 @@ export function imageCommand(): Command {
         }
 
         for (let i = 0; i < data.data.length; i++) {
-          const item = data.data[i];
+          const item = decodeImageOutput(data.data[i]);
           if (item.b64_json) {
             const suffix = data.data.length > 1 ? `-${i + 1}` : "";
             const outPath = opts.output
@@ -108,8 +112,9 @@ export function imageCommand(): Command {
           }
         }
 
-        if (data.usage?.cost_in_usd_ticks) {
-          log.dim(`Cost: $${(data.usage.cost_in_usd_ticks / USD_TICKS_DIVISOR).toFixed(4)}`);
+        const costTicks = imageCostTicks(data.usage);
+        if (costTicks) {
+          log.dim(`Cost: $${(costTicks / USD_TICKS_DIVISOR).toFixed(4)}`);
         }
       } catch (err) {
         log.error((err as Error).message);
@@ -117,5 +122,3 @@ export function imageCommand(): Command {
       }
     });
 }
-
-

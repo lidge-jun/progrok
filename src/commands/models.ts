@@ -1,20 +1,8 @@
 import { Command } from "commander";
-import { getValidBearer } from "../auth/token-store.js";
-import { XAI_API_BASE_URL } from "../auth/constants.js";
+import { ModelsClient } from "../surfaces/index.js";
+import type { ModelFamily, XaiModel } from "../surfaces/models.js";
+import { createXaiTransport } from "../transport/fetch.js";
 import { log } from "../utils/logger.js";
-
-interface LanguageModel {
-  id: string;
-  input_modalities?: string[];
-  output_modalities?: string[];
-  prompt_text_token_price?: number;
-  completion_text_token_price?: number;
-  aliases?: string[];
-}
-
-interface SimpleModel {
-  id: string;
-}
 
 function formatPrice(ticks: number | undefined): string {
   if (ticks == null) return "-";
@@ -31,50 +19,64 @@ const MODEL_TAGS: [string, string][] = [
   ["imagine", " [image]"],
 ];
 
+const MODEL_KIND = {
+  all: "models",
+  language: "language-models",
+  image: "image-generation-models",
+  video: "video-generation-models",
+  embedding: "embedding-models",
+} as const satisfies Record<string, ModelFamily>;
+
+function printDetailedModel(model: XaiModel): void {
+  const input = Array.isArray(model.raw.input_modalities)
+    ? model.raw.input_modalities
+      .filter((value): value is string => typeof value === "string")
+      .join(", ")
+    : "";
+  const inPrice = formatPrice(
+    typeof model.raw.prompt_text_token_price === "number"
+      ? model.raw.prompt_text_token_price
+      : undefined,
+  );
+  const outPrice = formatPrice(
+    typeof model.raw.completion_text_token_price === "number"
+      ? model.raw.completion_text_token_price
+      : undefined,
+  );
+  console.log(`  ${model.id}`);
+  console.log(`    Input: ${input}  |  Price: ${inPrice}/1M in, ${outPrice}/1M out`);
+  if (model.aliases.length > 0) {
+    console.log(`    Aliases: ${model.aliases.slice(0, 5).join(", ")}${model.aliases.length > 5 ? ` (+${model.aliases.length - 5} more)` : ""}`);
+  }
+  console.log();
+}
+
 export function modelsCommand(): Command {
   return new Command("models")
     .description("List available Grok models")
     .option("--detail", "Show pricing and aliases from /v1/language-models")
-    .action(async (opts: { detail?: boolean }) => {
+    .option("--kind <kind>", "all|language|image|video|embedding", "all")
+    .option("--json", "Output the live catalog as JSON")
+    .action(async (opts: { detail?: boolean; kind?: string; json?: boolean }) => {
       try {
-        const bearer = await getValidBearer();
-
-        if (opts.detail) {
-          const res = await fetch(`${XAI_API_BASE_URL}/language-models`, {
-            headers: { Authorization: `Bearer ${bearer}` },
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-          const data = (await res.json()) as { models: LanguageModel[] };
-
-          log.info("Grok Models (detailed)\n");
-          for (const m of data.models ?? []) {
-            const input = (m.input_modalities || []).join(", ");
-            const inPrice = formatPrice(m.prompt_text_token_price);
-            const outPrice = formatPrice(m.completion_text_token_price);
-            console.log(`  ${m.id}`);
-            console.log(`    Input: ${input}  |  Price: ${inPrice}/1M in, ${outPrice}/1M out`);
-            if (m.aliases && m.aliases.length > 0) {
-              console.log(`    Aliases: ${m.aliases.slice(0, 5).join(", ")}${m.aliases.length > 5 ? ` (+${m.aliases.length - 5} more)` : ""}`);
-            }
-            console.log();
-          }
+        const kind = opts.detail ? "language" : opts.kind ?? "all";
+        const family = MODEL_KIND[kind as keyof typeof MODEL_KIND];
+        if (!family) throw new Error(`invalid --kind '${kind}'`);
+        const models = await new ModelsClient(createXaiTransport()).list(family);
+        if (opts.json) {
+          console.log(JSON.stringify({ source: `GET /v1/${family}`, models }, null, 2));
           return;
         }
 
-        const res = await fetch(`${XAI_API_BASE_URL}/models`, {
-          headers: { Authorization: `Bearer ${bearer}` },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        const data = (await res.json()) as { data: SimpleModel[] };
-
-        log.info("Available Grok models:\n");
-        for (const m of data.data ?? []) {
-          const tag = MODEL_TAGS.find(([k]) => m.id.includes(k))?.[1] ?? "";
-          console.log(`  ${m.id}${tag}`);
+        log.info(opts.detail ? "Grok Models (detailed)\n" : "Available Grok models:\n");
+        for (const model of models) {
+          if (opts.detail) printDetailedModel(model);
+          else {
+            const tag = MODEL_TAGS.find(([key]) => model.id.includes(key))?.[1] ?? "";
+            console.log(`  ${model.id}${tag}`);
+          }
         }
-        log.dim("\n  Use --detail for pricing and aliases");
+        if (!opts.detail) log.dim("\n  Use --detail for pricing and aliases");
       } catch (err) {
         log.error((err as Error).message);
         process.exit(1);

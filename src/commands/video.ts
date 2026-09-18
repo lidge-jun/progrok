@@ -1,12 +1,13 @@
 import { Command } from "commander";
-import { getValidBearer } from "../auth/token-store.js";
 import {
-  XAI_API_BASE_URL,
   DEFAULT_VIDEO_MODEL,
   VIDEO_POLL_INTERVAL_MS,
   VIDEO_DEFAULT_TIMEOUT_S,
   USD_TICKS_DIVISOR,
 } from "../auth/constants.js";
+import { VideosClient } from "../surfaces/index.js";
+import type { VideoPollResponse } from "../surfaces/videos.js";
+import { createXaiTransport } from "../transport/fetch.js";
 import { log } from "../utils/logger.js";
 import { writeFileSync } from "node:fs";
 import { mediaRef } from "../utils/media.js";
@@ -48,33 +49,28 @@ export interface VideoExtendOptions {
 
 
 
-async function pollUntilDone(requestId: string, bearer: string, timeout: number, json?: boolean): Promise<Record<string, unknown>> {
+async function pollUntilDone(
+  client: VideosClient,
+  requestId: string,
+  timeout: number,
+  json?: boolean,
+): Promise<VideoPollResponse> {
   const deadline = Date.now() + timeout;
   let lastProgress = -1;
 
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, VIDEO_POLL_INTERVAL_MS));
 
-    const poll = await fetch(`${XAI_API_BASE_URL}/videos/${requestId}`, {
-      headers: { Authorization: `Bearer ${bearer}` },
-    });
+    const data = await client.poll(requestId);
 
-    if (!poll.ok) {
-      throw new Error(`Poll HTTP ${poll.status}: ${(await poll.text()).slice(0, 200)}`);
+    if (data.status === "done") return data;
+    if (data.status === "failed") {
+      throw new Error(`Generation failed: ${JSON.stringify(data.error ?? "unknown")}`);
     }
-
-    const data = (await poll.json()) as Record<string, unknown>;
-    const status = data.status as string;
-
-    if (status === "done") return data;
-    if (status === "failed") {
-      const err = data.error as { code?: string; message?: string } | undefined;
-      throw new Error(`Generation failed: ${err?.code ?? "unknown"} — ${err?.message ?? ""}`);
-    }
-    if (status === "expired") throw new Error("Generation expired");
+    if (data.status === "expired") throw new Error("Generation expired");
 
     if (!json && typeof data.progress === "number" && data.progress !== lastProgress) {
-      lastProgress = data.progress as number;
+      lastProgress = data.progress;
       process.stdout.write(`\r  Progress: ${Math.round(lastProgress * 100)}%`);
     }
   }
@@ -161,7 +157,7 @@ export function videoCommand(): Command {
 
 async function generateAction(prompt: string, opts: VideoOptions): Promise<void> {
   try {
-    const bearer = await getValidBearer();
+    const client = new VideosClient(createXaiTransport());
     const duration = parseIntOrThrow(opts.seconds ?? opts.duration ?? "5", "duration", 1, 15);
     const timeout = parseIntOrThrow(opts.timeout ?? String(VIDEO_DEFAULT_TIMEOUT_S), "timeout", 1) * 1000;
     const refs = opts.ref ?? [];
@@ -194,32 +190,24 @@ async function generateAction(prompt: string, opts: VideoOptions): Promise<void>
     }
     if (opts.uploadUrl) body.output = { upload_url: opts.uploadUrl };
 
-    const res = await fetch(`${XAI_API_BASE_URL}/videos/generations`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
-
-    const { request_id } = (await res.json()) as { request_id: string };
+    const { requestId } = await client.start("generations", body);
     if (!opts.json) {
-      log.info(`Video generation started (${request_id})`);
+      log.info(`Video generation started (${requestId})`);
       log.dim(`Model: ${body.model} | ${duration}s | ${opts.aspect} | ${opts.resolution}`);
     }
 
-    const data = await pollUntilDone(request_id, bearer, timeout, opts.json);
+    const data = await pollUntilDone(client, requestId, timeout, opts.json);
     if (opts.json) { console.log(JSON.stringify(data, null, 2)); return; }
 
-    const video = data.video as { url: string; duration: number } | undefined;
+    const video = data.video;
     if (!video) throw new Error("No video in response");
 
-    const outPath = opts.output ?? `progrok-video-${request_id.slice(0, 8)}.mp4`;
+    const outPath = opts.output ?? `progrok-video-${requestId.slice(0, 8)}.mp4`;
     await downloadAndSave(video.url, outPath);
     if (!opts.json) process.stdout.write("\n");
     log.success(`Video saved: ${outPath}`);
     log.info(`Duration: ${video.duration}s`);
-    const usage = data.usage as { cost_in_usd_ticks?: number } | undefined;
+    const usage = data.raw.usage as { cost_in_usd_ticks?: number } | undefined;
     if (usage?.cost_in_usd_ticks) log.dim(`Cost: $${(usage.cost_in_usd_ticks / USD_TICKS_DIVISOR).toFixed(4)}`);
   } catch (err) {
     log.error((err as Error).message);
@@ -229,7 +217,7 @@ async function generateAction(prompt: string, opts: VideoOptions): Promise<void>
 
 async function editAction(prompt: string, opts: VideoEditOptions): Promise<void> {
   try {
-    const bearer = await getValidBearer();
+    const client = new VideosClient(createXaiTransport());
     const timeout = parseIntOrThrow(opts.timeout ?? String(VIDEO_DEFAULT_TIMEOUT_S), "timeout", 1) * 1000;
     const model = opts.model ?? DEFAULT_VIDEO_MODEL;
 
@@ -239,27 +227,24 @@ async function editAction(prompt: string, opts: VideoEditOptions): Promise<void>
 
     const sourceVideo = mediaRef(opts.video, "video");
 
-    const res = await fetch(`${XAI_API_BASE_URL}/videos/edits`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model, prompt, video: sourceVideo, ...(opts.uploadUrl ? { output: { upload_url: opts.uploadUrl } } : {}) }),
+    const { requestId } = await client.start("edits", {
+      model,
+      prompt,
+      video: sourceVideo,
+      ...(opts.uploadUrl ? { output: { upload_url: opts.uploadUrl } } : {}),
     });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
-
-    const { request_id } = (await res.json()) as { request_id: string };
     if (!opts.json) {
-      log.info(`Video edit started (${request_id})`);
+      log.info(`Video edit started (${requestId})`);
       log.dim(`Model: ${model} | Edit: "${prompt.slice(0, 60)}"`);
     }
 
-    const data = await pollUntilDone(request_id, bearer, timeout, opts.json);
+    const data = await pollUntilDone(client, requestId, timeout, opts.json);
     if (opts.json) { console.log(JSON.stringify(data, null, 2)); return; }
 
-    const outputVideo = data.video as { url: string; duration: number } | undefined;
+    const outputVideo = data.video;
     if (!outputVideo) throw new Error("No video in response");
 
-    const outPath = opts.output ?? `progrok-edit-${request_id.slice(0, 8)}.mp4`;
+    const outPath = opts.output ?? `progrok-edit-${requestId.slice(0, 8)}.mp4`;
     await downloadAndSave(outputVideo.url, outPath);
     if (!opts.json) process.stdout.write("\n");
     log.success(`Edited video saved: ${outPath}`);
@@ -272,7 +257,7 @@ async function editAction(prompt: string, opts: VideoEditOptions): Promise<void>
 
 async function extendAction(prompt: string, opts: VideoExtendOptions): Promise<void> {
   try {
-    const bearer = await getValidBearer();
+    const client = new VideosClient(createXaiTransport());
     const timeout = parseIntOrThrow(opts.timeout ?? String(VIDEO_DEFAULT_TIMEOUT_S), "timeout", 1) * 1000;
     const duration = parseIntOrThrow(opts.duration ?? "6", "duration", 2, 10);
     const model = opts.model ?? DEFAULT_VIDEO_MODEL;
@@ -283,27 +268,25 @@ async function extendAction(prompt: string, opts: VideoExtendOptions): Promise<v
 
     const sourceVideo = mediaRef(opts.video, "video");
 
-    const res = await fetch(`${XAI_API_BASE_URL}/videos/extensions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model, prompt, duration, video: sourceVideo, ...(opts.uploadUrl ? { output: { upload_url: opts.uploadUrl } } : {}) }),
+    const { requestId } = await client.start("extensions", {
+      model,
+      prompt,
+      duration,
+      video: sourceVideo,
+      ...(opts.uploadUrl ? { output: { upload_url: opts.uploadUrl } } : {}),
     });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
-
-    const { request_id } = (await res.json()) as { request_id: string };
     if (!opts.json) {
-      log.info(`Video extension started (${request_id})`);
+      log.info(`Video extension started (${requestId})`);
       log.dim(`Model: ${model} | Extend: +${duration}s | "${prompt.slice(0, 60)}"`);
     }
 
-    const data = await pollUntilDone(request_id, bearer, timeout, opts.json);
+    const data = await pollUntilDone(client, requestId, timeout, opts.json);
     if (opts.json) { console.log(JSON.stringify(data, null, 2)); return; }
 
-    const outputVideo = data.video as { url: string; duration: number } | undefined;
+    const outputVideo = data.video;
     if (!outputVideo) throw new Error("No video in response");
 
-    const outPath = opts.output ?? `progrok-extend-${request_id.slice(0, 8)}.mp4`;
+    const outPath = opts.output ?? `progrok-extend-${requestId.slice(0, 8)}.mp4`;
     await downloadAndSave(outputVideo.url, outPath);
     if (!opts.json) process.stdout.write("\n");
     log.success(`Extended video saved: ${outPath}`);
@@ -313,5 +296,3 @@ async function extendAction(prompt: string, opts: VideoExtendOptions): Promise<v
     process.exit(1);
   }
 }
-
-

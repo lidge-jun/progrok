@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { COMMAND_MANIFEST, COMMAND_NAMES } from "../src/commands/command-manifest.js";
+import {
+  COMMAND_FACTORIES,
+  createRegisteredCommands,
+} from "../src/commands/command-registry.js";
 
 function readSource(path: string): string {
   return readFileSync(path, "utf-8");
@@ -46,12 +51,18 @@ describe("CLI packaged skill contract", () => {
     assert.match(src, /proxy/);
   });
 
-  it("top-level CLI registers both skill and capabilities", () => {
-    const src = readSource("src/index.ts");
+  it("keeps manifest, factories, and Commander registration in exact parity", () => {
+    assert.deepEqual(Object.keys(COMMAND_FACTORIES), [...COMMAND_NAMES]);
+    assert.deepEqual(COMMAND_MANIFEST.map((entry) => entry.name), [...COMMAND_NAMES]);
+    assert.deepEqual(
+      createRegisteredCommands().map((command) => command.name()),
+      [...COMMAND_NAMES],
+    );
+  });
 
-    assert.match(src, /skillCommand/);
-    assert.match(src, /capabilitiesCommand/);
-    assert.match(src, /"skill"/);
-    assert.match(src, /"capabilities"/);
+  it("includes the voice commands", () => {
+    assert(COMMAND_NAMES.includes("tts"));
+    assert(COMMAND_NAMES.includes("stt"));
+    assert(COMMAND_NAMES.includes("live"));
   });
 });

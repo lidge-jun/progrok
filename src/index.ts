@@ -1,16 +1,8 @@
 import { Command } from "commander";
-import { loginCommand } from "./commands/login.js";
-import { logoutCommand } from "./commands/logout.js";
-import { proxyCommand } from "./commands/proxy.js";
-import { chatCommand } from "./commands/chat.js";
-import { modelsCommand } from "./commands/models.js";
-import { statusCommand } from "./commands/status.js";
-import { skillCommand } from "./commands/skill.js";
-import { capabilitiesCommand } from "./commands/capabilities.js";
-import { searchCommand } from "./commands/search.js";
-import { videoCommand } from "./commands/video.js";
-import { imageCommand } from "./commands/image.js";
-import { billingCommand } from "./commands/billing.js";
+import {
+  createRegisteredCommands,
+  isCommandName,
+} from "./commands/command-registry.js";
 import { showStarPrompt } from "./utils/star-prompt.js";
 import { readPackageVersion } from "./utils/version.js";
 
@@ -24,45 +16,29 @@ program
   .description(
     `Activate your xAI OAuth session as a local Grok API proxy and CLI tool surface.
 
-  SuperGrok OAuth → local proxy → OpenAI-compatible API for any client.
-  All xAI endpoints forwarded: responses, chat, images, video, tts, stt.
+  SuperGrok OAuth → native xAI clients + local OpenAI-compatible proxy.
 
   Quick start:
-    $ progrok login          # OAuth via browser (or --device-code for SSH)
-    $ progrok proxy          # Start proxy on 127.0.0.1:18645
-    $ curl localhost:18645/v1/chat/completions -d '{"model":"grok-4.3",...}'
+    $ progrok login
+    $ progrok proxy
+    $ progrok tts "Hello" --output hello.mp3
+    $ progrok stt meeting.wav --json
+    $ progrok live --event '{"type":"session.update","session":{}}' --once
 
-  Proxy forwards ALL /v1/* paths to api.x.ai — no whitelist.
-  Supported xAI surfaces:
-    /v1/responses            Responses API (streaming, tools, reasoning)
-    /v1/chat/completions     OpenAI-compatible chat
-    /v1/models               Model list
-    /v1/language-models      Detailed models (pricing, aliases, modalities)
-    /v1/images/generations   Image generation (grok-imagine-image)
-    /v1/videos/generations   Video generation (async, poll /v1/videos/{id})
-    /v1/tts                  Text-to-speech
-    /v1/stt                  Speech-to-text
-    /v1/batch/completions    Batch processing
-    /v1/embeddings           Embeddings`,
+  The proxy keeps forwarding every HTTP /v1/* path. WebSocket commands connect
+  directly to api.x.ai and never expose your OAuth token through the local proxy.`,
   )
   .version(readPackageVersion());
 
-program.addCommand(loginCommand());
-program.addCommand(logoutCommand());
-program.addCommand(proxyCommand());
-program.addCommand(chatCommand());
-program.addCommand(modelsCommand());
-program.addCommand(statusCommand());
-program.addCommand(skillCommand());
-program.addCommand(capabilitiesCommand());
-program.addCommand(searchCommand());
-program.addCommand(videoCommand());
-program.addCommand(imageCommand());
-program.addCommand(billingCommand());
+for (const command of createRegisteredCommands()) {
+  program.addCommand(command);
+}
 
-const REAL_COMMANDS = new Set(["login", "logout", "proxy", "chat", "models", "status", "skill", "capabilities", "search", "video", "image", "billing"]);
 const subcommand = process.argv[2];
-if (subcommand && REAL_COMMANDS.has(subcommand)) {
+const reservesStdout = process.argv.includes("--json") ||
+  (subcommand === "tts" && process.argv.includes("--stdout")) ||
+  subcommand === "live";
+if (subcommand && isCommandName(subcommand) && !reservesStdout) {
   await showStarPrompt();
 }
 
