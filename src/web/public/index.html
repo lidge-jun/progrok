@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="description" content="Local xAI workspace for chat, live voice, images, and video.">
+    <title>progrok workspace</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#workspace">Skip to workspace</a>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Chat sessions">
+        <div class="sidebar__header">
+          <a class="brand" href="/" aria-label="progrok home">
+            <span class="brand__mark" aria-hidden="true">p</span>
+            <span>progrok</span>
+          </a>
+          <button id="new-session" type="button" disabled>New chat</button>
+        </div>
+        <nav id="session-list" aria-label="Saved chat sessions"></nav>
+        <p class="sidebar__note">Sessions stay in this browser.</p>
+      </aside>
+
+      <div class="workspace-shell">
+        <header class="topbar">
+          <div class="topbar__context">
+            <span class="eyebrow">Local xAI workspace</span>
+            <strong>One runtime, three surfaces</strong>
+          </div>
+          <nav id="workspace-tabs" class="tabs" role="tablist" aria-label="Workspace">
+            <button role="tab" aria-selected="true" aria-controls="chat-panel" id="chat-tab">Chat</button>
+            <button role="tab" aria-selected="false" aria-controls="voice-panel" id="voice-tab" tabindex="-1">Voice</button>
+            <button role="tab" aria-selected="false" aria-controls="media-panel" id="media-tab" tabindex="-1">Media</button>
+          </nav>
+        </header>
+
+        <main id="workspace" tabindex="-1">
+          <p id="fatal-error" class="error-banner" role="alert" hidden></p>
+
+          <section id="chat-panel" role="tabpanel" aria-labelledby="chat-tab" class="panel panel--chat">
+            <h1 class="sr-only">Chat with Grok</h1>
+            <div class="panel__toolbar">
+              <label for="chat-model">Runtime model</label>
+              <select id="chat-model" disabled></select>
+              <span id="chat-status" class="status-line" role="status" aria-live="polite">Loading models</span>
+            </div>
+            <div id="messages" class="messages" aria-label="Conversation" aria-live="polite">
+              <div class="empty-state empty-state--loading">
+                <h2>Loading the runtime catalog</h2>
+                <p>The model list comes from your current xAI session.</p>
+              </div>
+            </div>
+            <form id="chat-form" class="composer">
+              <label class="sr-only" for="chat-input">Message</label>
+              <textarea id="chat-input" rows="2" required disabled placeholder="Message Grok"></textarea>
+              <div class="composer__actions">
+                <span class="key-hint">⌘ Enter</span>
+                <button id="chat-send" class="primary" type="submit" disabled>Send</button>
+                <button id="chat-stop" class="danger" type="button" hidden>Stop</button>
+              </div>
+            </form>
+          </section>
+
+          <section id="voice-panel" role="tabpanel" aria-labelledby="voice-tab" class="panel panel--voice" hidden>
+            <header class="panel__intro">
+              <p class="eyebrow">Direct xAI connection</p>
+              <h1>Live voice</h1>
+              <p>Each connection gets a new one-use client secret. Long-lived OAuth credentials stay in the local proxy.</p>
+            </header>
+            <div class="voice-layout">
+              <section class="control-surface" aria-labelledby="voice-controls-title">
+                <h2 id="voice-controls-title">Connection</h2>
+                <div class="form-grid">
+                  <label for="voice-mode">Mode</label>
+                  <select id="voice-mode">
+                    <option value="stt">Live transcription</option>
+                    <option value="realtime">Speech to speech</option>
+                  </select>
+                  <label for="voice-model">Realtime model</label>
+                  <input id="voice-model" value="grok-voice-think-fast-2.0" spellcheck="false">
+                  <label for="voice-name">Voice</label>
+                  <select id="voice-name">
+                    <option value="eve">Eve</option>
+                    <option value="ara">Ara</option>
+                    <option value="leo">Leo</option>
+                    <option value="rex">Rex</option>
+                    <option value="sal">Sal</option>
+                  </select>
+                </div>
+                <div class="actions">
+                  <button id="voice-start" class="primary" type="button">Start microphone</button>
+                  <button id="voice-finish" type="button">Finish utterance</button>
+                  <button id="voice-stop" class="danger" type="button" disabled>Stop</button>
+                </div>
+                <p id="voice-status" class="status-line" role="status" aria-live="polite">Microphone is idle</p>
+              </section>
+
+              <div class="transcript-grid" aria-label="Live transcript">
+                <section>
+                  <h2>You</h2>
+                  <p id="voice-user-transcript" class="transcript-placeholder">Your transcript will appear here.</p>
+                </section>
+                <section>
+                  <h2>Grok</h2>
+                  <p id="voice-assistant-transcript" class="transcript-placeholder">Realtime replies will appear here.</p>
+                </section>
+              </div>
+            </div>
+          </section>
+
+          <section id="media-panel" role="tabpanel" aria-labelledby="media-tab" class="panel panel--media" hidden>
+            <header class="panel__intro">
+              <p class="eyebrow">Imagine API</p>
+              <h1>Create media</h1>
+              <p>Images return immediately. Video jobs stay visible while progrok polls their real upstream status.</p>
+            </header>
+            <div class="media-layout">
+              <form id="media-form" class="control-surface">
+                <div class="form-grid">
+                  <label for="media-kind">Kind</label>
+                  <select id="media-kind" disabled>
+                    <option value="image">Image</option>
+                    <option value="video">Video</option>
+                  </select>
+                  <label for="media-model">Runtime model</label>
+                  <select id="media-model" disabled></select>
+                  <label for="media-prompt">Prompt</label>
+                  <textarea id="media-prompt" rows="6" required disabled placeholder="Describe the scene, composition, and mood"></textarea>
+                  <label class="media-options--image" for="image-count">Images</label>
+                  <input class="media-options--image" id="image-count" type="number" min="1" max="4" value="1">
+                  <label class="media-options--video" for="video-duration" hidden>Duration</label>
+                  <input class="media-options--video" id="video-duration" type="number" min="1" max="15" value="5" hidden>
+                  <label class="media-options--video" for="video-aspect" hidden>Aspect ratio</label>
+                  <select class="media-options--video" id="video-aspect" hidden>
+                    <option value="16:9">16:9</option>
+                    <option value="9:16">9:16</option>
+                    <option value="1:1">1:1</option>
+                  </select>
+                  <label class="media-options--video" for="video-resolution" hidden>Resolution</label>
+                  <select class="media-options--video" id="video-resolution" hidden>
+                    <option value="480p">480p</option>
+                    <option value="720p">720p</option>
+                  </select>
+                </div>
+                <div class="actions">
+                  <button id="media-submit" class="primary" type="submit" disabled>Generate</button>
+                  <button id="media-cancel" class="danger" type="button" hidden>Stop polling</button>
+                </div>
+              </form>
+              <section class="media-output" aria-labelledby="media-output-title">
+                <div class="media-output__header">
+                  <h2 id="media-output-title">Output</h2>
+                  <p id="media-status" class="status-line" role="status" aria-live="polite">Loading models</p>
+                </div>
+                <progress id="media-progress" max="1" aria-label="Generation progress" hidden></progress>
+                <div id="media-results" class="media-results">
+                  <div class="empty-state">
+                    <h3>No generation yet</h3>
+                    <p>Your result and job status will stay together here.</p>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+    <noscript><p class="error-banner">The progrok web app requires JavaScript.</p></noscript>
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>

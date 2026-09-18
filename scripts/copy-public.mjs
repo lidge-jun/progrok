@@ -1,4 +1,8 @@
-import { cpSync } from "node:fs";
+import { cpSync, rmSync } from "node:fs";
 
-cpSync("src/chat/public", "dist/public", { recursive: true });
-console.log("Copied chat UI assets to dist/public/");
+const source = new URL("../src/web/public/", import.meta.url);
+const target = new URL("../dist/public/", import.meta.url);
+
+rmSync(target, { recursive: true, force: true });
+cpSync(source, target, { recursive: true });
+console.log("Copied web app static assets to dist/public/");
