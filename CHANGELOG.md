@@ -50,6 +50,11 @@ native client for the xAI API, with a web app on top.
   copy. There is no legacy shim: a consumer reading `commands[i]` as a string
   must read `commands[i].name`. This is the whole reason the version is a major.
 - **`progrok chat` serves the new workspace**, not the old single-page demo.
+- **Node 22 is the minimum runtime**, raised from Node 18. Node 18 reached
+  end-of-life in 2025-04 and Node 20 in 2026-04, so neither line receives
+  security fixes any more. npm only warns about an `engines` mismatch by
+  default, but an install run with `engine-strict` will now fail on Node 18
+  or 20. CI covers Node 22, 24 and 26.
 
 ### Added
 

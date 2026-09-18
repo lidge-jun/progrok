@@ -22,8 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -36,8 +36,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -47,6 +47,36 @@ jobs:
         run: test -f dist/index.js
       - name: Smoke-run built CLI
         run: node dist/index.js --version
+
+  # The docs site only builds in pages.yml, and that workflow never runs on a
+  # pull request. Without this job a broken site is first discovered during the
+  # deploy after merge. There is no branch protection on this repository yet, so
+  # this is an advisory signal rather than a merge gate.
+  site:
+    name: Docs site build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+        working-directory: site
+      - run: npm run build
+        working-directory: site
+      # upload-pages-artifact v4+ silently drops hidden files. Fail here instead
+      # of shipping a site that is missing them.
+      - name: Reject hidden files in the built site
+        run: |
+          found=$(find site/dist -mindepth 1 -name '.*' -print)
+          if [ -n "$found" ]; then
+            echo "hidden files would be dropped by upload-pages-artifact:"
+            echo "$found"
+            exit 1
+          fi
 
   # Full test matrix across supported OSes and Node versions.
   test:
@@ -58,10 +88,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        node: ['20', '22', '24']
+        # 22 is the lowest line still supported (maintenance LTS), 24 is active
+        # LTS and 26 becomes LTS in 2026-10. Node 20 went end-of-life 2026-04-30.
+        node: ['22', '24', '26']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: npm

@@ -35,7 +35,7 @@
     "url": "https://github.com/lidge-jun/progrok.git"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "dependencies": {
     "commander": "^13.0.0",

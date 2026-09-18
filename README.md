@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/progrok.svg)](https://www.npmjs.com/package/progrok)
 [![license: MIT](https://img.shields.io/badge/license-MIT-16a085.svg)](./LICENSE)
 [![docs](https://img.shields.io/badge/docs-GitHub%20Pages-4cc9a6.svg)](https://lidge-jun.github.io/progrok/)
-[![node](https://img.shields.io/badge/node-%3E%3D18-2d3748.svg)](./package.json)
+[![node](https://img.shields.io/badge/node-%3E%3D22-2d3748.svg)](./package.json)
 
 Activate your xAI Grok OAuth session as a local API and tool surface.
 

@@ -19,15 +19,29 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
-      - run: npm install
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
         working-directory: site
       - run: npx astro build
         working-directory: site
-      - uses: actions/upload-pages-artifact@v3
+      # upload-pages-artifact excludes hidden files by default, so a hidden
+      # build output would be dropped from the deployed site without any error.
+      # This is the deploy gate; ci.yml runs the same check earlier for PR
+      # feedback, but this workflow is what actually uploads.
+      - name: Reject hidden files in the built site
+        run: |
+          found=$(find site/dist -mindepth 1 -name '.*' -print)
+          if [ -n "$found" ]; then
+            echo "these would be silently dropped from the deployed site:"
+            echo "$found"
+            exit 1
+          fi
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site/dist
 
@@ -39,4 +53,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
