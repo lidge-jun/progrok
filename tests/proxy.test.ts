@@ -9,11 +9,16 @@ import {
   prepareGrokRequestObject,
 } from "../src/proxy/composer-inject.js";
 import { relayUpstreamResponse } from "../src/proxy/relay.js";
+import { decideProxyRoute } from "../src/proxy/route-policy.js";
 import {
   createProxyApp,
   type ProxyAppDependencies,
 } from "../src/proxy/server.js";
-import type { XaiFetchInput } from "../src/transport/fetch.js";
+import {
+  executeXaiFetch,
+  type XaiFetchInput,
+} from "../src/transport/fetch.js";
+import { startFakeXai } from "./helpers/fake-xai.js";
 
 interface FetchResult {
   status: number;
@@ -191,6 +196,115 @@ describe("progrok proxy server", () => {
       });
     } finally {
       await proxy.close();
+    }
+  });
+
+  it("classifies the complete native and relay route matrix", () => {
+    const json = (value: unknown): Buffer => Buffer.from(JSON.stringify(value));
+    const cases = [
+      {
+        name: "streaming Chat",
+        input: { method: "POST", relPath: "/chat/completions", contentType: "application/json", body: json({ stream: true }) },
+        expected: "native-chat",
+      },
+      {
+        name: "streaming Responses with a parameterized content type",
+        input: { method: "post", relPath: "/responses", contentType: "application/json; charset=utf-8", body: json({ stream: true }) },
+        expected: "native-responses",
+      },
+      {
+        name: "non-streaming Chat JSON",
+        input: { method: "POST", relPath: "/chat/completions", contentType: "application/json", body: json({ stream: false }) },
+        expected: "json-relay",
+      },
+      {
+        name: "non-streaming Responses JSON",
+        input: { method: "POST", relPath: "/responses", contentType: "application/json", body: json({ input: "hello" }) },
+        expected: "json-relay",
+      },
+      {
+        name: "non-POST method",
+        input: { method: "GET", relPath: "/responses", contentType: "application/json", body: json({ stream: true }) },
+        expected: "opaque-relay",
+      },
+      {
+        name: "unknown path",
+        input: { method: "POST", relPath: "/future", contentType: "application/json", body: json({ stream: true }) },
+        expected: "opaque-relay",
+      },
+      {
+        name: "non-JSON content type",
+        input: { method: "POST", relPath: "/responses", contentType: "text/plain", body: json({ stream: true }) },
+        expected: "opaque-relay",
+      },
+      {
+        name: "malformed JSON",
+        input: { method: "POST", relPath: "/responses", contentType: "application/json", body: Buffer.from("{broken") },
+        expected: "opaque-relay",
+      },
+      {
+        name: "non-object JSON",
+        input: { method: "POST", relPath: "/responses", contentType: "application/json", body: json([]) },
+        expected: "opaque-relay",
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      assert.equal(
+        decideProxyRoute(testCase.input).kind,
+        testCase.expected,
+        testCase.name,
+      );
+    }
+  });
+
+  it("forwards an unknown route through the real transport seam to local HTTP", async () => {
+    const fake = await startFakeXai(() => ({
+      status: 207,
+      headers: { "content-type": "application/octet-stream" },
+      chunks: [new Uint8Array([0, 1, 2, 255])],
+    }));
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const original = new URL(input instanceof Request ? input.url : String(input));
+      const localUrl = `${fake.baseUrl}${original.pathname.replace(/^\/v1/, "")}${original.search}`;
+      return fetch(localUrl, init);
+    };
+    const proxy = await startProxy({
+      getBearer: async () => "stored-test-bearer",
+      fetchUpstream: (input, { bearer }) =>
+        executeXaiFetch(input, { bearer, fetchImpl }),
+    });
+    try {
+      const body = new Uint8Array([9, 8, 7, 0]);
+      const response = await request(
+        `${proxy.baseUrl}/v1/future/path?a=1&a=2`,
+        {
+          method: "POST",
+          headers: {
+            authorization: "Bearer caller-placeholder",
+            "content-type": "application/octet-stream",
+          },
+          body,
+        },
+      );
+      assert.equal(fake.requests.length, 1);
+      assert.equal(fake.requests[0]?.method, "POST");
+      assert.equal(fake.requests[0]?.pathname, "/v1/future/path");
+      assert.equal(fake.requests[0]?.search, "?a=1&a=2");
+      assert.deepEqual(fake.requests[0]?.body, Buffer.from(body));
+      assert.equal(
+        fake.requests[0]?.headers.authorization,
+        "Bearer stored-test-bearer",
+      );
+      assert.equal(
+        JSON.stringify(fake.requests[0]?.headers).includes("caller-placeholder"),
+        false,
+      );
+      assert.equal(response.status, 207);
+      assert.deepEqual(response.body, Buffer.from([0, 1, 2, 255]));
+    } finally {
+      await proxy.close();
+      await fake.close();
     }
   });
 

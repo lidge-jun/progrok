@@ -42,21 +42,21 @@ function recorder(
 }
 
 describe("REST surface public boundary", () => {
-  it("exports the nine clients and Responses WebSocket connector", () => {
-    for (const value of [
-      BatchesClient,
-      CollectionsSearchClient,
-      EmbeddingsClient,
-      FilesClient,
-      ImagesClient,
-      MiscClient,
-      ModelsClient,
-      SkillsClient,
-      VideosClient,
-      connectResponsesWebSocket,
-    ]) {
-      assert.equal(typeof value, "function");
-    }
+  it("exports exactly the nine clients and Responses WebSocket connector", async () => {
+    const boundary = await import("../src/surfaces/index.js");
+    assert.deepEqual(Object.keys(boundary).sort(), [
+      "BatchesClient",
+      "CollectionsSearchClient",
+      "EmbeddingsClient",
+      "FilesClient",
+      "ImagesClient",
+      "MiscClient",
+      "ModelsClient",
+      "SkillsClient",
+      "VideosClient",
+      "connectResponsesWebSocket",
+    ].sort());
+    for (const value of Object.values(boundary)) assert.equal(typeof value, "function");
   });
 
   it("keeps OpenAPI-only and official-guide evidence explicit", () => {

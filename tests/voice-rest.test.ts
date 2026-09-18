@@ -34,10 +34,26 @@ describe("Voice REST", () => {
     await assert.rejects(client.synthesize({ text: "x", language: "auto", replace: { "bad-key": "x" } }), RangeError);
   });
 
-  it("puts STT file last and sends URL input as multipart", async () => {
+  it("puts STT file last on the serialized wire and sends URL input as multipart", async () => {
     const form = buildSttForm({ file: new Blob(["audio"]), filename: "a.wav", language: "en", keyterm: ["one", "two"], diarize: true });
     assert.equal([...form.keys()].at(-1), "file");
     assert.deepEqual(form.getAll("keyterm"), ["one", "two"]);
+    const wireRequest = new Request("http://voice.invalid/v1/stt", {
+      method: "POST",
+      body: form,
+    });
+    assert.match(
+      wireRequest.headers.get("content-type") ?? "",
+      /^multipart\/form-data; boundary=/,
+    );
+    const multipart = Buffer.from(await wireRequest.arrayBuffer()).toString("utf8");
+    const filePosition = multipart.indexOf('name="file"; filename="a.wav"');
+    assert(filePosition > 0);
+    for (const field of ["language", "keyterm", "diarize"]) {
+      const metadataPosition = multipart.lastIndexOf(`name="${field}"`);
+      assert(metadataPosition >= 0, field);
+      assert(metadataPosition < filePosition, field);
+    }
     const result = await createSttClient({ transport: transport((input) => {
       assert(input.body instanceof FormData);
       assert.equal(input.body.get("url"), "https://example.com/a.wav");

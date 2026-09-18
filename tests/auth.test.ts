@@ -196,6 +196,7 @@ describe("auth public compatibility", () => {
     );
 
     const before = Date.now();
+    const previousInode = statSync(authFile).ino;
     await tokenStore.saveTokens({
       accessToken: "new-access",
       refreshToken: "new-refresh",
@@ -209,6 +210,7 @@ describe("auth public compatibility", () => {
     assert.ok((saved?.expiresAt ?? 0) >= before + 3_600_000);
     assert.ok((saved?.expiresAt ?? Infinity) <= Date.now() + 3_600_000);
     if (process.platform !== "win32") {
+      assert.notEqual(statSync(authFile).ino, previousInode);
       assert.equal(statSync(authFile).mode & 0o777, 0o600);
       assert.equal(statSync(join(tempHome, ".progrok")).mode & 0o777, 0o700);
     }
@@ -660,6 +662,7 @@ describe("token manager", () => {
       "refresh_token_reused",
       "revoked_token",
     ]) {
+      const responseSentinel = `credential-response-${oauthError}`;
       let now = 40_000;
       let fetchCalls = 0;
       const memory = createMemoryDependencies({
@@ -673,11 +676,20 @@ describe("token manager", () => {
         now: () => now,
         fetch: async () => {
           fetchCalls += 1;
-          return jsonResponse({ error: oauthError }, 400);
+          return jsonResponse({
+            error: oauthError,
+            error_description: responseSentinel,
+          }, 400);
         },
       });
       const manager = tokenManager.createTokenManager(memory.deps);
-      await assert.rejects(manager.getValidBearer(), /no longer valid/);
+      await assert.rejects(
+        manager.getValidBearer(),
+        (error) =>
+          error instanceof Error &&
+          /no longer valid/.test(error.message) &&
+          !error.message.includes(responseSentinel),
+      );
       await assert.rejects(manager.getValidBearer(), /no longer valid/);
       assert.equal(fetchCalls, 1);
       assert.ok(memory.getState().accessToken);

@@ -87,6 +87,16 @@ describe("reduceResponsesStream", () => {
     assert.equal(events.at(-1)?.type === "error" && events.at(-1)?.code, "stream_truncated");
   });
 
+  it("fails closed without exposing a pending tool call at strict EOF", async () => {
+    const events = await collect(reduceResponsesStream(chunks(
+      frame({ type: "response.output_item.added", item: { type: "function_call", id: "item_1", call_id: "call_1", name: "lookup", arguments: "" } }),
+      frame({ type: "response.function_call_arguments.delta", item_id: "item_1", delta: "{\"q\":\"secret\"}" }),
+    )));
+    assert.deepEqual(events.map((event) => event.type), ["heartbeat", "error"]);
+    assert.equal(events.at(-1)?.type === "error" && events.at(-1)?.code, "stream_truncated");
+    assert.equal(events.some((event) => event.type.startsWith("tool_call_")), false);
+  });
+
   it("rejects completed snapshots that do not match an open item", async () => {
     const events = await collect(reduceResponsesStream(chunks(
       frame({ type: "response.output_item.added", item: { id: "item", type: "message" } }),
