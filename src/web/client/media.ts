@@ -40,21 +40,23 @@ export class MediaController {
   constructor(
     private readonly el: MediaElements,
     private readonly models: ModelRecord[],
+    private readonly signal?: AbortSignal,
   ) {}
 
   init(): void {
+    const options = this.signal ? { signal: this.signal } : undefined;
     this.#cancel = this.el.form.querySelector<HTMLButtonElement>("#media-cancel") ??
       undefined;
     this.syncModels();
     this.el.kind.addEventListener("change", () => {
       this.#active?.abort();
       this.syncModels();
-    });
+    }, options);
     this.el.form.addEventListener("submit", (event) => {
       event.preventDefault();
       void this.run();
-    });
-    this.#cancel?.addEventListener("click", () => this.#active?.abort());
+    }, options);
+    this.#cancel?.addEventListener("click", () => this.#active?.abort(), options);
   }
 
   private syncModels(): void {
@@ -101,52 +103,72 @@ export class MediaController {
     this.#active?.abort();
     const active = new AbortController();
     this.#active = active;
+    const request = Object.freeze({
+      kind: this.el.kind.value,
+      model: this.el.model.value,
+      prompt: this.el.prompt.value,
+      count: this.formNumber("#image-count", 1),
+      duration: this.formNumber("#video-duration", 5),
+      aspect: this.formValue("#video-aspect", "16:9"),
+      resolution: this.formValue("#video-resolution", "480p"),
+      startedAt: performance.now(),
+    });
     this.el.submit.disabled = true;
     if (this.#cancel) this.#cancel.hidden = false;
     this.el.results.replaceChildren();
     this.el.status.textContent = "Submitting generation request";
 
     try {
-      if (this.el.kind.value === "image") {
+      if (request.kind === "image") {
         const images = await generateImages({
-          model: this.el.model.value,
-          prompt: this.el.prompt.value,
-          count: this.formNumber("#image-count", 1),
+          model: request.model,
+          prompt: request.prompt,
+          count: request.count,
         }, active.signal);
+        const elapsed = this.elapsedSeconds(request.startedAt);
         for (const result of images) {
           const figure = document.createElement("figure");
           const image = new Image();
           image.src = result.url;
-          image.alt = result.revisedPrompt ?? this.el.prompt.value;
+          image.alt = result.revisedPrompt ?? request.prompt;
           image.decoding = "async";
           figure.append(image);
-          if (result.revisedPrompt) {
-            const caption = document.createElement("figcaption");
-            caption.textContent = result.revisedPrompt;
-            figure.append(caption);
-          }
+          figure.append(this.caption(
+            [request.model, `${images.length} image${images.length === 1 ? "" : "s"}`, `${elapsed}s`],
+            result.revisedPrompt,
+          ));
           this.el.results.append(figure);
         }
         this.el.status.textContent = `Created ${images.length} image${images.length === 1 ? "" : "s"}.`;
       } else {
         this.el.progress.removeAttribute("value");
         const requestId = await submitVideo({
-          model: this.el.model.value,
-          prompt: this.el.prompt.value,
-          duration: this.formNumber("#video-duration", 5),
-          aspectRatio: this.formValue("#video-aspect", "16:9"),
-          resolution: this.formValue("#video-resolution", "480p"),
+          model: request.model,
+          prompt: request.prompt,
+          duration: request.duration,
+          aspectRatio: request.aspect,
+          resolution: request.resolution,
         }, active.signal);
         this.el.status.textContent = `Video job ${requestId} is pending.`;
         const job = await this.pollVideo(requestId, active.signal);
         if (!job.videoUrl) throw new Error("Completed video omitted video.url");
+        const figure = document.createElement("figure");
         const video = document.createElement("video");
         video.src = job.videoUrl;
         video.controls = true;
         video.preload = "metadata";
         video.setAttribute("playsinline", "");
-        video.setAttribute("aria-label", `Generated video for ${this.el.prompt.value}`);
-        this.el.results.append(video);
+        video.setAttribute("aria-label", `Generated video for ${request.prompt}`);
+        figure.append(video);
+        figure.append(this.caption([
+          request.model,
+          `${request.duration}s`,
+          request.aspect,
+          request.resolution,
+          `${this.elapsedSeconds(request.startedAt)}s`,
+          `job ${requestId}`,
+        ]));
+        this.el.results.append(figure);
         this.el.status.textContent = `Video job ${requestId} is complete.`;
       }
     } catch (error) {
@@ -162,6 +184,24 @@ export class MediaController {
       this.el.submit.disabled = this.el.model.options.length === 0;
       if (this.#cancel) this.#cancel.hidden = true;
     }
+  }
+
+  private elapsedSeconds(startedAt: number): string {
+    return ((performance.now() - startedAt) / 1000).toFixed(1);
+  }
+
+  private caption(parts: string[], detail?: string): HTMLElement {
+    const caption = document.createElement("figcaption");
+    const meta = document.createElement("span");
+    meta.className = "mono";
+    meta.textContent = parts.join(" · ");
+    caption.append(meta);
+    if (detail) {
+      const line = document.createElement("span");
+      line.textContent = detail;
+      caption.append(line);
+    }
+    return caption;
   }
 
   private async pollVideo(

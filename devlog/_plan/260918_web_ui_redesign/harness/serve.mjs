@@ -31,6 +31,14 @@ const SCRIPT = [
   { type: "response.completed" },
 ];
 
+// "1" fails every catalog read; "once" fails only the first so a retry can succeed.
+const CATALOG_FAILURE = process.env.PROGROK_HARNESS_FAIL_CATALOG ?? "";
+let catalogFailuresLeft = CATALOG_FAILURE === "once"
+  ? 1
+  : CATALOG_FAILURE === "1"
+  ? Number.POSITIVE_INFINITY
+  : 0;
+
 function json(res, status, body) {
   const payload = JSON.stringify(body);
   res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" });
@@ -66,7 +74,8 @@ const server = createServer(async (req, res) => {
   );
 
   if (url.pathname === "/v1/models") {
-    if (process.env.PROGROK_HARNESS_FAIL_CATALOG === "1") {
+    if (catalogFailuresLeft > 0) {
+      catalogFailuresLeft -= 1;
       return json(res, 500, { error: { message: "catalog unavailable" } });
     }
     return json(res, 200, { object: "list", data: MODELS });
@@ -114,4 +123,3 @@ const server = createServer(async (req, res) => {
 server.listen(PORT, "127.0.0.1", () => {
   process.stdout.write(`harness on http://127.0.0.1:${PORT} serving ${ROOT}\n`);
 });
-

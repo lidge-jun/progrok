@@ -213,6 +213,8 @@ input:disabled, select:disabled, textarea:disabled { color: var(--fg-disabled); 
   color: var(--danger);
   font-size: 0.8125rem;
 }
+.banner--panel { align-items: center; justify-content: space-between; }
+.banner--panel .button { flex: none; }
 .empty, .empty-state {
   display: grid;
   gap: 0.25rem;
@@ -264,6 +266,7 @@ input:disabled, select:disabled, textarea:disabled { color: var(--fg-disabled); 
 .shell {
   display: grid;
   grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   width: min(100%, var(--page-max));
   height: 100dvh;
   margin-inline: auto;
@@ -273,6 +276,7 @@ input:disabled, select:disabled, textarea:disabled { color: var(--fg-disabled); 
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
+  min-height: 0;
   background: var(--surface);
   border-right: 1px solid var(--border);
 }
@@ -340,6 +344,7 @@ input:disabled, select:disabled, textarea:disabled { color: var(--fg-disabled); 
   display: grid;
   grid-template-rows: var(--topbar-h) minmax(0, 1fr);
   min-width: 0;
+  min-height: 0;
 }
 .topbar {
   display: grid;
@@ -786,6 +791,7 @@ input:disabled, select:disabled, textarea:disabled { color: var(--fg-disabled); 
 @media (max-width: 80rem) {
   .voice { grid-template-columns: minmax(0, 1fr) minmax(15rem, 18rem); }
   .media { grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr); }
+  #rt-endpoint-row { display: none; }
 }
 @media (max-width: 64rem) {
   .voice, .media { grid-template-columns: minmax(0, 1fr); }

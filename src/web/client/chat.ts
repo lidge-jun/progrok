@@ -12,6 +12,7 @@ import { renderMessage } from "./render.js";
 const STORE_KEY = "progrok.web.sessions.v2";
 const LEGACY_STORE_KEY = "progrok_sessions";
 const MAX_SESSIONS = 50;
+const FOLLOW_THRESHOLD_PX = 48;
 const VALID_STATUSES: readonly TurnStatus[] = [
   "composing",
   "queued",
@@ -31,6 +32,7 @@ export interface ChatElements {
   stop: HTMLButtonElement;
   newSession: HTMLButtonElement;
   status: HTMLElement;
+  jump: HTMLButtonElement;
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -106,7 +108,10 @@ export class ChatController {
   #active?: AbortController;
   #modelIds = new Set<string>();
 
-  constructor(private readonly el: ChatElements) {}
+  constructor(
+    private readonly el: ChatElements,
+    private readonly signal?: AbortSignal,
+  ) {}
 
   async init(models: ModelRecord[]): Promise<void> {
     this.loadRuntimeModels(models);
@@ -210,29 +215,41 @@ export class ChatController {
   }
 
   private bind(): void {
+    const options = this.signal ? { signal: this.signal } : undefined;
     this.el.form.addEventListener("submit", (event) => {
       event.preventDefault();
       const value = this.el.input.value;
       if (!value.trim()) return;
       this.el.input.value = "";
       void this.send(value);
-    });
+    }, options);
     this.el.input.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         this.el.form.requestSubmit();
       }
-    });
-    this.el.stop.addEventListener("click", () => this.stop());
+    }, options);
+    this.el.stop.addEventListener("click", () => this.stop(), options);
     this.el.newSession.addEventListener("click", () => {
       this.createSession();
       this.render();
       this.el.input.focus();
-    });
+    }, options);
     this.el.model.addEventListener("change", () => {
       this.current().model = this.el.model.value;
       this.persist();
-    });
+      this.el.model.dispatchEvent(
+        new CustomEvent("progrok:model", { bubbles: true, detail: this.el.model.value }),
+      );
+    }, options);
+    this.el.jump.addEventListener("click", () => {
+      this.el.messages.scrollTop = this.el.messages.scrollHeight;
+      this.el.jump.hidden = true;
+      this.el.messages.focus({ preventScroll: true });
+    }, options);
+    this.el.messages.addEventListener("scroll", () => {
+      if (this.nearBottom()) this.el.jump.hidden = true;
+    }, options);
   }
 
   private current(): ChatSession {
@@ -298,8 +315,16 @@ export class ChatController {
     }
   }
 
+  private nearBottom(): boolean {
+    const { scrollHeight, scrollTop, clientHeight } = this.el.messages;
+    return scrollHeight - scrollTop - clientHeight <= FOLLOW_THRESHOLD_PX;
+  }
+
   private renderMessages(): void {
     const messages = this.current().messages;
+    const following = this.nearBottom();
+    const previousHeight = this.el.messages.scrollHeight;
+    const previousTop = this.el.messages.scrollTop;
     if (messages.length === 0) {
       const empty = document.createElement("div");
       empty.className = "empty-state";
@@ -312,7 +337,13 @@ export class ChatController {
     } else {
       this.el.messages.replaceChildren(...messages.map(renderMessage));
     }
-    this.el.messages.scrollTop = this.el.messages.scrollHeight;
+    if (following) {
+      this.el.messages.scrollTop = this.el.messages.scrollHeight;
+      this.el.jump.hidden = true;
+      return;
+    }
+    this.el.messages.scrollTop = previousTop;
+    if (this.el.messages.scrollHeight > previousHeight) this.el.jump.hidden = false;
   }
 
   private render(): void {
