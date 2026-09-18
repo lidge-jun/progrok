@@ -47,6 +47,11 @@ const TOOL_DISCIPLINE =
 
 const INJECT_PATHS = new Set(["/responses", "/chat/completions"]);
 
+export interface PreparedGrokRequest {
+  value: Record<string, unknown>;
+  changed: boolean;
+}
+
 function isComposerModel(model: unknown): boolean {
   return typeof model === "string" && model.toLowerCase().includes("composer");
 }
@@ -181,17 +186,11 @@ function injectServerSideSearch(
  * Any other request (wrong path, non-JSON body, parse error) passes through
  * untouched, and the proxy is never broken by a transform edge case.
  */
-export function prepareGrokRequest(relPath: string, body: Buffer): Buffer {
-  if (!INJECT_PATHS.has(relPath)) return body;
-  if (body.length === 0) return body;
-
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(body.toString("utf8")) as Record<string, unknown>;
-  } catch {
-    return body; // not JSON — pass through untouched
-  }
-
+export function prepareGrokRequestObject(
+  relPath: string,
+  parsed: Record<string, unknown>,
+): PreparedGrokRequest {
+  if (!INJECT_PATHS.has(relPath)) return { value: parsed, changed: false };
   try {
     const composerDisabled =
       process.env["PROGROK_DISABLE_COMPOSER_INJECT"] === "1";
@@ -202,7 +201,8 @@ export function prepareGrokRequest(relPath: string, body: Buffer): Buffer {
       stripped = stripReasoningEffort(parsed);
       injected = injectToolDiscipline(relPath, parsed);
     }
-    if (!searched && !stripped && !injected) return body;
+    const changed = searched || stripped || injected;
+    if (!changed) return { value: parsed, changed: false };
     const notes = [
       searched ? "injected server-side search" : "",
       stripped ? "stripped reasoning_effort" : "",
@@ -211,10 +211,26 @@ export function prepareGrokRequest(relPath: string, body: Buffer): Buffer {
       .filter(Boolean)
       .join(", ");
     log.dim(`[progrok] grok request adjusted (${relPath}): ${notes}`);
-    return Buffer.from(JSON.stringify(parsed), "utf8");
+    return { value: parsed, changed: true };
   } catch (err) {
-    // Never break the proxy because of a transform edge case.
     log.dim(`[progrok] grok transform skipped: ${(err as Error).message}`);
+    return { value: parsed, changed: false };
+  }
+}
+
+export function prepareGrokRequest(relPath: string, body: Buffer): Buffer {
+  if (!INJECT_PATHS.has(relPath) || body.length === 0) return body;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body.toString("utf8"));
+  } catch {
     return body;
   }
+  if (!isObject(parsed)) return body;
+
+  const prepared = prepareGrokRequestObject(relPath, parsed);
+  return prepared.changed
+    ? Buffer.from(JSON.stringify(prepared.value), "utf8")
+    : body;
 }

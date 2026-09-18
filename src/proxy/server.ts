@@ -4,39 +4,49 @@ import {
   PROXY_DEFAULT_PORT,
   PROXY_DEFAULT_HOST,
 } from "../auth/constants.js";
-import { getValidBearer } from "../auth/token-store.js";
+import { getValidBearerSnapshot } from "../auth/token-manager.js";
+import { executeXaiFetch } from "../transport/fetch.js";
 import { log } from "../utils/logger.js";
-import { prepareGrokRequest } from "./composer-inject.js";
+import { PayloadTooLargeError, readBoundedBody } from "./body.js";
+import { prepareGrokRequestObject } from "./composer-inject.js";
+import { serveNativeStream } from "./native-stream.js";
+import { filterRequestHeaders, relayUpstreamResponse } from "./relay.js";
+import { decideProxyRoute } from "./route-policy.js";
 
-const MAX_BODY_BYTES = 100 * 1024 * 1024; // 100 MB
-
-const HOP_BY_HOP = new Set([
-  "host",
-  "content-length",
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailers",
-  "transfer-encoding",
-  "upgrade",
-  "authorization",
-]);
-
-function filterHeaders(
-  headers: Record<string, string | string[] | undefined>,
-): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(headers)) {
-    if (!HOP_BY_HOP.has(key.toLowerCase()) && value) {
-      out[key] = Array.isArray(value) ? value[0] : value;
-    }
-  }
-  return out;
+export interface ProxyAppDependencies {
+  getBearer(): Promise<string>;
+  fetchUpstream: typeof executeXaiFetch;
 }
 
-export function createProxyApp(): express.Application {
+const DEFAULT_DEPS: ProxyAppDependencies = {
+  getBearer: async () => (await getValidBearerSnapshot()).bearer,
+  fetchUpstream: executeXaiFetch,
+};
+
+function sendUpstreamError(res: Response, error: unknown): void {
+  if (res.destroyed) return;
+  if (!res.headersSent) {
+    res.status(502).json({
+      error: {
+        message: `Upstream error: ${(error as Error).message}`,
+        type: "upstream_error",
+      },
+    });
+    return;
+  }
+  log.dim(
+    `[progrok] stream interrupted after response commit: ${(error as Error).message}`,
+  );
+  res.end();
+}
+
+export function createProxyApp(
+  deps?: Partial<ProxyAppDependencies>,
+): express.Express {
+  const resolvedDeps: ProxyAppDependencies = {
+    getBearer: deps?.getBearer ?? DEFAULT_DEPS.getBearer,
+    fetchUpstream: deps?.fetchUpstream ?? DEFAULT_DEPS.fetchUpstream,
+  };
   const app = express();
 
   app.get("/health", (_req: Request, res: Response) => {
@@ -44,97 +54,101 @@ export function createProxyApp(): express.Application {
   });
 
   app.all("/v1/*", (req: Request, res: Response) => {
-    void handleProxy(req, res);
+    void handleProxy(req, res, resolvedDeps).catch((error: unknown) => {
+      sendUpstreamError(res, error);
+    });
   });
 
   return app;
 }
 
-async function handleProxy(req: Request, res: Response): Promise<void> {
+async function handleProxy(
+  req: Request,
+  res: Response,
+  deps: ProxyAppDependencies,
+): Promise<void> {
   const relPath = req.path.replace(/^\/v1/, "");
 
   let bearer: string;
   try {
-    bearer = await getValidBearer();
-  } catch (err) {
+    bearer = await deps.getBearer();
+  } catch (error) {
     res.status(401).json({
-      error: { message: (err as Error).message, type: "auth_error" },
+      error: { message: (error as Error).message, type: "auth_error" },
     });
     return;
   }
 
-  const chunks: Buffer[] = [];
-  let totalBytes = 0;
-  for await (const chunk of req) {
-    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string);
-    totalBytes += buf.length;
-    if (totalBytes > MAX_BODY_BYTES) {
+  let body: Buffer;
+  try {
+    body = await readBoundedBody(req);
+  } catch (error) {
+    if (error instanceof PayloadTooLargeError) {
       res.status(413).json({
         error: {
-          message: `Request body exceeds ${MAX_BODY_BYTES / 1024 / 1024}MB limit`,
+          message: error.message,
           type: "payload_too_large",
         },
       });
       return;
     }
-    chunks.push(buf);
+    throw error;
   }
-  const body = Buffer.concat(chunks);
-  const fwdBody =
-    req.method === "POST" ? prepareGrokRequest(relPath, body) : body;
 
-  const qsIdx = req.url.indexOf("?");
-  const qs = qsIdx >= 0 ? req.url.slice(qsIdx) : "";
-  const upstreamUrl = `${XAI_API_BASE_URL}${relPath}${qs}`;
-  const fwdHeaders = filterHeaders(
-    req.headers as Record<string, string>,
-  );
-  fwdHeaders["Authorization"] = `Bearer ${bearer}`;
+  const rawContentType = req.headers["content-type"];
+  const decision = decideProxyRoute({
+    method: req.method,
+    relPath,
+    contentType: Array.isArray(rawContentType)
+      ? rawContentType[0]
+      : rawContentType,
+    body,
+  });
+  let forwardBody = body;
+  if (decision.kind !== "opaque-relay") {
+    const prepared = prepareGrokRequestObject(relPath, decision.json);
+    forwardBody = Buffer.from(JSON.stringify(prepared.value), "utf8");
+  }
+
+  const queryIndex = req.url.indexOf("?");
+  const query = queryIndex >= 0 ? req.url.slice(queryIndex) : "";
+  const controller = new AbortController();
+  const abortUpstream = (): void => {
+    if (!controller.signal.aborted) {
+      controller.abort(new Error("downstream request aborted"));
+    }
+  };
+  req.once("aborted", abortUpstream);
+  res.once("close", () => {
+    if (!res.writableEnded) abortUpstream();
+  });
 
   try {
-    const upstream = await fetch(upstreamUrl, {
+    const upstream = await deps.fetchUpstream({
       method: req.method,
-      headers: fwdHeaders,
-      body: fwdBody.length > 0 ? new Uint8Array(fwdBody) : undefined,
-    });
+      pathWithQuery: `/v1${relPath}${query}`,
+      headers: new Headers(filterRequestHeaders(req.headers)),
+      body:
+        forwardBody.length > 0 ? new Uint8Array(forwardBody) : undefined,
+      signal: controller.signal,
+    }, { bearer });
 
-    res.status(upstream.status);
-
-    for (const [key, value] of upstream.headers) {
-      const lower = key.toLowerCase();
-      if (
-        !HOP_BY_HOP.has(lower) &&
-        lower !== "content-encoding" &&
-        lower !== "content-length"
-      ) {
-        res.setHeader(key, value);
-      }
-    }
-
-    if (upstream.body) {
-      const reader = (
-        upstream.body as ReadableStream<Uint8Array>
-      ).getReader();
-      try {
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          res.write(value);
-        }
-      } catch (streamErr) {
-        log.dim(`[progrok] stream read interrupted: ${(streamErr as Error).message}`);
-      }
-    }
-    res.end();
-  } catch (err) {
-    if (!res.headersSent) {
-      res.status(502).json({
-        error: {
-          message: `Upstream error: ${(err as Error).message}`,
-          type: "upstream_error",
-        },
+    if (decision.kind === "native-chat" || decision.kind === "native-responses") {
+      const model = typeof decision.json.model === "string"
+        ? decision.json.model
+        : "unknown";
+      const handled = await serveNativeStream({
+        protocol: decision.kind === "native-chat" ? "chat" : "responses",
+        upstream,
+        downstream: res,
+        model,
       });
+      if (handled === "handled") return;
     }
+
+    await relayUpstreamResponse(upstream, res);
+  } catch (error) {
+    sendUpstreamError(res, error);
   }
 }
 
