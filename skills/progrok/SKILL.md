@@ -11,9 +11,10 @@ metadata:
 # progrok — OAuth-Activated Grok Proxy and Tool Surface
 
 `progrok` authenticates with xAI via OAuth (the same flow as the Grok web app)
-and activates that session as a local proxy plus direct CLI workflows. Any
-OpenAI-compatible client connects to the proxy with a placeholder key while
-progrok injects the real xAI OAuth bearer token locally.
+and activates that session as a native HTTP/SSE bridge, typed direct WebSocket
+clients, CLI workflows, and a local web app. Any OpenAI-compatible client
+connects to the proxy with a placeholder key while progrok injects the real xAI
+OAuth bearer token locally.
 
 This is an activation tool, not a bypass. Hermes Agent and OpenClaw document the
 same shared xAI OAuth client lineage, and Grok Build-style coding workflows can
@@ -79,6 +80,31 @@ curl http://127.0.0.1:18645/v1/responses \
     "stream": true
   }'
 ```
+
+### Pattern 2b: Direct Responses WebSocket
+
+The typed client connects to `wss://api.x.ai/v1/responses` with the stored
+server-side bearer. Requests are serialized on one connection; `stream` and
+`background` are invalid in the WebSocket request object.
+
+```ts
+// connectResponsesWebSocket is exported by src/surfaces/index.ts.
+const session = await connectResponsesWebSocket();
+await session.send({
+  type: "response.create",
+  model: "grok-4.6",
+  input: "Explain this repository",
+});
+for await (const event of session.events()) {
+  if (event.type === "text_delta") process.stdout.write(event.text);
+  if (event.type === "done" || event.type === "incomplete") break;
+}
+await session.close();
+```
+
+The connection is direct to xAI, processes one request at a time, and has an
+upstream 25-minute maximum lifetime. The first terminal event wins; EOF alone is
+not success, and mid-stream failure is never replayed.
 
 ### Pattern 3: Image generation / editing
 
@@ -157,18 +183,76 @@ curl http://127.0.0.1:18645/v1/videos/abc-123
 # Text-to-speech (voices: eve, ara, leo, rex, sal). Returns audio bytes.
 curl http://127.0.0.1:18645/v1/tts \
   -H "Content-Type: application/json" \
-  -d '{"text": "Hello [pause] world", "voice_id": "eve", "language": "en"}' -o out.mp3
+  -d '{"text": "Hello [pause] world", "voice_id": "eve", "language": "en", "output_format": {"codec": "mp3"}}' -o out.mp3
 
 # List voices
 curl http://127.0.0.1:18645/v1/tts/voices
 
 # Speech-to-text (diarize, multichannel, word timestamps)
-curl http://127.0.0.1:18645/v1/stt -F "file=@audio.mp3" -F "language=en" -F "diarize=true"
+curl http://127.0.0.1:18645/v1/stt \
+  -F "language=en" -F "diarize=true" -F "file=@audio.mp3"
 ```
 
-> Realtime Voice Agent + streaming TTS/STT use **WebSocket** endpoints that the
-> proxy does **not** forward. Mint a token with `POST /v1/realtime/client_secrets`
-> and connect directly to `wss://api.x.ai/v1/realtime`.
+The `file` part must be the last STT multipart field. TTS `output_format` is an
+object, never a codec string.
+
+CLI equivalents use the same native clients:
+
+```bash
+progrok tts "Hello" --voice eve --language en --format mp3 -o hello.mp3
+progrok stt audio.mp3 --language en --diarize --keyterm Grok --json
+progrok live --event '{"type":"session.update","session":{"voice":"eve"}}' --once
+```
+
+`live` is an NDJSON stdin/stdout bridge and does not capture microphone audio.
+
+progrok's WebSocket clients connect directly to
+`wss://api.x.ai/v1/responses`, `wss://api.x.ai/v1/realtime`,
+`wss://api.x.ai/v1/stt`, and `wss://api.x.ai/v1/tts`; the localhost HTTP proxy
+does not relay WebSocket upgrades. Server-side clients use bearer auth. Browser
+realtime and STT clients mint a new one-use secret through same-origin
+`POST /v1/realtime/client_secrets` for every connection and reconnect, then use
+the `xai-client-secret.<token>` subprotocol once on the direct xAI socket. Do not
+cache or reuse it. Browser ephemeral auth for TTS is not verified; use
+server-side bearer auth there.
+
+```ts
+async function openRealtime() {
+  const response = await fetch("/v1/realtime/client_secrets", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ expires_after: { seconds: 300 } }),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`secret mint failed: ${response.status}`);
+  const secret = await response.json();
+  const ws = new WebSocket(
+    "wss://api.x.ai/v1/realtime?model=grok-voice-think-fast-2.0",
+    [`xai-client-secret.${secret.value}`],
+  );
+  ws.addEventListener("open", () => ws.send(JSON.stringify({
+    type: "session.update",
+    session: { voice: "eve", resumption: { enabled: true } },
+  })));
+  return ws;
+}
+```
+
+Keep the mint inside the socket creation function. A secret is consumed by one
+connection, including failed/reconnected sessions. Never send OAuth, API keys,
+or client secrets in a WebSocket query parameter.
+
+### Pattern 5b: Local web app
+
+```bash
+progrok chat
+# opens http://127.0.0.1:18646
+```
+
+The web app serves its HTTP `/v1/*` proxy on the same origin. Text uses
+Responses SSE; realtime Voice and streaming STT connect directly to xAI with a
+fresh one-use browser secret for each socket. OAuth access and refresh tokens
+never enter browser HTML, JavaScript, storage, or logs.
 
 ### Pattern 6: RAG over your documents
 
@@ -209,6 +293,15 @@ resp = client.chat.completions.create(
 Full request/response contracts: see `docs/api.md`. Live metadata:
 `progrok capabilities --json`.
 
+Direct typed WebSocket surface: `wss://api.x.ai/v1/responses`,
+`wss://api.x.ai/v1/realtime`, `wss://api.x.ai/v1/stt`, and
+`wss://api.x.ai/v1/tts`. The `src/surfaces/index.ts` boundary exports
+`BatchesClient`, `CollectionsSearchClient`, `EmbeddingsClient`, `FilesClient`,
+`ImagesClient`, `MiscClient`, `ModelsClient`, `SkillsClient`, `VideosClient`,
+and `connectResponsesWebSocket`. These are repository source boundaries used by
+the CLI and tests; the current npm artifact is a CLI bundle, not a separate SDK
+entry point.
+
 ## Models
 
 ### Chat / vision (input: text + image)
@@ -226,9 +319,10 @@ Full request/response contracts: see `docs/api.md`. Live metadata:
 Cached input $0.20/1M. Above the 200K long-context threshold, chat rates double
 ($2.50 / $5.00 in/out; cached $0.40). Live search $25 / 1K sources.
 
-Aliases: `grok-4.3` also answers to `grok-latest`, `grok-4`,
-`grok-4-fast-reasoning`, `grok-3`, `grok-3-mini`, … Use `<model>-latest` to
-auto-track the newest version, `<model>-<date>` to pin a release.
+Do not assume historical aliases. `GET /v1/models` and
+`progrok models --detail` are authoritative for the current account. Use a
+rolling alias only when automatic movement is acceptable, and a concrete model
+identifier when reproducibility matters.
 
 ### Media & voice
 
@@ -237,7 +331,8 @@ auto-track the newest version, `<model>-<date>` to pin a release.
 | `grok-imagine-image` | Image gen/edit | $0.02 / image (1k/2k) |
 | `grok-imagine-image-quality` | High-quality image gen/edit | $0.04 / image (1k/2k) |
 | `grok-imagine-video` | Video gen/edit/extend (async) | $0.05 / sec (480p/720p) |
-| `grok-voice-latest` / `-fast-1.0` / `-think-fast-1.0` | Voice Agent | $3/hr agent, $15/1M TTS chars |
+| `grok-voice-latest` | Rolling Voice alias | Resolve availability from the runtime catalog. |
+| `grok-voice-think-fast-2.0` | Reproducible Voice pin and `progrok live` default | Runtime catalog and xAI account terms are authoritative. |
 
 ### Reasoning effort
 
@@ -284,12 +379,14 @@ curl http://127.0.0.1:18645/v1/responses \
 
 ## Ports & Paths
 
-- Proxy: `127.0.0.1:18645` · Chat UI: `127.0.0.1:18646` · OAuth callback: `127.0.0.1:56121`
+- HTTP proxy: `http://127.0.0.1:18645/v1` · Web app and same-origin proxy: `http://127.0.0.1:18646` · OAuth callback: `127.0.0.1:56121`
+- Direct WS: `wss://api.x.ai/v1/responses`, `/realtime`, `/stt`, `/tts` (never a localhost WS URL)
 - Config: `~/.progrok/auth.json`
 
 ## Limitations
 
-- WebSocket endpoints (`wss /v1/realtime`, `/v1/tts`, `/v1/stt`) are not proxied.
+- The localhost servers are HTTP-only; typed WebSocket clients connect directly to xAI.
+- Browser ephemeral auth is verified for realtime and STT, one secret per connection. TTS browser ephemeral auth is not verified.
 - Collection *management* (`management-api.x.ai`) is not proxied; search is.
 - `grok-4.20-multi-agent` needs the Responses API (not Chat Completions).
 
@@ -302,6 +399,18 @@ progrok models --detail       # live pricing + aliases
 progrok billing               # plan tier, usage, remaining quota
 progrok billing --json        # structured billing data for agents
 ```
+
+progrok 3.0.0 emits capabilities schema v2. `commands` is an array of
+`{ name, summary, mutatesRemote, json }` entries sourced from
+`COMMAND_MANIFEST`; endpoint entries come from `SURFACE_REGISTRY`.
+
+```js
+const capabilities = JSON.parse(output);
+if (capabilities.schemaVersion !== 2) throw new Error("unsupported schema");
+const commandNames = capabilities.commands.map((entry) => entry.name);
+```
+
+Do not treat `commands` as `string[]`; no legacy string-array shape is promised.
 
 ## Install
 

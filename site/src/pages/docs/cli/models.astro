@@ -5,13 +5,11 @@ const title = 'progrok models';
 
 <DocsLayout title={title}>
 <h1>progrok models</h1>
-<p>List available models and their capabilities.</p>
-<pre><code>{`progrok models --detail`}</code></pre>
-<table>
-<tr><th>Model</th><th>Context</th><th>Capabilities</th></tr>
-<tr><td>grok-3</td><td>131072</td><td>chat, tools, vision</td></tr>
-<tr><td>grok-3-mini</td><td>131072</td><td>chat, tools</td></tr>
-<tr><td>grok-4</td><td>131072</td><td>chat, tools, vision, reasoning</td></tr>
-<tr><td>grok-4-image</td><td>32768</td><td>image generation</td></tr>
-</table>
+<p>Read the live model catalogs available to the current xAI account. <code>GET /v1/models</code> is the runtime authority; do not copy an old static list into automation.</p>
+<pre><code>{`progrok models
+progrok models --detail
+progrok models --kind language --json
+progrok models --kind image --json`}</code></pre>
+<p><code>--detail</code> reads aliases and available metadata from the live catalog. <code>--kind</code> accepts <code>all</code>, <code>language</code>, <code>image</code>, <code>video</code>, or <code>embedding</code>. Use <code>--json</code> for scripts.</p>
+<p>For Voice, <code>grok-voice-latest</code> is a rolling alias while <code>grok-voice-think-fast-2.0</code> is the reproducible pin and current <code>progrok live</code> default.</p>
 </DocsLayout>

@@ -5,5 +5,15 @@ const title = 'Voice API';
 
 <DocsLayout title={title}>
 <h1>Voice API</h1>
-<p>The Voice API provides Text-to-Speech (TTS), Speech-to-Text (STT), and Voice Agent capabilities. WebSocket endpoints are not proxied through progrok — use ephemeral tokens for direct client connections instead.</p>
+<p>progrok exposes Voice REST through the localhost HTTP bridge and provides typed clients for direct xAI WebSockets. The localhost servers do not accept WebSocket upgrades.</p>
+<table>
+<thead><tr><th>Surface</th><th>Endpoint</th><th>Authentication</th></tr></thead>
+<tbody>
+<tr><td>TTS, STT, voices, client secrets</td><td><code>http://127.0.0.1:18645/v1/*</code></td><td>progrok injects the stored bearer.</td></tr>
+<tr><td>Realtime Voice</td><td><code>wss://api.x.ai/v1/realtime</code></td><td>Server bearer, or one fresh browser secret per connection.</td></tr>
+<tr><td>Streaming STT</td><td><code>wss://api.x.ai/v1/stt</code></td><td>Server bearer, or one fresh browser secret per connection.</td></tr>
+<tr><td>Streaming TTS</td><td><code>wss://api.x.ai/v1/tts</code></td><td>Server bearer. Browser ephemeral auth is not verified.</td></tr>
+</tbody>
+</table>
+<p>Browser realtime and STT clients mint through same-origin <code>POST /v1/realtime/client_secrets</code>, pass the value only as <code>xai-client-secret.&lt;token&gt;</code> in <code>Sec-WebSocket-Protocol</code>, and discard it after one connection. Every reconnect needs a new secret.</p>
 </DocsLayout>

@@ -46,6 +46,15 @@ batches, tokenizer requests, model listing, images, videos, voice endpoints, and
 collection search when your account has access.
 </p>
 
+<h2>WebSocket boundary</h2>
+<p>
+The localhost server is HTTP-only. Responses, realtime Voice, streaming STT,
+and streaming TTS clients connect directly to <code>wss://api.x.ai/v1</code>;
+there is no localhost WebSocket upgrade path. Server clients use the stored
+bearer. Browser realtime and STT clients mint a fresh one-use secret through
+same-origin HTTP for every connection and reconnect.
+</p>
+
 <h2>When not to use the proxy</h2>
 <p>
 Use direct commands when progrok provides a richer workflow than a generic HTTP
@@ -55,6 +64,9 @@ forwarder:
 <li><code>progrok search</code> for web/X source selection, JSON output, and reasoning effort.</li>
 <li><code>progrok image</code> for local reference files and output handling.</li>
 <li><code>progrok video</code> for async job polling and downloads.</li>
+<li><code>progrok tts</code> and <code>progrok stt</code> for local audio files.</li>
+<li><code>progrok live</code> for a direct Realtime NDJSON bridge.</li>
+<li><code>progrok chat</code> for the local web app on port 18646.</li>
 <li><code>progrok capabilities --json</code> for agent-readable metadata.</li>
 </ul>
 </DocsLayout>

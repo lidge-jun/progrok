@@ -1,10 +1,10 @@
 # progrok API Reference
 
-progrok activates your xAI OAuth session as a local API surface. It runs a
-localhost proxy that forwards every **HTTP** `/v1/*` request to
-`https://api.x.ai/v1`, injecting your refreshed OAuth token automatically. This
-document mirrors the official xAI REST API (<https://docs.x.ai>) for the
-endpoints reachable through the proxy.
+progrok activates your xAI OAuth session as a native HTTP/SSE bridge, typed xAI
+client surface, and local web app. The localhost server forwards every **HTTP**
+`/v1/*` request to `https://api.x.ai/v1`, injecting your refreshed OAuth token
+automatically. Direct WebSocket clients connect to xAI itself rather than to the
+localhost server.
 
 The design follows the same OAuth credential lineage documented by Hermes Agent
 and OpenClaw and is useful for Grok Build-style coding tools: authenticate the
@@ -15,16 +15,18 @@ use a stable local endpoint.
 replaces it with the stored OAuth bearer token. Send any placeholder value —
 the proxy handles auth.
 
-**Base URL:** `http://127.0.0.1:18645` (proxy) → `https://api.x.ai` (upstream)
+**HTTP base:** `http://127.0.0.1:18645/v1`
+
+**Direct WebSocket base:** `wss://api.x.ai/v1`
+
+**Web app:** `http://127.0.0.1:18646`
 
 **Activation model:** `progrok login` stores `~/.progrok/auth.json`;
 `progrok proxy` turns it into an OpenAI-compatible endpoint; direct commands
-such as `progrok search`, `progrok image`, and `progrok video` use the same
-credential without requiring the proxy process.
-
-> **Not proxied:** WebSocket endpoints (`wss://api.x.ai/v1/realtime`,
-> `/v1/tts`, `/v1/stt`) and Collection *management* (`management-api.x.ai`).
-> See [Limitations](#limitations).
+such as `progrok search`, `progrok image`, `progrok video`, `progrok tts`,
+`progrok stt`, and `progrok live` use the same credential without requiring the
+HTTP proxy process. Collection *management* still requires
+`management-api.x.ai`; see [Limitations](#limitations).
 
 ---
 
@@ -36,6 +38,19 @@ credential without requiring the proxy process.
 curl http://127.0.0.1:18645/health
 # {"status": "ok", "upstream": "xAI Grok", "proxy": "progrok"}
 ```
+
+## Native protocol behavior
+
+For streaming `POST /v1/chat/completions` and `POST /v1/responses` requests,
+progrok parses the known JSON request, reduces upstream SSE bytes into canonical
+typed events, and renders the requested client protocol. Non-streaming JSON,
+binary responses, multipart uploads, malformed or unknown JSON, and new HTTP
+paths retain the verified relay path.
+
+The first terminal event is authoritative; EOF by itself is not success. A
+request is retried only before response headers arrive, and only when its method
+and idempotency metadata make replay safe. After headers or stream output have
+been committed, failures are surfaced to the caller and are never replayed.
 
 ---
 
@@ -101,6 +116,39 @@ Delete a stored response → `{"id": "...", "object": "response", "deleted": tru
 Fetch a deferred completion. Returns `200` with the body when ready, `202`
 while still pending. Start a deferred request by setting `"deferred": true` on a
 chat request.
+
+## Responses WebSocket
+
+`connectResponsesWebSocket()` opens `wss://api.x.ai/v1/responses` directly with
+the stored server-side bearer. The localhost HTTP server does not accept
+WebSocket upgrades. One connection processes requests serially and has an
+upstream maximum lifetime of 25 minutes.
+
+```ts
+// connectResponsesWebSocket is exported by src/surfaces/index.ts.
+const session = await connectResponsesWebSocket();
+await session.send({
+  type: "response.create",
+  model: "grok-4.6",
+  input: "Summarize the release notes",
+});
+
+for await (const event of session.events()) {
+  if (event.type === "text_delta") process.stdout.write(event.text);
+  if (event.type === "done" || event.type === "incomplete") break;
+  if (event.type === "error") {
+    throw new Error("error" in event ? event.error.message : event.message);
+  }
+}
+await session.close();
+```
+
+Requests must have `type: "response.create"`; `stream` and `background` are not
+accepted on this transport. The client reduces response lifecycle messages into
+typed text, reasoning, tool-call, usage, completed, failed, and incomplete
+events. The first terminal event wins, and mid-stream failures are not replayed.
+Handle upstream protocol errors including `previous_response_not_found` and
+`websocket_connection_limit_reached`.
 
 ---
 
@@ -201,10 +249,10 @@ Error codes (in `error.code`): `invalid_argument`, `permission_denied`,
 
 ---
 
-## Voice (HTTP)
+## Voice REST
 
-> Realtime conversations and incremental streaming use **WebSocket** endpoints
-> that are **not** proxied — see [Limitations](#limitations).
+REST Voice calls use the localhost HTTP bridge. The direct streaming and
+realtime clients are documented in the following WebSocket sections.
 
 ### POST /v1/tts
 
@@ -218,13 +266,13 @@ curl http://127.0.0.1:18645/v1/tts \
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `text` | string | **required**, ≤15,000 chars. Supports speech tags (`[pause]`, `[laugh]`, …) and wrapping style tags |
+| `text` | string | **required**, 1–60,000 chars. Supports speech tags (`[pause]`, `[laugh]`, …) and wrapping style tags |
 | `language` | string | **required** — BCP-47 (`en`, `zh`, `pt-BR`) or `auto` |
 | `voice_id` | string | built-in (`eve` default, `ara`, `leo`, `rex`, `sal`) or custom id |
 | `output_format` | object | `{codec: mp3\|wav\|pcm\|mulaw\|alaw, sample_rate, bit_rate}` |
 | `speed` | number | speed multiplier, default `1.0` |
 | `text_normalization` | boolean | normalize numbers/abbreviations |
-| `optimize_streaming_latency` | `0`\|`1` | latency vs quality |
+| `optimize_streaming_latency` | string | `"0"` or `"1"`; latency vs quality |
 
 ### GET /v1/tts/voices · GET /v1/tts/voices/{voice_id}
 
@@ -235,7 +283,9 @@ List built-in voices / get one. Built-ins: `ara`, `eve`, `leo`, `rex`, `sal`.
 Speech-to-text. `multipart/form-data` with `file` (≤500 MB) **or** `url`.
 
 ```bash
-curl http://127.0.0.1:18645/v1/stt -F "file=@recording.mp3" -F "language=en"
+curl http://127.0.0.1:18645/v1/stt \
+  -F "language=en" \
+  -F "file=@recording.mp3"
 ```
 
 | Field | Notes |
@@ -253,10 +303,13 @@ Response: `{ text, language, duration, words: [{text, start, end, confidence}] }
 
 ### POST /v1/realtime/client_secrets
 
-Mint an ephemeral token for a browser-side Voice Agent / Realtime WebSocket
-connection. `{expires_after: {seconds}}` (≤3600, default 600). Optional
-`session.model`: `grok-voice-latest` / `grok-voice-think-fast-1.0` /
-`grok-voice-fast-1.0`.
+Mint an ephemeral client secret for one browser-side realtime or STT WebSocket
+connection. `{expires_after: {seconds}}` accepts up to 3600 seconds (default
+600), but expiry is not reuse permission: a secret is consumed by its first
+connection. Mint a new secret for every connect and reconnect.
+
+`session.model`: use `grok-voice-latest` for the rolling alias or pin
+`grok-voice-think-fast-2.0` for production reproducibility.
 
 ### Custom Voices
 
@@ -270,6 +323,100 @@ connection. `{expires_after: {seconds}}` (≤3600, default 600). Optional
 | GET | `/v1/custom-voices/{voice_id}/audio` | Download reference audio |
 
 Returns an 8-char lowercase `voice_id` usable anywhere a `voice_id` is accepted.
+
+## Realtime Voice WebSocket
+
+Connect directly to `wss://api.x.ai/v1/realtime`. Server processes use bearer
+authentication; browser realtime connections can use a one-use client secret as
+described under [Browser authentication](#browser-authentication).
+
+Query parameters are `model`, `call_id`, `conversation_id`, and
+`reasoning.effort`. `call_id` joins an incoming SIP call and requires
+server-side bearer auth. Otherwise choose the rolling `grok-voice-latest` alias
+or the reproducible `grok-voice-think-fast-2.0` pin.
+
+```ts
+// createRealtimeClient is exported by src/voice/realtime.ts.
+const client = createRealtimeClient({
+  auth: { kind: "oauth" },
+  model: "grok-voice-think-fast-2.0",
+  reasoningEffort: "medium",
+});
+await client.ready();
+client.updateSession({
+  voice: "eve",
+  resumption: { enabled: true },
+  audio: { input: { transport: "binary" } },
+});
+```
+
+The typed client covers `session.update`, base64 or binary audio input,
+commit/clear, response create/cancel, conversation create/delete/truncate,
+forced messages, function calls, hosted and MCP tools, DTMF, automatic
+ping/pong, cancellation, and conversation resumption. Server events include
+session/conversation state, VAD speech boundaries, audio/text/transcript
+deltas, function and MCP lifecycles, `response.done`, and `error`.
+
+## Streaming STT WebSocket
+
+Connect directly to `wss://api.x.ai/v1/stt`. The typed Node client uses the
+server-side bearer; the local web app uses a fresh browser client secret for
+each connection. Query options include `encoding`, `sample_rate`,
+`interim_results`, `endpointing`, `language`, `multichannel`, `channels`,
+`diarize`, repeated `keyterm`, `filler_words`, `smart_turn`,
+`smart_turn_timeout`, and `vad_threshold`.
+
+Wait for `transcript.created`, send audio as binary frames, optionally send
+`{"type":"finalize"}`, then finish with `{"type":"audio.done"}`. Treat a
+`transcript.partial` with `speech_final: true` as final evidence. In the
+2026-09-18 live probe, that event held the final text while
+`transcript.done.text` was empty and the transport then closed with code 1006.
+The client reports this as `completed-with-transport-close` rather than losing
+the transcript.
+
+## Streaming TTS WebSocket
+
+Connect directly to `wss://api.x.ai/v1/tts` with a server-side bearer. Query
+options are `voice`, required `language`, `codec`, `sample_rate`, `bit_rate`,
+`optimize_streaming_latency`, `speed`, `text_normalization`, and
+`with_timestamps`.
+
+Send `{"type":"text.delta","delta":"..."}` followed by
+`{"type":"text.done"}`. The typed client yields JSON `audio.delta` events
+whose `delta` is encoded audio, optional timestamps/duration, then
+`audio.done`. It rejects unexpected binary server frames. Browser ephemeral
+authentication for `/tts` has not been verified, so only server-side bearer
+auth is guaranteed here.
+
+## Browser authentication
+
+Browsers cannot set an `Authorization` header during a WebSocket upgrade. For
+`/realtime` and `/stt`, mint a new backend-issued secret through same-origin
+HTTP and pass it once as the only WebSocket subprotocol:
+
+```ts
+async function connectRealtime() {
+  const response = await fetch("/v1/realtime/client_secrets", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ expires_after: { seconds: 300 } }),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`secret mint failed: ${response.status}`);
+  const secret = await response.json();
+  return new WebSocket(
+    "wss://api.x.ai/v1/realtime?model=grok-voice-think-fast-2.0",
+    [`xai-client-secret.${secret.value}`],
+  );
+}
+```
+
+Run the mint inside the socket creation function so every connection and
+reconnect receives a new secret. Never cache or reuse it. Never put an OAuth
+token, API key, or client secret in the URL query. The ephemeral credential is
+valid only in the `Sec-WebSocket-Protocol` handshake; sending it as a bearer was
+observed to fail. The web app follows this flow for realtime and STT and keeps
+OAuth access and refresh tokens out of HTML, JavaScript, storage, and logs.
 
 ---
 
@@ -362,6 +509,24 @@ Text embeddings (OpenAI-compatible).
 
 Forwarded to xAI without filtering — any new HTTP endpoint works automatically.
 
+## Typed surface clients
+
+The repository's `src/surfaces/index.ts` source boundary exports clients for
+batches, files, collection search, embeddings, skills, model catalogs,
+account/tokenizer calls, images, videos, and Responses WebSocket sessions:
+
+```ts
+// Imported from the repository source boundaries.
+const transport = createXaiTransport();
+const models = await new ModelsClient(transport).list("models");
+```
+
+The REST clients share the native transport's OAuth refresh, safe pre-header
+retry classification, bounded error decoding, and URL rules. Binary and
+multipart clients preserve their protocol-specific bodies; for example, STT
+appends its `file` part last. The current npm build is a CLI application bundle,
+not a separately exported SDK entry point.
+
 ---
 
 ## Tools (Responses API)
@@ -423,15 +588,53 @@ until authorized.
 
 The token is auto-refreshed ~2 minutes before expiry.
 
+## Capabilities schema v2
+
+progrok 3.0.0 emits `schemaVersion: 2` from
+`progrok capabilities --json`. `commands` is now an array of manifest entries:
+
+```json
+{
+  "schemaVersion": 2,
+  "commands": [
+    {
+      "name": "live",
+      "summary": "Bridge Realtime events over NDJSON stdin/stdout.",
+      "mutatesRemote": true,
+      "json": true
+    }
+  ]
+}
+```
+
+`COMMAND_MANIFEST` is the command metadata source of truth and
+`SURFACE_REGISTRY` is the endpoint source of truth. Schema-v1 consumers must
+replace direct string access with:
+
+```js
+const commandNames = capabilities.commands.map((entry) => entry.name);
+```
+
+Existing CLI command names and localhost HTTP paths remain available. The
+object-array JSON change is the 3.0.0 breaking boundary; no legacy string-array
+shape is promised.
+
 ---
 
 ## Limitations
 
-- **WebSocket endpoints are not proxied.** `wss://api.x.ai/v1/realtime` (Voice
-  Agent), `wss://api.x.ai/v1/tts` (streaming TTS), and `wss://api.x.ai/v1/stt`
-  (streaming STT) require a direct connection. For the Voice Agent, mint an
-  ephemeral token with `POST /v1/realtime/client_secrets` (which *is* proxied)
-  and connect from the browser.
+- **The localhost server is HTTP-only.** Responses, realtime, streaming TTS,
+  and streaming STT sockets connect directly to `wss://api.x.ai`; there is no
+  localhost WebSocket upgrade path.
+- **Browser ephemeral scope is deliberately narrow.** One secret opens one
+  realtime or STT connection and must be replaced on reconnect. Browser
+  ephemeral auth for TTS is not claimed without live proof.
+- **Upstream connection limits still apply.** Responses WebSocket connections
+  have a 25-minute maximum lifetime and may return
+  `websocket_connection_limit_reached`.
+- **The web app is localhost-oriented.** It combines same-origin HTTP with
+  direct xAI Voice sockets and relies on its CSP/origin boundary; exposing it
+  remotely requires your own access control and origin policy.
 - **Collection management** (`management-api.x.ai`) uses a Management API key and
   is not reachable through this proxy. Only `POST /v1/documents/search` is.
 - **Multi-agent** (`grok-4.20-multi-agent`) requires the Responses API, not Chat
@@ -440,6 +643,43 @@ The token is auto-refreshed ~2 minutes before expiry.
 ---
 
 ## CLI Commands — Direct Generation
+
+### progrok tts
+
+```bash
+progrok tts "Hello from Grok" --voice eve --language en --format mp3 \
+  --output hello.mp3
+progrok tts "raw audio" --stdout > speech.mp3
+progrok tts "metadata" --json
+```
+
+`--format` accepts `mp3`, `wav`, `pcm`, `mulaw`, or `alaw`. `--stdout` cannot
+be combined with `--output` or `--json`. The command sends object-shaped
+`output_format: { codec }` and writes raw bytes or decodes the JSON audio body.
+
+### progrok stt
+
+```bash
+progrok stt meeting.wav --language ko --diarize \
+  --keyterm progrok --keyterm Grok --json
+```
+
+The positional argument is a local file. Options are `--language`,
+`--diarize`, `--multichannel`, repeatable `--keyterm`, and `--json`.
+
+### progrok live
+
+```bash
+progrok live \
+  --model grok-voice-think-fast-2.0 \
+  --reasoning medium \
+  --event '{"type":"session.update","session":{"voice":"eve"}}' \
+  --once
+```
+
+`live` is an NDJSON stdin/stdout bridge to the direct Realtime WebSocket, not a
+microphone recorder. It accepts `--conversation-id`, `--reasoning
+low|medium|high`, repeatable `--event`, `--no-stdin`, and `--once`.
 
 ### progrok video
 

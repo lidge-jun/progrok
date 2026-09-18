@@ -5,13 +5,10 @@ const title = 'Rate Limits';
 
 <DocsLayout title={title}>
 <h1>Rate Limits</h1>
-<p>Rate limits are applied per API key and vary by model tier.</p>
-<table>
-<tr><th>Tier</th><th>Model</th><th>RPM</th><th>TPM</th></tr>
-<tr><td>Free</td><td>grok-3-mini</td><td>30</td><td>15,000</td></tr>
-<tr><td>Standard</td><td>grok-3</td><td>60</td><td>100,000</td></tr>
-<tr><td>Standard</td><td>grok-3-mini</td><td>120</td><td>200,000</td></tr>
-<tr><td>Pro</td><td>grok-3</td><td>200</td><td>1,000,000</td></tr>
-<tr><td>Pro</td><td>grok-4</td><td>100</td><td>500,000</td></tr>
-</table>
+<p>Rate limits belong to the current xAI account, model, and product tier. progrok does not maintain a static RPM/TPM table because it would drift from the live account contract.</p>
+<ul>
+<li>Use <code>progrok models --detail</code> to confirm the current model catalog.</li>
+<li>Preserve and inspect upstream rate-limit and <code>Retry-After</code> headers.</li>
+<li>A <code>429</code> may be retried only when the request is replay-safe. Non-idempotent or streaming bodies are not replayed automatically.</li>
+</ul>
 </DocsLayout>

@@ -1,71 +1,56 @@
-[개념글 예약] SuperGrok / X Premium 결제해두고 API key 아깝던 놈들 필독 (Grok OAuth 프록시 progrok 배포)
+[개념글 예약] SuperGrok 세션을 로컬 API·보이스·웹앱으로 쓰는 progrok 3.0.0
 
-형들, X Premium이나 SuperGrok 매달 구독료 내면서 브라우저 웹 UI로 노가다만 뛰고 있었냐?
-API key 발급받자니 비용 이중지출이라 돈 아까웠던 갤러들을 위해 Grok OAuth 프록시 progrok 만들어서 배포한다.
+SuperGrok이나 X 구독은 해뒀는데 개발 도구에서 쓰려면 또 API 키부터 준비해야 해서 애매했던 사람들을 위한 로컬 도구다. progrok login으로 xAI OAuth 로그인을 한 번 해두면 그 세션을 HTTP API, CLI, WebSocket 클라이언트, 웹앱에서 같이 쓸 수 있다.
 
-Hermes Agent나 OpenClaw 쓰는 빌런들은 알겠지만, 걔네가 쓰는 xAI 공용 OAuth client ID (b1a00...) 기반 세션을 그대로 로컬 API로 바인딩해주는 도구임.
+무료 호출 우회기는 아니다. 계정 권한, 쿼터, 과금, 이용 제한은 전부 xAI 정책을 그대로 따른다.
 
-1. 이게 대체 뭐하는 물건임?
-- 내 계정 세션 그대로 사용: OAuth PKCE / Device Code 로그인 한 번 해두면 로컬에 세션 저장되고 자동 갱신됨.
-- OpenAI 호환 프록시: 로컬 포트 127.0.0.1:18645에 프록시 서버 띄워줌. SDK나 에이전트, Cursor, OpenClaw에서 API 주소만 로컬로 바꾸고 API key는 아무거나 넣으면 작동함.
-- CLI & Web UI 탑재: 머신러닝/에이전트 연동용 CLI 커맨드는 물론이고, progrok chat 치면 로컬 웹 챗 UI까지 바로 열림.
+1. 3.0.0 핵심
 
-2. xAI 공식 API 스펙(계약 표면) 완벽 대응
-이 프록시가 대단한 이유는 단순히 텍스트만 전달하는 게 아니라, 최근 공식 xAI 오딧(Audit) 거친 API 계약 표면(Contract Surface)을 전부 로컬 환경에 완벽하게 바인딩해준다는 거다.
+- 127.0.0.1:18645/v1/* HTTP 프록시는 Chat/Responses SSE를 직접 파싱하고 다시 렌더링한다. 파일·오디오 같은 바이너리/멀티파트 경로는 검증된 릴레이로 보낸다.
+- Responses, realtime Voice, streaming STT/TTS는 로컬 프록시를 거치지 않고 wss://api.x.ai/v1/*에 직접 붙는 타입드 클라이언트를 제공한다.
+- progrok tts, progrok stt, progrok live 명령이 추가됐다. live는 마이크 앱이 아니라 Realtime 이벤트를 NDJSON stdin/stdout으로 연결하는 명령이다.
+- progrok chat은 127.0.0.1:18646에서 텍스트 SSE, 이미지·비디오, streaming STT, realtime Voice를 한 화면에 제공한다.
+- batches, files, collections search, embeddings, skills, models, images, videos와 Responses WebSocket을 다루는 타입드 surface client가 들어갔다.
 
-[TTS (Text-to-Speech) 계약]
-- 지원 보이스: eve, ara, leo, rex, sal 5종 엔진 완벽 대응.
-- output_format 객체 파싱 및 speed 세밀화 제어 (0.7배속부터 1.5배속까지 지원).
-- 커스텀 보이스 생성: 단일 오디오 파일(최대 120초) 업로드 대응. 단, 일리노이주(BIPA) 제외 미국 지역 제한 및 기업용 API 권한 필요.
-
-[STT (Speech-to-Text) 계약]
-- 파일 직접 업로드 및 원격 URL 다운로드 방식 모두 지원.
-- 파일 용량 한계: 최대 500MB 초대형 오디오 대응.
-- 파일 우선순위(file-last) 매핑, 다이어라이즈(화자 분리), 멀티채널 오디오, keyterm 정밀 필터, raw audio 로데이터 바인딩 지원.
-
-[Files API & 스토리지]
-- 안정적인 파일 핸들링을 위해 보수적인 48MB 용량 제한 강제 적용 (공식 스펙 50MB 경계 충돌 방지).
-- expires_after 타임스탬프 순서 제어 기능 탑재.
-- 파일 내용 직접 조회(content) 및 조각 데이터(chunk) 스트리밍 엔드포인트 완벽 포팅.
-- 문서 기반 대화 지원을 위한 attachment_search 및 벡터 검색 엔진 연동.
-
-[Imagine Video 1.5 & V2V 비디오 생성 계약]
-- 텍스트 투 비디오(T2V) 및 정지 이미지 애니메이팅(I2V).
-- 레퍼런스 가이드 생성: 최대 7개의 레퍼런스 이미지를 묶어 최장 10초 분량 비디오 생성 가능.
-- 비디오 편집(Edit) 및 연장(Extend): progrok video edit --video <url> 및 progrok video extend --video <url> 커맨드로 실시간 비디오 편집(grok-imagine-video 엔진 전용).
-
-[검색 & 추론엔진 (Reasoning)]
-- Responses API 전용 web_search 및 x_search 실시간 도구 기본 내장.
-- 추론 강도 세밀 조절 지원 (none, low, medium, high, xhigh 5단계 reasoning effort 파싱).
-
-[비용 & 쿼터 제어]
-- 캐시 텍스트 할인 비율(cached text), Imagine 토큰 소모 계산, 보이스 전송 단가 및 도구 호출 비용 로깅 연동.
-
-3. 주요 기능 및 커맨드
-귀찮게 웹 UI 갈 필요 없이 터미널에서 다 됨:
-- progrok login : 브라우저 켜지면서 깔끔하게 OAuth 로그인. SSH/원격 서버용 --device-code도 됨.
-- progrok proxy : OpenAI 호환 서버 작동 시작.
-- progrok search "<검색어>" : 웹 검색이랑 실시간 X 검색(citations 포함) 결과 바로 긁어옴.
-- progrok image "<프롬프트>" : Imagine 기반 이미지 생성 및 이미지 에디팅.
-- progrok video "<프롬프트>" : 이번에 새로 나온 Grok Video 1.5 비동기 생성 및 다운로드까지 터미널에서 올클리어.
-
-⚠️ 4. 뇌절 금지 및 핵심 경고 (매우 중요)
-사용하기 전에 이거 안 읽고 나중에 계정 터졌다고 징징대면 국물도 없다.
-
-- 비공식 우회 프록시 리스크: 이 도구는 공식 API key 발급 경로가 아니라, Hermes Agent나 공식 앱이 사용하는 OAuth 인증 라인을 로컬 프록시 형태로 연동하는 거다.
-- 언제든 터질 수 있음: Hermes에서 공식 지원하지 않거나 웹 UI 전용 비공식 표면(특히 이미지/비디오 우회 생성, 실시간 STT 웹소켓 등)은 xAI 측에서 패치하면 언제든지 예고 없이 기능이 동작하지 않거나 터질 수 있음. (참고: 실시간 WebSocket 엔드포인트는 프록싱에서 제외됨)
-- 계정 정지 및 Suspension 책임은 본인에게: 비공식 API를 통한 과도한 호출, 봇 탐지 정책 위반 등으로 인해 발생할 수 있는 X/xAI 계정 제한, 정지(Suspension), 구독 해지 등의 모든 책임은 100% 사용자 본인에게 있다. 쫄리면 정식 API 요금제 결제해서 써라. 리스크 테이킹할 놈들만 쓰셈.
-- 로컬 보안 주의: 기본적으로 로컬호스트(127.0.0.1)에만 바인딩되니까 포트 외부로 그냥 열지 마라. 세션 털리면 네 계정으로 결제되거나 털린다.
-
-5. 어떻게 씀? (설치 및 실행)
-Node.js 18 이상만 있으면 글로벌 설치 한 방에 끝난다.
+2. 바로 써보기
 
 npm install -g progrok
 progrok login
 progrok proxy
-progrok search "Node.js 22 신기능" --web
+progrok chat
 
-- GitHub 레포: github.com/lidge-jun/progrok
-- 공식 문서 사이트: lidge-jun.github.io/progrok
+progrok tts "안녕하세요" --voice eve --language ko --output hello.mp3
+progrok stt meeting.wav --language ko --diarize --json
+progrok live --event '{"type":"session.update","session":{"voice":"eve"}}' --once
 
-써보고 버그 제보나 PR은 언제나 환영한다. 념글(개념글) 보내줘라 형들!
+HTTP 클라이언트는 http://127.0.0.1:18645/v1을 base URL로 잡고 API 키 자리에 비어 있지 않은 임의 값을 넣으면 된다. progrok이 그 값을 버리고 로컬에 저장된 OAuth bearer로 교체한다.
+
+3. Voice 계약
+
+- REST TTS의 output_format은 문자열이 아니라 {"codec":"mp3"} 같은 객체다.
+- REST STT multipart는 언어·화자 분리 같은 메타 필드를 먼저 넣고 file을 마지막에 넣어야 한다.
+- 브라우저 realtime/STT는 연결할 때마다 POST /v1/realtime/client_secrets로 새 secret을 발급한다.
+- secret 하나는 WebSocket 연결 한 번만 열 수 있다. 재연결할 때도 새로 발급하며 캐시하거나 재사용하면 안 된다.
+- secret은 URL이나 bearer header가 아니라 xai-client-secret.<token> WebSocket 서브프로토콜로 한 번만 전달한다.
+- 브라우저 TTS의 ephemeral 인증은 아직 실측 보장하지 않는다. streaming TTS는 서버측 bearer를 쓴다.
+- grok-voice-latest는 rolling alias다. 재현성이 필요하면 grok-voice-think-fast-2.0을 고정한다.
+
+4. 모델·메타데이터
+
+정적 모델 목록은 금방 낡는다. 현재 계정에서 실제로 보이는 목록은 아래 명령으로 확인한다.
+
+progrok models --detail
+progrok capabilities --json
+
+3.0.0의 capabilities는 schema v2다. commands가 문자열 배열이 아니라 name, summary, mutatesRemote, json을 가진 객체 배열이므로 기존 자동화는 commands.map(entry => entry.name)으로 읽어야 한다.
+
+5. 주의사항
+
+- 기본 바인딩은 localhost다. 인증 장치 없이 포트를 외부에 열지 마라.
+- ~/.progrok/auth.json은 계정 크리덴셜이다. 커밋·공유·클라우드 동기화하지 마라.
+- WebSocket은 로컬 포트가 아니라 xAI에 직접 연결한다. 브라우저에는 OAuth 토큰을 넘기지 않는다.
+- 모델 접근 권한과 가격은 런타임 카탈로그와 현재 xAI 계정 조건이 기준이다.
+- ima2-gen v3.16.1 이후에는 progrok을 번들하거나 대신 실행하지 않는다. 두 도구는 ~/.progrok/auth.json의 경로와 스키마만 공유한다.
+
+GitHub: github.com/lidge-jun/progrok
+문서: lidge-jun.github.io/progrok

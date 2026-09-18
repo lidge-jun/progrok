@@ -13,16 +13,19 @@ const title = 'Image Generation';
   -H 'Authorization: Bearer anything' \
   -H 'Content-Type: application/json' \
   -d '{
+  "model": "grok-imagine-image",
   "prompt": "a sunset over a cyberpunk city",
   "n": 1,
-  "size": "1024x1024"
+  "aspect_ratio": "1:1",
+  "resolution": "1k"
 }'`}</code></pre>
 <h2>Parameters</h2>
 <table>
 <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
 <tr><td>prompt</td><td>string</td><td>Text description of the image to generate</td></tr>
 <tr><td>n</td><td>integer</td><td>Number of images (1–4, default 1)</td></tr>
-<tr><td>size</td><td>string</td><td>Image dimensions (1024x1024, 1536x1024, 1024x1536)</td></tr>
+<tr><td>aspect_ratio</td><td>string</td><td>Output shape such as 1:1, 16:9, or 9:16</td></tr>
+<tr><td>resolution</td><td>string</td><td>1k or 2k</td></tr>
 <tr><td>response_format</td><td>string</td><td>url or b64_json</td></tr>
 </table>
 </DocsLayout>

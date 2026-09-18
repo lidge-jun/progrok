@@ -1,0 +1,18 @@
+---
+import DocsLayout from '../../../layouts/DocsLayout.astro';
+const title = 'Streaming TTS and STT';
+---
+
+<DocsLayout title={title}>
+<h1>Streaming TTS and STT</h1>
+
+<h2>Streaming STT</h2>
+<p>Connect directly to <code>wss://api.x.ai/v1/stt</code>, wait for <code>transcript.created</code>, send binary audio frames, then send <code>finalize</code> when needed and finish with <code>audio.done</code>.</p>
+<p>For browser clients, mint a new one-use secret through same-origin <code>POST /v1/realtime/client_secrets</code> for every connection and reconnect, then pass it only as <code>xai-client-secret.&lt;token&gt;</code> in the WebSocket subprotocol list.</p>
+<p>Treat <code>transcript.partial</code> with <code>speech_final=true</code> as final evidence. In the 2026-09-18 live probe it carried the completed text while <code>transcript.done.text</code> was empty, followed by transport close 1006.</p>
+
+<h2>Streaming TTS</h2>
+<p>Connect directly to <code>wss://api.x.ai/v1/tts</code> with a server-side bearer. Configure voice, required language, codec, sample rate, MP3 bit rate, latency optimization, speed, normalization, and timestamps in the query string.</p>
+<p>Send <code>text.delta</code> and <code>text.done</code>. The typed client yields JSON <code>audio.delta</code> events with encoded audio and optional timestamps, followed by <code>audio.done</code>.</p>
+<p>Browser ephemeral authentication has not been verified for TTS, so progrok documents bearer auth only for this socket.</p>
+</DocsLayout>

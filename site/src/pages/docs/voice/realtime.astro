@@ -1,0 +1,37 @@
+---
+import DocsLayout from '../../../layouts/DocsLayout.astro';
+const title = 'Realtime Voice';
+---
+
+<DocsLayout title={title}>
+<h1>Realtime Voice</h1>
+<p>Connect directly to <code>wss://api.x.ai/v1/realtime</code> for native speech-to-speech. Use <code>grok-voice-latest</code> as the rolling alias or pin <code>grok-voice-think-fast-2.0</code> for reproducibility.</p>
+
+<h2>CLI</h2>
+<pre><code>{`progrok live \
+  --model grok-voice-think-fast-2.0 \
+  --reasoning medium \
+  --event '{"type":"session.update","session":{"voice":"eve","resumption":{"enabled":true}}}' \
+  --once`}</code></pre>
+<p><code>progrok live</code> bridges NDJSON stdin/stdout. It supports <code>--conversation-id</code>, repeatable <code>--event</code>, <code>--no-stdin</code>, and <code>--once</code>; it does not capture microphone audio.</p>
+
+<h2>Protocol</h2>
+<p>Query parameters include <code>model</code>, <code>call_id</code>, <code>conversation_id</code>, and <code>reasoning.effort</code>. Sessions cover audio formats and transport, VAD, resumption, pronunciation replacement, function and hosted tools, MCP, DTMF, cancellation, and automatic ping/pong.</p>
+
+<h2>Browser-direct authentication</h2>
+<pre><code>{`async function connectRealtime() {
+  const response = await fetch("/v1/realtime/client_secrets", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ expires_after: { seconds: 300 } }),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error("secret mint failed: " + response.status);
+  const secret = await response.json();
+  return new WebSocket(
+    "wss://api.x.ai/v1/realtime?model=grok-voice-think-fast-2.0",
+    ["xai-client-secret." + secret.value],
+  );
+}`}</code></pre>
+<p>Mint inside the connection function. A secret opens exactly one connection, so every reconnect needs a fresh secret. Never cache or reuse it, and never expose the OAuth access or refresh token to browser code.</p>
+</DocsLayout>

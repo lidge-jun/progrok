@@ -5,7 +5,7 @@ const title = 'Structured Outputs';
 
 <DocsLayout title={title}>
 <h1>Structured Outputs</h1>
-<p>Force the model to return JSON conforming to a schema by setting <code>response_format</code> with a <code>json_schema</code> definition.</p>
+<p>For the Responses API, force JSON that conforms to a schema with <code>text.format</code>. Chat Completions uses the separate <code>response_format</code> field.</p>
 <pre><code>{`curl -X POST http://localhost:18645/v1/responses \
   -H 'Authorization: Bearer anything' \
   -H 'Content-Type: application/json' \

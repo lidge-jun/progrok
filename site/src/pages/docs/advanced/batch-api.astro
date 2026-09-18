@@ -5,5 +5,12 @@ const title = 'Batch API';
 
 <DocsLayout title={title}>
 <h1>Batch API</h1>
-<p>The Batch API enables async bulk processing of requests at a 20–50% discount compared to real-time pricing. Submit a batch via <code>POST /v1/batches</code> with a JSONL file of requests and poll for completion.</p>
+<p>The native Batch API is a multi-step REST workflow, not a one-shot JSONL upload.</p>
+<ol>
+<li>Create the container with <code>POST /v1/batches</code> and <code>{`{"name":"nightly"}`}</code>.</li>
+<li>Add <code>batch_requests[]</code> with <code>POST /v1/batches/&#123;batch_id&#125;/requests</code>.</li>
+<li>Poll <code>GET /v1/batches/&#123;batch_id&#125;</code> and inspect queued requests with <code>GET /requests</code>.</li>
+<li>Read <code>GET /results</code>, or cancel with <code>POST /v1/batches/&#123;batch_id&#125;:cancel</code>.</li>
+</ol>
+<p>Each request has a caller-supplied <code>batch_request_id</code> and a <code>batch_request</code> object. Pagination uses <code>limit</code> and <code>pagination_token</code>.</p>
 </DocsLayout>

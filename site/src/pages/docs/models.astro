@@ -7,9 +7,9 @@ const title = 'Models';
 <h1>Models</h1>
 <p>
 progrok exposes the Grok models available to your xAI account through the local
-OAuth bridge. Model availability can change, so treat this page as orientation
-and run <code>progrok models --detail</code> before wiring a long-running
-automation.
+OAuth bridge. <code>GET /v1/models</code> is authoritative for the active
+runtime; this page lists representative uses, not a fixed catalog. Run
+<code>progrok models --detail</code> before wiring a long-running automation.
 </p>
 
 <h2>Core text and coding models</h2>
@@ -21,6 +21,15 @@ automation.
 <tr><td><code>grok-4.20-0309-reasoning</code></td><td>Reasoning</td><td>Deeper reasoning when latency is less important.</td><td>Use explicit reasoning settings where supported.</td></tr>
 <tr><td><code>grok-4.20-0309-non-reasoning</code></td><td>Text</td><td>Lower-latency text generation.</td><td>Useful when you want Grok output without extended reasoning.</td></tr>
 <tr><td><code>grok-4.20-multi-agent-0309</code></td><td>Research</td><td>Deep research, synthesis, and high-effort search workflows.</td><td>Pair with <code>--reasoning high</code> or <code>--reasoning xhigh</code> for expensive investigations.</td></tr>
+</tbody>
+</table>
+
+<h2>Voice models</h2>
+<table>
+<thead><tr><th>Model</th><th>Use</th><th>Stability</th></tr></thead>
+<tbody>
+<tr><td><code>grok-voice-latest</code></td><td>Follow the current Voice model.</td><td>Rolling alias; behavior can move.</td></tr>
+<tr><td><code>grok-voice-think-fast-2.0</code></td><td>Realtime production sessions and the <code>progrok live</code> default.</td><td>Pinned identifier for reproducibility.</td></tr>
 </tbody>
 </table>
 

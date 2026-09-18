@@ -89,6 +89,8 @@ proxy process to be running.
 <tr><td><code>progrok image</code></td><td>Imagine image generation/editing</td><td>Handles reference files, output folders, and result extraction.</td></tr>
 <tr><td><code>progrok video</code></td><td>Imagine video jobs</td><td>Submits async jobs, polls status, and downloads completed files.</td></tr>
 <tr><td><code>progrok models</code></td><td>Live model catalog</td><td>Shows aliases, model purpose, context, and cost assumptions before automation.</td></tr>
+<tr><td><code>progrok tts</code> / <code>progrok stt</code></td><td>Voice REST clients</td><td>Handle local audio files and exact xAI request shapes.</td></tr>
+<tr><td><code>progrok live</code></td><td>Realtime Voice WebSocket</td><td>Bridges typed events over NDJSON without microphone capture.</td></tr>
 <tr><td><code>progrok capabilities</code></td><td>Machine-readable metadata</td><td>Lets agents discover ports, commands, models, and supported workflows.</td></tr>
 </tbody>
 </table>
@@ -98,7 +100,9 @@ proxy process to be running.
 <li>It does not bypass xAI access, quotas, subscriptions, pricing, or product limits.</li>
 <li>It does not make remote callers safe automatically; the proxy binds to localhost by default for a reason.</li>
 <li>It does not turn OAuth into a permanent API key. Tokens expire and are refreshed through the stored session.</li>
-<li>It does not proxy WebSocket realtime streams directly; use HTTP client-secret minting where available.</li>
+<li>The localhost servers are HTTP-only. Typed clients connect Responses and Voice sockets directly to xAI.</li>
+<li>For browser realtime and STT, the web app mints a new one-use secret through same-origin HTTP for every connection and reconnect, then sends it only in the WebSocket subprotocol handshake.</li>
+<li>Browser ephemeral authentication for TTS has not been verified; use a server-side bearer there.</li>
 </ul>
 
 <h2>When to use progrok</h2>

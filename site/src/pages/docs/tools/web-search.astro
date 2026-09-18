@@ -7,12 +7,12 @@ const title = 'Web Search';
 <h1>Web Search</h1>
 <p>Use the <code>web_search</code> tool to give the model access to current web information. You can also use <code>progrok search</code> directly from the CLI (no proxy needed).</p>
 <h2>API Usage</h2>
-<pre><code>{`curl -X POST http://localhost:18645/v1/chat/completions \
+<pre><code>{`curl -X POST http://localhost:18645/v1/responses \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gpt-4o",
-    "messages": [{"role": "user", "content": "Latest news on AI"}],
+    "model": "grok-4.6",
+    "input": "Latest news on AI",
     "tools": [{"type": "web_search"}]
   }'`}</code></pre>
 <h2>CLI Usage</h2>

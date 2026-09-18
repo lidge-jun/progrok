@@ -1,0 +1,35 @@
+---
+import DocsLayout from '../../../layouts/DocsLayout.astro';
+const title = 'Responses WebSocket';
+---
+
+<DocsLayout title={title}>
+<h1>Responses WebSocket</h1>
+<p>Use progrok's typed client to connect directly to <code>wss://api.x.ai/v1/responses</code> with the server-side bearer. The localhost HTTP server does not accept WebSocket upgrades.</p>
+
+<h2>Typed session</h2>
+<pre><code>{`// connectResponsesWebSocket is exported by src/surfaces/index.ts.
+const session = await connectResponsesWebSocket();
+await session.send({
+  type: "response.create",
+  model: "grok-4.6",
+  input: "Summarize this change",
+});
+
+for await (const event of session.events()) {
+  if (event.type === "text_delta") process.stdout.write(event.text);
+  if (event.type === "done" || event.type === "incomplete") break;
+}
+await session.close();`}</code></pre>
+<p>This is a repository source-level client used by progrok itself. The current npm artifact is a CLI bundle rather than a separately exported SDK package.</p>
+
+<h2>Lifecycle and rules</h2>
+<pre><code>{`open -> response.create -> typed deltas -> done|incomplete|error`}</code></pre>
+<ul>
+<li>Requests are processed serially on one connection. Do not send <code>stream</code> or <code>background</code>.</li>
+<li>The first terminal event wins; EOF alone is not success.</li>
+<li>Mid-stream failures are surfaced and never replayed automatically.</li>
+<li>The upstream connection lifetime is limited to 25 minutes.</li>
+<li>Handle <code>previous_response_not_found</code> and <code>websocket_connection_limit_reached</code>.</li>
+</ul>
+</DocsLayout>

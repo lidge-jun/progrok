@@ -14,6 +14,8 @@ const title = 'xAI Smoke Matrix';
 <tr><td>Models</td><td><code>/v1/models</code>, <code>/v1/language-models</code>, <code>/v1/image-generation-models</code>, <code>/v1/video-generation-models</code></td><td>All returned HTTP 200.</td></tr>
 <tr><td>Files</td><td>upload, list, metadata, content, delete</td><td>Uploaded text file returned <code>file_id</code>; content download matched; delete returned <code>deleted: true</code>.</td></tr>
 <tr><td>Voice</td><td>TTS voices, TTS generation, STT from generated TTS, realtime client secret, custom voice list</td><td>All returned HTTP 200. STT transcript returned the expected smoke text.</td></tr>
+<tr><td>Streaming STT</td><td>Bearer-authenticated direct <code>wss://api.x.ai/v1/stt</code>, binary audio, <code>finalize</code>, <code>audio.done</code></td><td>2026-09-18: <code>speech_final=true</code> carried the terminal transcript; <code>transcript.done.text</code> was empty; transport closed 1006. The recorded evidence contains only event name, duration, and status.</td></tr>
+<tr><td>Browser client secret</td><td>Fresh secret against direct STT and realtime sockets, then attempted reuse</td><td>2026-09-18: first connection opened; reuse closed 1002. The working handshake used only <code>xai-client-secret.&lt;token&gt;</code> as the subprotocol.</td></tr>
 <tr><td>Images</td><td>generation, single-image edit with data URI</td><td>Both returned base64 image output.</td></tr>
 <tr><td>Tools</td><td><code>web_search</code>, <code>x_search</code>, <code>code_execution</code></td><td>Responses completed. Code execution returned <code>437</code> for <code>19*23</code>.</td></tr>
 <tr><td>Video</td><td>T2V, I2V, R2V, edit, extend, file_id, seconds alias, upload URL, 1.5 I2V</td><td>See the dedicated Video Smoke Matrix page.</td></tr>
@@ -28,7 +30,7 @@ const title = 'xAI Smoke Matrix';
 <tr><td>Remote MCP</td><td>Requires a reachable MCP server URL and known tool contract.</td></tr>
 <tr><td><code>collections_search</code></td><td>Requires a pre-created xAI collection and management setup.</td></tr>
 <tr><td><code>attachment_search</code></td><td>Requires a chat attachment contract beyond the current progrok CLI wrappers.</td></tr>
-<tr><td>Realtime WebSocket TTS/STT/Voice Agent</td><td>WebSocket endpoints are intentionally not proxied. Only HTTP client-secret minting was smoke-tested.</td></tr>
+<tr><td>Browser ephemeral auth for streaming TTS</td><td>Not verified. progrok guarantees server-side bearer auth for <code>wss://api.x.ai/v1/tts</code> only.</td></tr>
 </tbody>
 </table>
 </DocsLayout>

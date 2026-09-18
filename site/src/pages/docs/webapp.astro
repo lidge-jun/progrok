@@ -1,0 +1,14 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+const title = 'Local Web App';
+---
+
+<DocsLayout title={title}>
+<h1>Local Web App</h1>
+<pre><code>{`progrok chat
+# opens http://127.0.0.1:18646
+# same-origin HTTP API: http://127.0.0.1:18646/v1/*`}</code></pre>
+<p>The web app provides text Responses streaming, sessions, model switching, safe rendering of reasoning and tool results, image/video workflows, streaming STT, and realtime Voice.</p>
+<p>HTTP calls use the same origin. Realtime Voice and STT mint a new one-use client secret through same-origin <code>POST /v1/realtime/client_secrets</code> for every connection and reconnect, then connect directly to <code>wss://api.x.ai</code>.</p>
+<p>OAuth access and refresh tokens are never serialized into HTML, JavaScript, storage, or browser logs. The ephemeral client secret stays in memory and is sent once in the WebSocket subprotocol handshake. TTS browser ephemeral authentication is not claimed without live proof.</p>
+</DocsLayout>

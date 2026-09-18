@@ -5,6 +5,9 @@ const title = 'progrok chat';
 
 <DocsLayout title={title}>
 <h1>progrok chat</h1>
-<p>Launch a web-based chat UI on port 18646 for interactive conversations with Grok models.</p>
-<pre><code>{`progrok chat`}</code></pre>
+<p>Launch the local web app at <code>http://127.0.0.1:18646</code>. The same origin serves the HTTP proxy under <code>/v1/*</code>.</p>
+<pre><code>{`progrok chat
+progrok chat --host 127.0.0.1 --port 18646`}</code></pre>
+<p>The app supports text Responses SSE, sessions, model switching, reasoning/tool result rendering, media workflows, streaming STT, and realtime Voice. Voice sockets connect directly to xAI after the app mints a fresh one-use client secret for every realtime or STT connection.</p>
+<p>OAuth access and refresh tokens stay on the server. They are not serialized into HTML, JavaScript, browser storage, or logs.</p>
 </DocsLayout>

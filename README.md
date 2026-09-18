@@ -8,13 +8,17 @@
 Activate your xAI Grok OAuth session as a local API and tool surface.
 
 `progrok` is an OAuth bridge for Grok. It signs in with your xAI account, stores
-a refreshable local OAuth session, and activates that session through two
+a refreshable local OAuth session, and activates that session through four
 developer-facing surfaces:
 
-1. an OpenAI-compatible localhost proxy that forwards `/v1/*` requests to
-   `api.x.ai`, and
+1. a native localhost xAI bridge that parses and renders HTTP/SSE contracts for
+   `/v1/*`, provides typed clients for direct xAI WebSockets, and retains
+   verified binary/multipart passthroughs;
 2. direct CLI commands for Grok workflows that need source selection, JSON
-   output, async polling, local files, or machine-readable metadata.
+   output, async polling, local files, voice, or machine-readable metadata;
+3. typed clients for the REST surface and direct Responses/Voice WebSockets;
+4. a local web app that combines same-origin HTTP with browser-direct Voice
+   connections without exposing the OAuth token to browser code.
 
 The point is not only "no API key." The point is that Hermes Agent, OpenClaw,
 and Grok Build-style coding workflows all rely on the same xAI OAuth credential
@@ -66,6 +70,10 @@ After `progrok login`, the stored OAuth session powers every surface below:
 | Video workflows | `progrok video` | Async video submission, polling, progress display, and download handling. |
 | Coding models | `grok-build-0.1`, `grok-composer-2.5` through the proxy | Grok Build and Composer coding work from clients that can point at a local OpenAI-compatible endpoint. |
 | Agent discovery | `progrok capabilities --json` | Machine-readable ports, commands, models, endpoints, and auth requirements. |
+| Voice CLI | `progrok tts`, `progrok stt`, `progrok live` | REST synthesis/transcription and a direct Realtime NDJSON bridge using the same OAuth session. |
+| Responses WebSocket | `wss://api.x.ai/v1/responses` | Direct typed Responses session with server-side bearer auth. |
+| Voice WebSockets | `wss://api.x.ai/v1/realtime`, `wss://api.x.ai/v1/stt`, `wss://api.x.ai/v1/tts` | Direct realtime speech, streaming transcription, and streaming synthesis with server-side bearer auth. Browser ephemeral auth is verified for realtime and STT only; mint a new one-use secret for every connection and reconnect. |
+| Local web app | `http://127.0.0.1:18646` | Same-origin HTTP plus direct xAI Voice WebSockets without exposing OAuth tokens to browser code. |
 
 The placeholder `OPENAI_API_KEY` or `Authorization` value is only there to
 satisfy client libraries. progrok replaces it before forwarding the request.
@@ -105,6 +113,10 @@ For direct tool activation, the proxy process is optional:
 progrok search --x --json "Grok Build release discussion"
 progrok image "a precise product diagram of an OAuth bridge CLI" --output ./out
 progrok video "a local proxy turning on Grok tools" --duration 5
+progrok tts "Hello from Grok" --output hello.mp3
+progrok stt meeting.wav --json
+progrok live --event '{"type":"session.update","session":{"voice":"eve"}}' --once
+progrok chat
 progrok models --detail
 progrok capabilities --json
 ```
@@ -158,6 +170,9 @@ export OPENAI_API_KEY=anything
 | `progrok video extend <prompt> --video <url>` | Continue video from last frame. `grok-imagine-video` only. |
 | `progrok billing` | Show subscription plan, usage, and remaining quota. |
 | `progrok billing --json` | Machine-readable billing and usage data. |
+| `progrok tts <text>` | Synthesize speech to a file or raw stdout. |
+| `progrok stt <file>` | Transcribe a local audio file; supports language hints, diarization, multichannel audio, and repeatable key terms. |
+| `progrok live` | Bridge direct Realtime events over NDJSON stdin/stdout; it does not capture the microphone. |
 | `progrok capabilities --json` | Print machine-readable command, model, and endpoint metadata. |
 | `progrok skill` | Print an agent-oriented usage guide. |
 
@@ -279,8 +294,22 @@ xAI API surface available to your account:
 - text-to-speech, speech-to-text, and realtime client-secret minting
 - files, batches, tokenizer, models, and collection search
 
-WebSocket endpoints are not proxied. For realtime voice streams, mint a client
-secret through the HTTP proxy and connect directly to xAI's WebSocket endpoint.
+The localhost server handles HTTP only and does not accept WebSocket upgrades.
+Node and browser clients connect directly to these xAI endpoints:
+
+- `wss://api.x.ai/v1/responses` for serial Responses requests on one connection;
+- `wss://api.x.ai/v1/realtime` for native speech-to-speech;
+- `wss://api.x.ai/v1/stt` for streaming transcription;
+- `wss://api.x.ai/v1/tts` for streaming synthesis.
+
+Server-side clients authenticate those sockets with the stored bearer. A browser
+must use the same-origin flow for realtime or STT: call
+`POST /v1/realtime/client_secrets`, create one socket with the returned secret
+as the single `xai-client-secret.<token>` WebSocket subprotocol, then discard the
+secret. A secret is consumed by one connection, so every reconnect must mint a
+new one; never cache or reuse it. Browser ephemeral auth has not been verified
+for `/v1/tts`, so TTS WebSocket documentation guarantees server-side bearer auth
+only.
 
 ## Models
 
@@ -297,6 +326,8 @@ secret through the HTTP proxy and connect directly to xAI's WebSocket endpoint.
 | `grok-imagine-image-quality` | Higher-quality image output | - | $0.01/input image; $0.05 (1K) or $0.07 (2K) output image. |
 | `grok-imagine-video` | Video: T2V, I2V, Ref2V, Edit, Extend | - | $0.002/input image, $0.01/input video sec; $0.05/sec (480p), $0.07/sec (720p). |
 | `grok-imagine-video-1.5-preview` | Video: I2V only in live smoke; no native T2V/Ref2V/Edit/Extend | - | $0.01/input image; $0.08/sec (480p), $0.14/sec (720p). |
+| `grok-voice-latest` | Rolling Voice alias | - | Resolve availability from the live catalog. |
+| `grok-voice-think-fast-2.0` | Reproducible Voice pin and `progrok live` default | - | Runtime catalog and xAI account terms are authoritative. |
 
 Run the live metadata command before relying on a model in automation:
 
@@ -308,12 +339,13 @@ progrok capabilities --json
 ## How It Works
 
 ```text
-OpenAI client, coding agent, curl script, or local tool
-  -> http://127.0.0.1:18645/v1/*
-  -> progrok loads ~/.progrok/auth.json
-  -> progrok refreshes the token if needed
-  -> progrok injects the xAI OAuth bearer token
+OpenAI client, coding agent, curl script, or local web app
+  -> http://127.0.0.1:18645/v1/* (or same-origin :18646/v1/*)
+  -> parse known JSON requests into canonical request IR
+  -> progrok loads/refreshes ~/.progrok/auth.json and injects the bearer
   -> https://api.x.ai/v1/*
+  -> reduce known SSE streams into typed events
+  -> render the client protocol; relay verified binary/multipart paths unchanged
 ```
 
 Credentials are stored locally at `~/.progrok/auth.json` and refreshed before
@@ -322,10 +354,19 @@ expiry. Treat that file like any other account credential.
 The direct command path is similar but skips the proxy server:
 
 ```text
-progrok search / image / video / models / capabilities
+progrok search / image / video / tts / stt / live / models / capabilities
   -> load the same local OAuth session
   -> call the relevant xAI endpoint
   -> add CLI-specific behavior such as polling, files, or JSON output
+```
+
+WebSocket clients skip the localhost proxy:
+
+```text
+server client -> stored bearer -> wss://api.x.ai/v1/{responses,realtime,stt,tts}
+browser -> same-origin POST /v1/realtime/client_secrets
+        -> fresh one-use xai-client-secret.<token> subprotocol
+        -> wss://api.x.ai/v1/{realtime,stt}
 ```
 
 ## Relationship to Hermes Agent, OpenClaw, and Grok Build
@@ -345,6 +386,29 @@ progrok takes that pattern and packages it as a focused bridge:
 This is why the documentation describes progrok as an activation tool. Login is
 the authorization step; the proxy and CLI commands are the activated surfaces.
 
+ima2-gen v3.16.1 no longer bundles or supervises progrok. It calls xAI directly;
+the two tools only share the path and schema of `~/.progrok/auth.json`.
+
+## 3.0.0 migration: capabilities schema v2
+
+`progrok capabilities --json` now emits `schemaVersion: 2`. Its `commands`
+property is a `CommandManifestEntry[]`, not a string array:
+
+```json
+{
+  "schemaVersion": 2,
+  "commands": [
+    {"name":"tts","summary":"Synthesize speech to a file or stdout.","mutatesRemote":true,"json":true}
+  ]
+}
+```
+
+Consumers written for schema v1 must read names with
+`capabilities.commands.map((entry) => entry.name)`. `COMMAND_MANIFEST` owns the
+command entries and `SURFACE_REGISTRY` owns endpoint metadata. Existing command
+names and localhost HTTP routes remain, but the JSON shape change is the 3.0.0
+breaking boundary.
+
 ## Security Notes
 
 - The proxy binds to localhost by default.
@@ -357,6 +421,9 @@ the authorization step; the proxy and CLI commands are the activated surfaces.
   the same policy you use for direct xAI API usage.
 - The OAuth file enables account-backed access. Do not commit it, sync it to
   untrusted machines, or share it between users.
+- Ephemeral client secrets are one-connection credentials. Keep them in memory,
+  pass them only as the WebSocket subprotocol, and mint a new secret for every
+  connection and reconnect.
 
 ## Troubleshooting
 

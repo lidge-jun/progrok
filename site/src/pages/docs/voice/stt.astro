@@ -6,6 +6,10 @@ const title = 'Speech to Text';
 <DocsLayout title={title}>
 <h1>Speech to Text</h1>
 <p>Transcribe audio using <code>POST /v1/stt</code> for REST jobs or <code>wss://api.x.ai/v1/stt</code> for streaming. REST accepts either a multipart <code>file</code> or an audio <code>url</code>.</p>
+<h2>CLI</h2>
+<pre><code>{`progrok stt recording.mp3 --language en --diarize \
+  --keyterm progrok --keyterm Grok --json`}</code></pre>
+<h2>REST</h2>
 <pre><code>{`curl -X POST http://localhost:18645/v1/stt \
   -H "Authorization: Bearer $API_KEY" \
   -F "language=en" \
@@ -22,5 +26,8 @@ const title = 'Speech to Text';
 <tr><td>sample_rate</td><td>integer</td><td>Required for raw formats.</td></tr>
 <tr><td>filler_words</td><td>boolean</td><td>Include filler words such as "um" and "uh".</td></tr>
 </table>
-<p>REST STT supports files up to 500 MB. Streaming STT is billed separately and is not proxied by progrok because it uses WebSocket transport.</p>
+<p>REST STT supports files up to 500 MB. Metadata fields must precede the multipart <code>file</code> part; progrok's client enforces that ordering.</p>
+<h2>Streaming WebSocket</h2>
+<p>Direct streaming uses <code>wss://api.x.ai/v1/stt</code>. Send binary audio after <code>transcript.created</code>, then <code>finalize</code> and <code>audio.done</code>. Treat <code>speech_final=true</code> on a partial event as final evidence even if <code>transcript.done.text</code> is empty.</p>
+<p>Browser clients must mint a new one-use secret for every connection and reconnect, and pass it only as the <code>xai-client-secret.&lt;token&gt;</code> WebSocket subprotocol.</p>
 </DocsLayout>

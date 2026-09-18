@@ -7,8 +7,9 @@ const title = 'Documentation';
 <h1>Documentation</h1>
 <p>
 progrok documents one operating model: activate your xAI OAuth session once,
-then use that session through a local OpenAI-compatible proxy and direct Grok
-tool commands. The docs are organized around that bridge, not around API keys.
+then use it through a native HTTP/SSE bridge, direct WebSocket clients and CLI
+commands, and a local web app. The docs are organized around that bridge, not
+around API keys.
 </p>
 
 <div class="callout strong">
@@ -29,6 +30,7 @@ tool commands. The docs are organized around that bridge, not around API keys.
 <tr><td>3</td><td><a href="/progrok/docs/cli/login">Login</a></td><td>Browser login, device-code login, stored credential path, and validation.</td></tr>
 <tr><td>4</td><td><a href="/progrok/docs/cli/proxy">Proxy</a></td><td>How placeholder keys become OAuth-backed upstream requests.</td></tr>
 <tr><td>5</td><td><a href="/progrok/docs/tools/overview">Tools overview</a></td><td>Which proxy tools and direct CLI commands are activated by the session.</td></tr>
+<tr><td>6</td><td><a href="/progrok/docs/webapp">Web app</a></td><td>How same-origin HTTP and direct xAI Voice sockets work together on port 18646.</td></tr>
 </tbody>
 </table>
 
@@ -36,6 +38,7 @@ tool commands. The docs are organized around that bridge, not around API keys.
 <ul>
 <li><a href="/progrok/docs/concepts/oauth-bridge">OAuth Bridge</a></li>
 <li><a href="/progrok/docs/quickstart">Quick Start</a></li>
+<li><a href="/progrok/docs/webapp">Web App</a></li>
 <li><a href="/progrok/docs/models">Models</a></li>
 <li><a href="/progrok/docs/pricing">Pricing</a></li>
 </ul>
@@ -56,7 +59,8 @@ tool commands. The docs are organized around that bridge, not around API keys.
 <li><a href="/progrok/docs/text/generation">Generation</a></li>
 <li><a href="/progrok/docs/text/reasoning">Reasoning</a></li>
 <li><a href="/progrok/docs/text/structured-outputs">Structured Outputs</a></li>
-<li><a href="/progrok/docs/text/streaming">Streaming</a></li>
+<li><a href="/progrok/docs/text/streaming">SSE Streaming</a></li>
+<li><a href="/progrok/docs/text/responses-websocket">Responses WebSocket</a></li>
 <li><a href="/progrok/docs/text/multi-agent">Multi-Agent</a></li>
 </ul>
 
@@ -81,6 +85,8 @@ tool commands. The docs are organized around that bridge, not around API keys.
 <li><a href="/progrok/docs/voice/overview">Overview</a></li>
 <li><a href="/progrok/docs/voice/tts">Text to Speech</a></li>
 <li><a href="/progrok/docs/voice/stt">Speech to Text</a></li>
+<li><a href="/progrok/docs/voice/realtime">Realtime Voice</a></li>
+<li><a href="/progrok/docs/voice/streaming">Streaming TTS and STT</a></li>
 <li><a href="/progrok/docs/voice/custom-voices">Custom Voices</a></li>
 </ul>
 

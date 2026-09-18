@@ -5,12 +5,12 @@ const title = 'Function Calling';
 
 <DocsLayout title={title}>
 <h1>Function Calling</h1>
-<p>Define custom functions that the model can invoke. The model returns a tool call with arguments; your application executes the function and returns the result.</p>
+<p>Define custom functions that the model can invoke. The model returns a tool call with arguments; your application executes the function and returns the result. Chat Completions nests the definition under <code>function</code>; Responses uses its own flat tool shape.</p>
 <pre><code>{`curl -X POST http://localhost:18645/v1/chat/completions \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gpt-4o",
+    "model": "grok-4.6",
     "messages": [{"role": "user", "content": "What is the weather in Seoul?"}],
     "tools": [{
       "type": "function",
@@ -27,4 +27,5 @@ const title = 'Function Calling';
       }
     }]
   }'`}</code></pre>
+<p>For Responses, send a tool such as <code>{`{"type":"function","name":"get_weather","parameters":{...}}`}</code> and return a <code>function_call_output</code> item using the emitted <code>call_id</code>.</p>
 </DocsLayout>
