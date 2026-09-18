@@ -4,76 +4,149 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
-    <meta name="description" content="Local xAI workspace for chat, live voice, images, and video.">
+    <meta name="theme-color" content="#0a0b0d">
+    <meta name="description" content="Local workspace for the progrok xAI bridge: chat, live voice, and media generation.">
     <title>progrok workspace</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/style.css">
   </head>
   <body>
     <a class="skip-link" href="#workspace">Skip to workspace</a>
-    <div class="app-shell">
-      <aside class="sidebar" aria-label="Chat sessions">
-        <div class="sidebar__header">
-          <a class="brand" href="/" aria-label="progrok home">
+
+    <svg class="sprite" hidden aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+      <symbol id="i-mic-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9V6a3 3 0 0 1 6 0v5M5 11a7 7 0 0 0 11.5 5.4M12 18v3M4 4l16 16"/></symbol>
+      <symbol id="i-stop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12h13M12 6l6 6-6 6"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5 21 19H3z"/><path d="M12 10v4M12 16.6v.1"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+      <symbol id="i-wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 12h2M8 7v10M12 4v16M16 8v8M21 12h-2"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m8 10 4 4 4-4"/></symbol>
+    </svg>
+
+    <div class="shell">
+      <aside class="rail" aria-label="Chat sessions">
+        <div class="rail__head">
+          <a class="brand" href="/">
             <span class="brand__mark" aria-hidden="true">p</span>
-            <span>progrok</span>
+            <span class="brand__name">progrok</span>
           </a>
-          <button id="new-session" type="button" disabled>New chat</button>
+          <button id="new-session" class="icon-button" type="button" disabled aria-label="New chat">
+            <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+          </button>
         </div>
         <nav id="session-list" aria-label="Saved chat sessions"></nav>
-        <p class="sidebar__note">Sessions stay in this browser.</p>
+        <p class="rail__note">Sessions stay in this browser.</p>
       </aside>
 
-      <div class="workspace-shell">
+      <div class="workspace">
         <header class="topbar">
-          <div class="topbar__context">
-            <span class="eyebrow">Local xAI workspace</span>
-            <strong>One runtime, three surfaces</strong>
-          </div>
+          <h1 class="topbar__title">progrok workspace</h1>
           <nav id="workspace-tabs" class="tabs" role="tablist" aria-label="Workspace">
-            <button role="tab" aria-selected="true" aria-controls="chat-panel" id="chat-tab">Chat</button>
-            <button role="tab" aria-selected="false" aria-controls="voice-panel" id="voice-tab" tabindex="-1">Voice</button>
-            <button role="tab" aria-selected="false" aria-controls="media-panel" id="media-tab" tabindex="-1">Media</button>
+            <button role="tab" aria-selected="true" aria-controls="chat-panel" id="chat-tab" type="button">Chat</button>
+            <button role="tab" aria-selected="false" aria-controls="voice-panel" id="voice-tab" type="button" tabindex="-1">Voice</button>
+            <button role="tab" aria-selected="false" aria-controls="media-panel" id="media-tab" type="button" tabindex="-1">Media</button>
           </nav>
+          <dl class="runtime">
+            <div class="runtime__item" id="rt-endpoint-row" hidden>
+              <dt>Endpoint</dt>
+              <dd id="rt-endpoint" class="mono"></dd>
+            </div>
+            <div class="runtime__item" id="rt-catalog-row" hidden>
+              <dt>Catalog</dt>
+              <dd id="rt-catalog"></dd>
+            </div>
+            <div class="runtime__item" id="rt-model-row" hidden>
+              <dt>Model</dt>
+              <dd id="rt-model" class="mono"></dd>
+            </div>
+          </dl>
         </header>
 
         <main id="workspace" tabindex="-1">
-          <p id="fatal-error" class="error-banner" role="alert" hidden></p>
+          <p id="fatal-error" class="banner" role="alert" hidden></p>
 
           <section id="chat-panel" role="tabpanel" aria-labelledby="chat-tab" class="panel panel--chat">
-            <h1 class="sr-only">Chat with Grok</h1>
-            <div class="panel__toolbar">
-              <label for="chat-model">Runtime model</label>
+            <h2 class="sr-only">Chat with Grok</h2>
+            <div class="toolbar">
+              <label for="chat-model">Model</label>
               <select id="chat-model" disabled></select>
-              <span id="chat-status" class="status-line" role="status" aria-live="polite">Loading models</span>
+              <span id="chat-status" class="status" role="status" aria-live="polite">Loading models</span>
             </div>
-            <div id="messages" class="messages" aria-label="Conversation" aria-live="polite">
-              <div class="empty-state empty-state--loading">
-                <h2>Loading the runtime catalog</h2>
-                <p>The model list comes from your current xAI session.</p>
+            <div class="thread">
+              <div id="messages" class="messages" aria-label="Conversation" aria-live="polite">
+                <div class="empty">
+                  <p class="empty__title">Loading the runtime catalog</p>
+                  <p>The model list comes from your current xAI session.</p>
+                </div>
               </div>
+              <button id="chat-jump" class="jump" type="button" hidden>
+                New response
+                <svg class="icon" aria-hidden="true"><use href="#i-chevron"></use></svg>
+              </button>
             </div>
             <form id="chat-form" class="composer">
               <label class="sr-only" for="chat-input">Message</label>
-              <textarea id="chat-input" rows="2" required disabled placeholder="Message Grok"></textarea>
+              <textarea id="chat-input" rows="1" required disabled placeholder="Message Grok"></textarea>
               <div class="composer__actions">
-                <span class="key-hint">⌘ Enter</span>
-                <button id="chat-send" class="primary" type="submit" disabled>Send</button>
-                <button id="chat-stop" class="danger" type="button" hidden>Stop</button>
+                <kbd class="hint">&#8984; &#9166;</kbd>
+                <button id="chat-send" class="button button--primary" type="submit" disabled>
+                  <svg class="icon" aria-hidden="true"><use href="#i-send"></use></svg>
+                  Send
+                </button>
+                <button id="chat-stop" class="button button--danger" type="button" hidden>
+                  <svg class="icon" aria-hidden="true"><use href="#i-stop"></use></svg>
+                  Stop
+                </button>
               </div>
             </form>
           </section>
 
           <section id="voice-panel" role="tabpanel" aria-labelledby="voice-tab" class="panel panel--voice" hidden>
-            <header class="panel__intro">
-              <p class="eyebrow">Direct xAI connection</p>
-              <h1>Live voice</h1>
-              <p>Each connection gets a new one-use client secret. Long-lived OAuth credentials stay in the local proxy.</p>
-            </header>
-            <div class="voice-layout">
-              <section class="control-surface" aria-labelledby="voice-controls-title">
-                <h2 id="voice-controls-title">Connection</h2>
-                <div class="form-grid">
+            <h2 class="sr-only">Live voice</h2>
+            <div class="voice">
+              <div class="voice__stage">
+                <div class="stage__head">
+                  <p id="voice-status" class="chip" role="status" aria-live="polite" data-state="idle">Microphone is idle</p>
+                  <div class="meters">
+                    <div class="meter" data-channel="input">
+                      <p class="meter__label"><svg class="icon" aria-hidden="true"><use href="#i-mic"></use></svg><span>You</span></p>
+                      <div class="meter__bars" id="voice-input-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                    </div>
+                    <div class="meter" data-channel="output">
+                      <p class="meter__label"><svg class="icon" aria-hidden="true"><use href="#i-wave"></use></svg><span>Grok</span></p>
+                      <div class="meter__bars" id="voice-output-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                    </div>
+                  </div>
+                  <dl class="stage__meta">
+                    <div class="meta" id="voice-elapsed-row" hidden>
+                      <dt>Elapsed</dt><dd id="voice-elapsed" class="mono"></dd>
+                    </div>
+                    <div class="meta" id="voice-event-row" hidden>
+                      <dt>Last event</dt><dd id="voice-last-event" class="mono"></dd>
+                    </div>
+                  </dl>
+                  <button id="voice-mute" class="icon-button" type="button" aria-pressed="false" aria-label="Mute microphone" hidden>
+                    <svg class="icon" aria-hidden="true"><use href="#i-mic"></use></svg>
+                  </button>
+                </div>
+
+                <div class="stream">
+                  <section class="turn" data-speaker="user">
+                    <h3>You</h3>
+                    <p id="voice-user-transcript" class="transcript"></p>
+                  </section>
+                  <section class="turn" data-speaker="assistant">
+                    <h3>Grok</h3>
+                    <p id="voice-assistant-transcript" class="transcript"></p>
+                  </section>
+                </div>
+              </div>
+
+              <aside class="voice__console">
+                <h3>Connection</h3>
+                <div class="fields">
                   <label for="voice-mode">Mode</label>
                   <select id="voice-mode">
                     <option value="stt">Live transcription</option>
@@ -91,49 +164,53 @@
                   </select>
                 </div>
                 <div class="actions">
-                  <button id="voice-start" class="primary" type="button">Start microphone</button>
-                  <button id="voice-finish" type="button">Finish utterance</button>
-                  <button id="voice-stop" class="danger" type="button" disabled>Stop</button>
+                  <button id="voice-start" class="button button--primary" type="button">
+                    <svg class="icon" aria-hidden="true"><use href="#i-mic"></use></svg>
+                    Start
+                  </button>
+                  <button id="voice-finish" class="button" type="button">Finish utterance</button>
+                  <button id="voice-stop" class="button button--danger" type="button" disabled>
+                    <svg class="icon" aria-hidden="true"><use href="#i-stop"></use></svg>
+                    Stop
+                  </button>
                 </div>
-                <p id="voice-status" class="status-line" role="status" aria-live="polite">Microphone is idle</p>
-              </section>
 
-              <div class="transcript-grid" aria-label="Live transcript">
-                <section>
-                  <h2>You</h2>
-                  <p id="voice-user-transcript" class="transcript-placeholder">Your transcript will appear here.</p>
-                </section>
-                <section>
-                  <h2>Grok</h2>
-                  <p id="voice-assistant-transcript" class="transcript-placeholder">Realtime replies will appear here.</p>
-                </section>
-              </div>
+                <div id="voice-transport" hidden>
+                  <h3>Transport</h3>
+                  <dl class="rows">
+                    <div class="row" id="voice-endpoint-row" hidden><dt>Endpoint</dt><dd id="voice-endpoint" class="mono"></dd></div>
+                    <div class="row" id="voice-rate-row" hidden><dt>Sample rate</dt><dd id="voice-rate" class="mono"></dd></div>
+                    <div class="row" id="voice-device-row" hidden><dt>Input</dt><dd id="voice-device"></dd></div>
+                    <div class="row" id="voice-network-row" hidden><dt>Network</dt><dd id="voice-network"></dd></div>
+                  </dl>
+                </div>
+
+                <details class="drawer">
+                  <summary>Event log</summary>
+                  <ol id="voice-events" class="events"></ol>
+                </details>
+              </aside>
             </div>
           </section>
 
           <section id="media-panel" role="tabpanel" aria-labelledby="media-tab" class="panel panel--media" hidden>
-            <header class="panel__intro">
-              <p class="eyebrow">Imagine API</p>
-              <h1>Create media</h1>
-              <p>Images return immediately. Video jobs stay visible while progrok polls their real upstream status.</p>
-            </header>
-            <div class="media-layout">
-              <form id="media-form" class="control-surface">
-                <div class="form-grid">
+            <h2 class="sr-only">Create media</h2>
+            <div class="media">
+              <form id="media-form" class="media__form">
+                <h3>Request</h3>
+                <div class="fields">
                   <label for="media-kind">Kind</label>
                   <select id="media-kind" disabled>
                     <option value="image">Image</option>
                     <option value="video">Video</option>
                   </select>
-                  <label for="media-model">Runtime model</label>
+                  <label for="media-model">Model</label>
                   <select id="media-model" disabled></select>
-                  <label for="media-prompt">Prompt</label>
-                  <textarea id="media-prompt" rows="6" required disabled placeholder="Describe the scene, composition, and mood"></textarea>
                   <label class="media-options--image" for="image-count">Images</label>
                   <input class="media-options--image" id="image-count" type="number" min="1" max="4" value="1">
                   <label class="media-options--video" for="video-duration" hidden>Duration</label>
                   <input class="media-options--video" id="video-duration" type="number" min="1" max="15" value="5" hidden>
-                  <label class="media-options--video" for="video-aspect" hidden>Aspect ratio</label>
+                  <label class="media-options--video" for="video-aspect" hidden>Aspect</label>
                   <select class="media-options--video" id="video-aspect" hidden>
                     <option value="16:9">16:9</option>
                     <option value="9:16">9:16</option>
@@ -145,21 +222,23 @@
                     <option value="720p">720p</option>
                   </select>
                 </div>
+                <label class="field-label" for="media-prompt">Prompt</label>
+                <textarea id="media-prompt" rows="6" required disabled placeholder="Describe the scene, composition, and mood"></textarea>
                 <div class="actions">
-                  <button id="media-submit" class="primary" type="submit" disabled>Generate</button>
-                  <button id="media-cancel" class="danger" type="button" hidden>Stop polling</button>
+                  <button id="media-submit" class="button button--primary" type="submit" disabled>Generate</button>
+                  <button id="media-cancel" class="button button--danger" type="button" hidden>Stop polling</button>
                 </div>
               </form>
-              <section class="media-output" aria-labelledby="media-output-title">
-                <div class="media-output__header">
-                  <h2 id="media-output-title">Output</h2>
-                  <p id="media-status" class="status-line" role="status" aria-live="polite">Loading models</p>
+              <section class="media__output" aria-labelledby="media-output-title">
+                <div class="toolbar">
+                  <h3 id="media-output-title">Output</h3>
+                  <p id="media-status" class="status" role="status" aria-live="polite">Loading models</p>
                 </div>
                 <progress id="media-progress" max="1" aria-label="Generation progress" hidden></progress>
-                <div id="media-results" class="media-results">
-                  <div class="empty-state">
-                    <h3>No generation yet</h3>
-                    <p>Your result and job status will stay together here.</p>
+                <div id="media-results" class="results">
+                  <div class="empty">
+                    <p class="empty__title">No generation yet</p>
+                    <p>Results and job status stay together here.</p>
                   </div>
                 </div>
               </section>
@@ -168,7 +247,7 @@
         </main>
       </div>
     </div>
-    <noscript><p class="error-banner">The progrok web app requires JavaScript.</p></noscript>
+    <noscript><p class="banner">The progrok web app requires JavaScript.</p></noscript>
     <script type="module" src="/assets/app.js"></script>
   </body>
 </html>
