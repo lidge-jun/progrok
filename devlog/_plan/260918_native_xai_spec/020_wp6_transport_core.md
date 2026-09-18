@@ -2,11 +2,11 @@
 
 ## 1. 목표
 
-이 단계는 현재 `src/proxy/server.ts`에 섞여 있는 URL 조립, 헤더 필터링, bearer 주입, raw fetch, 오류 처리를 `src/transport/`의 네 소유자로 분리한다. `/health` 응답과 모든 `/v1/*` 포워딩 계약은 유지한다.
+이 단계는 현재 `src/proxy/server.ts`에 섞여 있는 URL 조립, 헤더 필터링, bearer 주입, raw fetch, 오류 처리를 `src/transport/`의 네 소유자로 분리한다. `/health` 응답과 일반 `/v1/*` 포워딩 계약은 유지하되 D2에 따라 `/deployment/config`는 별도 credential client로 분리하고 `/feedback*` 자동 포워딩은 거부한다.
 
 완료 후 전송 코어는 다음을 보장한다.
 
-- 경로와 credential 종류로 `api.x.ai` 또는 `cli-chat-proxy.grok.com`을 결정한다.
+- OAuth와 API-key의 모든 기본 경로는 `api.x.ai`로 고정한다. `cli-chat-proxy.grok.com`은 명시적 opt-in 전용 클라이언트에서만 접근한다.
 - OAuth 요청에는 `Authorization`과 `X-XAI-Token-Auth: xai-grok-cli`를 조립하고, 추적 헤더를 typed 입력에서만 만든다.
 - caller abort가 DNS/연결/헤더 대기/backoff에 전파된다.
 - header timeout은 응답 헤더가 도착할 때까지만 적용되고 장시간 stream을 임의로 끊지 않는다.
@@ -16,18 +16,19 @@
 
 ## 2. 현재 근거와 판정 원칙
 
-`001_endpoint_inventory.md:11-17`은 공개 API와 OAuth/session host를 구분한다. `001_endpoint_inventory.md:21-33`은 OAuth 보조 인증 헤더와 `x-grok-*` 추적 헤더를 기록한다. `000_plan.md:35-39`는 OAuth 추론 base URL을 미해결로 남겼다.
+`001_endpoint_inventory.md:143-166`의 2026-09-18 라이브 판정과 `000_plan.md` D2가 이 단계의 base URL 권위다. 같은 OAuth token으로 `api.x.ai`의 추론·Voice·계정 경로가 동작했고, `cli-chat-proxy.grok.com`은 별도 버전 게이트와 다른 모델 카탈로그를 가진 Grok CLI 전용 레인으로 확인됐다. `001_endpoint_inventory.md:21-33`은 OAuth 보조 인증 헤더와 `x-grok-*` 추적 헤더를 기록한다.
 
 현재 코드는 `src/proxy/server.ts:88-99`에서 모든 경로를 `XAI_API_BASE_URL`에 붙이고 bearer만 넣는다. `src/commands/billing.ts:5-6`만 세션 host를 별도 상수로 하드코딩한다. 따라서 base URL과 header 정책의 SSOT가 없다.
 
-초기 안전 판정은 다음과 같다.
+확정 판정은 다음과 같다.
 
-1. 2026-09-18 live evidence가 있는 `api.x.ai`를 OAuth 추론의 기본값으로 유지한다.
-2. `/billing`, `/user`, `/deployment/config`, `/feedback*`는 grok-build 근거가 있는 session host로 보낸다.
-3. 추론 경로를 session host로 옮기는 것은 probe가 같은 credential로 성공을 증명한 뒤에만 한다.
-4. API-key credential은 session host로 보내지 않는다.
+1. OAuth와 API-key 요청은 경로와 무관하게 `https://api.x.ai/v1`만 기본값으로 사용한다. `/billing`과 `/user`도 예외가 아니다.
+2. `cli-chat-proxy.grok.com`은 path resolver의 결과가 될 수 없다. 호출자가 명시적으로 opt-in한 전용 클라이언트만 이 host를 사용할 수 있다.
+3. `/deployment/config`는 OAuth가 아니라 별도 credential 종류인 `deployment-key`를 사용한다. 값의 원천은 `GROK_DEPLOYMENT_KEY`이며, 다른 경로에 재사용하지 않는다.
+4. `/feedback*`는 근거 URL이 확정되지 않았으므로 자동 resolver가 거부한다. public/session 어느 쪽으로도 추측해 보내지 않는다.
+5. host 간 자동 fallback이나 retry는 두 레인의 모델·게이트 차이와 중복 과금 위험 때문에 금지한다.
 
-참고 구현의 근거점은 ima2-gen `lib/grokRuntime.ts:20-35`의 URL·auth header 단일 조립, `lib/grokRuntime.ts:75-93`의 401 one-shot nesting, `lib/grokUpstreamRetry.ts:28-70`의 status/Retry-After 분류, `lib/grokUpstreamRetry.ts:99-164`의 body cancel과 abortable retry다. OpenCodex의 세대 snapshot 규칙은 `src/oauth/index.ts:540-622`, xAI token retry의 초과 Retry-After 거부 규칙은 `src/oauth/xai.ts:184-257`을 따른다. ima2-gen의 “모든 경로는 public host” 결정은 progrok의 `/billing`·`/user` 계약과 맞지 않으므로 그대로 복사하지 않는다.
+참고 구현의 근거점은 ima2-gen `lib/grokRuntime.ts:20-35`의 URL·auth header 단일 조립, `lib/grokRuntime.ts:75-93`의 401 one-shot nesting, `lib/grokUpstreamRetry.ts:28-70`의 status/Retry-After 분류, `lib/grokUpstreamRetry.ts:99-164`의 body cancel과 abortable retry다. OpenCodex의 세대 snapshot 규칙은 `src/oauth/index.ts:540-622`, xAI token retry의 초과 Retry-After 거부 규칙은 `src/oauth/xai.ts:184-257`을 따른다. host 판정은 참고 구현이 아니라 위 라이브 결과와 D2를 따른다.
 
 ## 3. 구조 결정
 
@@ -45,7 +46,7 @@ proxy/server.ts
 ## 4. 외부 계약과 마이그레이션
 
 - `GET /health`는 계속 `200 {status:"ok",upstream:"xAI Grok",proxy:"progrok"}`이다.
-- 모든 method의 `/v1/*`는 whitelist 없이 계속 포워딩한다.
+- 모든 method의 일반 `/v1/*`는 whitelist 없이 계속 포워딩한다. 단, `/deployment/config`는 `GROK_DEPLOYMENT_KEY` 전용 client로만 허용하고 `/feedback*`는 base URL 확정 전까지 fetch 전에 거부한다.
 - inbound client의 bearer는 계속 무시하고 progrok OAuth bearer로 교체한다.
 - 응답 status, 안전한 response header, body byte stream은 그대로 전달한다.
 - CLI 명령명, 기본 포트 18645, `~/.progrok/auth.json`은 바꾸지 않는다.
@@ -55,21 +56,21 @@ proxy/server.ts
 
 | 상태 | 경로 | 책임 |
 |---|---|---|
-| NEW | `src/transport/base-url.ts` | path/auth별 host 결정과 URL 정규화 |
+| NEW | `src/transport/base-url.ts` | public 기본 URL 고정, explicit CLI-proxy opt-in 격리, URL 정규화 |
 | NEW | `src/transport/headers.ts` | hop-by-hop 제거, auth와 `x-grok-*` 조립 |
 | NEW | `src/transport/retry.ts` | replay-safe 분류, Retry-After/backoff, abortable sleep |
-| NEW | `src/transport/fetch.ts` | header timeout, caller abort, HTTP retry, 401 one-shot |
+| NEW | `src/transport/fetch.ts` | `XaiTransport`, `createXaiTransport`, header timeout, caller abort, HTTP retry, 401 one-shot, opt-in CLI-proxy client |
 | NEW | `scripts/probe-oauth-base-url.ts` | 두 host 지원 매트릭스 생성 |
 | NEW | `tests/transport.test.ts` | transport 단위·통합 회귀 테스트 |
 | NEW | `devlog/_plan/260918_native_xai_spec/evidence/wp6-oauth-base-url-probe.json` | probe가 생성하는 redacted 결과 |
-| MODIFY | `src/auth/constants.ts` | public/session base 상수와 deprecated alias |
+| MODIFY | `src/auth/constants.ts` | public base와 explicit-opt-in 전용 CLI-proxy base 상수, deprecated alias |
 | MODIFY | `src/proxy/server.ts` | URL/header/fetch 코드를 transport 호출로 교체 |
 | MODIFY | `tests/proxy.test.ts` | 실제 인터넷 호출 제거, 주입 transport로 계약 검증 |
 | MODIFY | `devlog/_plan/260918_native_xai_spec/001_endpoint_inventory.md` | probe 결과와 경로별 base 확정 |
 | MODIFY | `devlog/_plan/260918_native_xai_spec/000_plan.md` | OAuth base URL 미해결 항목 종료 |
-| DELETE | 없음 | fallback `/v1/*` 계약을 유지한다 |
+| DELETE | 없음 | D2의 두 제한 경로 외 fallback `/v1/*` 계약을 유지한다 |
 
-`src/commands/billing.ts`와 기타 command의 직접 fetch는 WP12에서 transport로 이동한다. 이 단계에서는 동작 변경을 피하고, base resolver 테스트에 `/billing`과 `/user`를 포함해 향후 migration 경계를 고정한다.
+`src/commands/billing.ts`와 기타 command의 직접 fetch는 WP12에서 transport로 이동한다. 이 단계에서는 base resolver 테스트에 `/billing`과 `/user`가 OAuth 기본 레인인 `api.x.ai`로 가는 계약을 고정한다.
 
 ## 6. 상세 diff
 
@@ -79,23 +80,20 @@ proxy/server.ts
 export const XAI_PUBLIC_API_BASE_URL = "https://api.x.ai/v1";
 export const XAI_SESSION_API_BASE_URL = "https://cli-chat-proxy.grok.com/v1";
 
-export type UpstreamAuthKind = "oauth" | "api-key";
+export type UpstreamAuthKind = "oauth" | "api-key" | "deployment-key";
+export type PublicApiAuthKind = Exclude<UpstreamAuthKind, "deployment-key">;
 export type UpstreamBaseKind = "public-api" | "session-api";
 
 export interface BaseUrlDecision {
   kind: UpstreamBaseKind;
   baseUrl: string;
-  reason: "session-only-path" | "probed-session-inference" | "public-default" | "api-key-public-only";
+  reason: "oauth-public-default" | "api-key-public-only" | "explicit-cli-proxy" | "deployment-key-only";
 }
 
-const SESSION_ONLY = [
-  /^\/v1\/(?:billing|user)(?:\/|$)/,
-  /^\/v1\/deployment\/config(?:\/|$)/,
-  /^\/v1\/feedback(?:\/|$)/,
-] as const;
+export interface CliChatProxyOptIn { explicitOptIn: true }
 
-// probe로 확정하기 전에는 비워 둔다. 결과를 코드에 옮길 때 evidence 파일과 같은 PR에서 바꾼다.
-const PROBED_SESSION_INFERENCE = new Set<string>();
+const DEPLOYMENT_CONFIG = /^\/v1\/deployment\/config(?:\/|$)/;
+const FEEDBACK = /^\/v1\/feedback(?:\/|$)/;
 
 export function normalizeXaiPath(pathname: string): string {
   const parsed = new URL(pathname, "https://local.invalid");
@@ -107,31 +105,42 @@ export function normalizeXaiPath(pathname: string): string {
 
 export function resolveUpstreamBase(
   pathname: string,
-  authKind: UpstreamAuthKind,
+  authKind: PublicApiAuthKind,
 ): BaseUrlDecision {
   const normalized = normalizeXaiPath(pathname);
   const pathOnly = new URL(normalized, "https://local.invalid").pathname;
-  if (authKind === "api-key") {
-    return { kind: "public-api", baseUrl: XAI_PUBLIC_API_BASE_URL, reason: "api-key-public-only" };
-  }
-  if (SESSION_ONLY.some((pattern) => pattern.test(pathOnly))) {
-    return { kind: "session-api", baseUrl: XAI_SESSION_API_BASE_URL, reason: "session-only-path" };
-  }
-  if (PROBED_SESSION_INFERENCE.has(pathOnly)) {
-    return { kind: "session-api", baseUrl: XAI_SESSION_API_BASE_URL, reason: "probed-session-inference" };
-  }
-  return { kind: "public-api", baseUrl: XAI_PUBLIC_API_BASE_URL, reason: "public-default" };
+  if (DEPLOYMENT_CONFIG.test(pathOnly)) throw new Error("/deployment/config requires GROK_DEPLOYMENT_KEY");
+  if (FEEDBACK.test(pathOnly)) throw new Error("feedback base URL is not established; automatic routing is disabled");
+  return {
+    kind: "public-api",
+    baseUrl: XAI_PUBLIC_API_BASE_URL,
+    reason: authKind === "api-key" ? "api-key-public-only" : "oauth-public-default",
+  };
 }
 
-export function resolveUpstreamUrl(pathname: string, authKind: UpstreamAuthKind): URL {
+export function resolveUpstreamUrl(pathname: string, authKind: PublicApiAuthKind): URL {
   const normalized = normalizeXaiPath(pathname);
   const decision = resolveUpstreamBase(normalized, authKind);
   const suffix = normalized.replace(/^\/v1/, "");
   return new URL(`${decision.baseUrl}${suffix}`);
 }
+
+export function resolveCliChatProxyUrl(pathname: string, _optIn: CliChatProxyOptIn): URL {
+  const normalized = normalizeXaiPath(pathname);
+  const suffix = normalized.replace(/^\/v1/, "");
+  return new URL(`${XAI_SESSION_API_BASE_URL}${suffix}`);
+}
+
+export function resolveDeploymentConfigUrl(
+  authKind: Extract<UpstreamAuthKind, "deployment-key">,
+  optIn: CliChatProxyOptIn,
+): URL {
+  void authKind;
+  return resolveCliChatProxyUrl("/v1/deployment/config", optIn);
+}
 ```
 
-정규화는 absolute URL의 외부 host를 신뢰하지 않고 path/query만 취한다. `..`, userinfo, fragment로 host를 바꿀 수 없어야 한다.
+정규화는 absolute URL의 외부 host를 신뢰하지 않고 path/query만 취한다. `..`, userinfo, fragment로 host를 바꿀 수 없어야 한다. 기본 `resolveUpstreamUrl`은 session host를 반환하는 분기가 없다. `createXaiTransport`와 프록시는 이 함수만 사용한다. `resolveCliChatProxyUrl`은 이름과 `{ explicitOptIn: true }` 인자로 별도 선택을 강제하며, `/deployment/config`는 `resolveDeploymentConfigUrl("deployment-key", ...)`만 사용한다. `/feedback*`는 기본 resolver에서 거부하고, 근거 URL이 별도 결정되기 전에는 어떤 전용 client에도 자동 등록하지 않는다.
 
 ### 6.2 NEW `src/transport/headers.ts`
 
@@ -246,19 +255,29 @@ import { withBearer401Replay } from "../auth/bearer-session.js";
 import { resolveUpstreamUrl } from "./base-url.js";
 import { buildUpstreamHeaders, type GrokTraceContext } from "./headers.js";
 import { classifyReplay, isRetryableStatus, retryDelayMs, sleepWithAbort, type RetryPolicy } from "./retry.js";
+import { readPackageVersion } from "../utils/version.js";
 
 export interface XaiFetchInput {
   path: string;
   method: string;
-  incomingHeaders?: Record<string, string | string[] | undefined>;
+  incomingHeaders?: Headers | Record<string, string | string[] | undefined>;
   body?: BodyInit;
   signal?: AbortSignal;
   headerTimeoutMs?: number;
   trace?: GrokTraceContext;
   clientVersion: string;
+  replayable?: boolean;
 }
 
 export interface TransportDeps { fetch?: typeof globalThis.fetch }
+
+export interface XaiTransport {
+  request(
+    path: string,
+    init?: RequestInit,
+    policy?: { replayable?: boolean },
+  ): Promise<Response>;
+}
 
 function headerSignal(caller: AbortSignal | undefined, timeoutMs: number): {
   signal: AbortSignal; clear: () => void;
@@ -301,7 +320,7 @@ async function fetchHttpRetry(input: XaiFetchInput, bearer: string, deps: Transp
     incoming: input.incomingHeaders, auth: { kind: "oauth", bearer },
     trace: input.trace, clientVersion: input.clientVersion,
   });
-  const replay = classifyReplay(input.method, sampleHeaders);
+  const replay = input.replayable === false ? "never" : classifyReplay(input.method, sampleHeaders);
   const policy: RetryPolicy = {
     replay, maxAttempts: replay === "never" ? 1 : 3,
     baseDelayMs: 400, maxDelayMs: 5_000, retry429: true, retry5xx: true,
@@ -334,13 +353,54 @@ export function xaiFetch(input: XaiFetchInput, deps: TransportDeps = {}): Promis
     { signal: input.signal, discard: (response) => response.body?.cancel().catch(() => undefined) },
   );
 }
+
+export function createXaiTransport(options: {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+} = {}): XaiTransport {
+  return {
+    request(path, init = {}, policy = {}) {
+      const requestSignal = init.signal ?? undefined;
+      const signal = options.signal && requestSignal
+        ? AbortSignal.any([options.signal, requestSignal])
+        : options.signal ?? requestSignal;
+      return xaiFetch({
+        path,
+        method: init.method ?? "GET",
+        incomingHeaders: init.headers ? new Headers(init.headers) : undefined,
+        body: init.body ?? undefined,
+        signal,
+        headerTimeoutMs: options.timeoutMs,
+        clientVersion: readPackageVersion(),
+        replayable: policy.replayable,
+      });
+    },
+  };
+}
 ```
 
-`xaiFetch`는 Response를 반환한 뒤 body를 읽지 않는다. 따라서 stream 도중 reset, parser 오류, client disconnect를 이 레이어가 재시도할 기회가 없다. 이것이 mid-stream 금지의 구조적 보장이다. request body가 `ReadableStream`이면 재생 불가로 강제 분류하고 `duplex` 요구를 별도로 처리한다.
+`XaiTransport`와 `createXaiTransport`는 wp11이 import하는 공개 transport 계약이다. `createXaiTransport`는 OAuth 기본 레인만 만들며 내부에서 항상 `resolveUpstreamUrl(..., "oauth")`를 사용하므로 `cli-chat-proxy`로 갈 수 없다. `xaiFetch`는 Response를 반환한 뒤 body를 읽지 않는다. 따라서 stream 도중 reset, parser 오류, client disconnect를 이 레이어가 재시도할 기회가 없다. 이것이 mid-stream 금지의 구조적 보장이다. request body가 `ReadableStream`이면 재생 불가로 강제 분류하고 `duplex` 요구를 별도로 처리한다.
+
+`cli-chat-proxy`는 이 factory의 option이나 path 분기로 열지 않는다. 전용 factory의 공개 계약은 다음과 같이 별도로 둔다.
+
+```ts
+export type CliChatProxyCredential =
+  | { kind: "oauth" }
+  | { kind: "deployment-key"; env: "GROK_DEPLOYMENT_KEY" };
+
+export function createCliChatProxyTransport(options: {
+  explicitOptIn: true;
+  credential: CliChatProxyCredential;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}): XaiTransport;
+```
+
+이 factory만 `resolveCliChatProxyUrl`을 사용한다. 내부 HTTP 실행기는 public factory와 공유하되 URL resolver와 credential provider를 private 인자로 받는다. `deployment-key`는 `/v1/deployment/config` 외 경로를 fetch 전에 거부하고 OAuth 401 refresh를 실행하지 않는다. `/feedback*`는 이 전용 factory의 자동 surface 목록에도 넣지 않는다.
 
 ### 6.5 NEW `scripts/probe-oauth-base-url.ts`
 
-프로브는 `getValidBearerSnapshot()`을 사용하되 token을 출력하지 않는다. 각 host에 동일한 OAuth token과 `X-XAI-Token-Auth`를 보내 아래 표를 측정한다.
+프로브는 `getValidBearerSnapshot()`을 사용하되 token을 출력하지 않는다. 각 host에 동일한 OAuth token과 `X-XAI-Token-Auth`를 보내 아래 표를 측정한다. 이 스크립트는 진단 evidence만 만들며 `resolveUpstreamUrl`의 OAuth 기본 host를 바꾸거나 session host fallback을 활성화하지 않는다.
 
 | Probe | Method/path | Body | 비용/부작용 |
 |---|---|---|---|
@@ -424,6 +484,7 @@ export const DEFAULT_MODEL = "grok-4.3";
 
 ```ts
 export const XAI_PUBLIC_API_BASE_URL = "https://api.x.ai/v1";
+/** Explicit opt-in 전용이다. 기본 resolver와 createXaiTransport는 사용하지 않는다. */
 export const XAI_SESSION_API_BASE_URL = "https://cli-chat-proxy.grok.com/v1";
 /** @deprecated 신규 코드는 transport/base-url.ts의 resolver를 사용한다. */
 export const XAI_API_BASE_URL = XAI_PUBLIC_API_BASE_URL;
@@ -503,15 +564,15 @@ const app = createProxyApp({ transport: { fetch: fakeFetch } });
 
 ### 6.9 MODIFY 연구 문서
 
-`001_endpoint_inventory.md:9-16`의 host 표에 probe 날짜, credential 종류, path별 결과 링크를 추가한다. `000_plan.md:35-39`의 미해결 문단은 삭제하지 않고 다음 형식으로 결론을 기록한다.
+`001_endpoint_inventory.md:143-166`의 라이브 판정과 `000_plan.md` D2가 권위다. 추가 probe를 실행하더라도 OAuth 기본 레인은 `api.x.ai`, CLI proxy는 explicit opt-in이라는 결론을 자동으로 뒤집지 않는다. 문서에는 다음 형식으로 evidence를 연결한다.
 
 ```md
-- **OAuth 추론 base URL — 해결(YYYY-MM-DD).**
-  `evidence/wp6-oauth-base-url-probe.json` 결과에 따라 ... 경로는 ... host를 사용한다.
-  401/403/429/5xx는 지원 증거로 세지 않았다. 미확정 경로는 기존 `api.x.ai` 기본값을 유지한다.
+- **OAuth base URL — 해결(2026-09-18).**
+  모든 OAuth 기본 경로는 `api.x.ai`를 사용한다. CLI proxy는 explicit opt-in 전용이며,
+  deployment config는 `GROK_DEPLOYMENT_KEY`, feedback은 자동 라우팅 제외다.
 ```
 
-probe가 양쪽 모두 성공하면 임의 failover를 넣지 않는다. 경로별 canonical host 하나를 선택하고, 다른 host는 진단 정보로만 남긴다. 자동 cross-host retry는 중복 실행과 과금을 만들 수 있으므로 금지한다.
+probe가 양쪽 모두 성공해도 임의 failover를 넣지 않는다. 다른 host는 진단 정보로만 남긴다. 자동 cross-host retry는 모델 차이, 중복 실행과 과금을 만들 수 있으므로 금지한다.
 
 ## 7. 재시도 상태 기계
 
@@ -555,9 +616,13 @@ npx tsx scripts/probe-oauth-base-url.ts --include-billable-inference \
 
 | 사례 | 기대 |
 |---|---|
-| OAuth `/v1/models` | 판정된 canonical host, Authorization + X-XAI header |
+| OAuth `/v1/models` | `api.x.ai`, Authorization + X-XAI header |
 | API-key `/v1/models` | 항상 public host, X-XAI header 없음 |
-| OAuth `/v1/billing` | session host |
+| OAuth `/v1/billing`, `/v1/user` | `api.x.ai`; path 기반 session 전환 없음 |
+| OAuth `/v1/deployment/config` | credential mismatch로 fetch 전 거부 |
+| deployment-key `/v1/deployment/config` | explicit-opt-in CLI-proxy client만 허용 |
+| OAuth/API-key `/v1/feedback*` | base 미확정 오류로 fetch 전 거부 |
+| CLI-proxy 전용 client | `{ explicitOptIn: true }` 없이는 생성 불가 |
 | inbound host/auth/x-grok-user-id | 모두 제거·재조립 |
 | GET pre-header ECONNRESET | 최대 3회 |
 | POST pre-header ECONNRESET, idempotency key 없음 | 1회, 재시도 없음 |
@@ -577,6 +642,8 @@ npx tsx scripts/probe-oauth-base-url.ts --include-billable-inference \
 - focused tests, typecheck, 전체 test, build가 모두 exit 0이다.
 - `tests/proxy.test.ts`가 인터넷 없이 실행된다.
 - 임의 `/v1/unknown-path?x=1`이 path/query를 보존해 forward된다.
+- OAuth `/billing`·`/user`가 `api.x.ai`로 가고, `/deployment/config`·`/feedback*`가 잘못된 credential이나 자동 경로에서 fetch 전에 거부된다.
+- `cli-chat-proxy`는 explicit-opt-in 전용 client에서만 도달 가능하고 기본 `createXaiTransport`에서는 도달 불가능하다.
 - 401, pre-header network, 429/5xx, mid-stream 각각의 호출 횟수가 테스트에서 명시적으로 검증된다.
 - probe JSON에 token, response body, email, user ID가 없고 두 host의 모든 시도가 status/classification으로 남는다.
 - `001_endpoint_inventory.md`와 `000_plan.md`가 probe 결과와 같은 경로별 판정을 말한다.

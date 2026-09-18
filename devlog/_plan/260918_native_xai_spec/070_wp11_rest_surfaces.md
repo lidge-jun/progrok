@@ -2,7 +2,7 @@
 
 ## 결론
 
-wp11은 `src/surfaces/`를 xAI 비-Voice API의 단일 소유자로 만든다. 각 파일은 경로와 wire 타입만 소유하고, 인증·base URL·401 refresh·재시도·오류 본문 제한은 wp5/wp6의 전송 계층에 맡긴다. Responses WebSocket은 HTTP 프록시에 억지로 넣지 않고 직접 연결하는 타입드 세션으로 제공한다. `~/.progrok/auth.json`, 기존 CLI, `/health`, 모든 HTTP `/v1/*` 패스스루는 바꾸지 않는다.
+wp11은 `src/surfaces/`를 xAI 비-Voice API의 단일 소유자로 만든다. 각 파일은 경로와 wire 타입만 소유하고, 인증·base URL·401 refresh·재시도·오류 본문 제한은 wp5/wp6의 전송 계층에 맡긴다. Responses WebSocket은 HTTP 프록시에 억지로 넣지 않고 직접 연결하는 타입드 세션으로 제공한다. `~/.progrok/auth.json`, 기존 CLI, `/health`, D2 제한(`/deployment/config`, `/feedback*`)을 제외한 HTTP `/v1/*` 패스스루는 바꾸지 않는다.
 
 이 문서의 독자는 wp11 구현자다. 구현자는 아래 파일 순서대로 작업하고, 각 NEW 블록의 공개 시그니처와 핵심 흐름을 그대로 구현한 뒤 명시된 테스트를 통과시킨다.
 
@@ -68,13 +68,19 @@ export function createXaiTransport(options?: {
 
 `request()`는 `/v1` 상대 경로만 받고, bearer·base URL·manual redirect·401 한 번 refresh를 소유한다. 표면 클라이언트는 bearer를 직접 읽거나 retry loop를 만들지 않는다.
 
+wp11 구현 전 precondition은 다음과 같다.
+
+- wp7이 소유한 `src/core/types.ts`, `src/core/events.ts`, `src/wire/responses-stream.ts`가 존재해야 한다. wp11은 이 파일들을 생성하거나 수정하지 않고 `ResponsesRequest`, `AdapterEvent`, `reduceResponsesStream`을 import한다.
+- wp10이 `package.json`과 `package-lock.json`에 `ws`/`@types/ws`를 추가한 상태여야 한다. wp11은 manifest나 lockfile을 수정하거나 설치 명령을 다시 실행하지 않는다.
+
 ## 변경 매니페스트
 
 | 상태 | 정확한 경로 | 책임 |
 |---|---|---|
-| MODIFY | `package.json` | Node 18에서 Responses WS를 쓰기 위한 `ws` 런타임 의존성 |
-| MODIFY | `package-lock.json` | 위 의존성의 lock 동기화 |
+| NO CHANGE — precondition (wp10 소유) | `package.json` | `ws`와 `@types/ws`가 이미 선언돼 있어야 함 |
+| NO CHANGE — precondition (wp10 소유) | `package-lock.json` | wp10이 생성한 exact dependency graph를 재사용 |
 | NEW | `src/surfaces/client.ts` | JSON/multipart/binary 공통 경계와 bounded 오류 파싱 |
+| NEW | `src/surfaces/index.ts` | wp11 surface 모듈의 단일 public boundary export |
 | NEW | `src/surfaces/registry.ts` | 엔드포인트·근거·전송 종류 SSOT |
 | NEW | `src/surfaces/responses-ws.ts` | Responses WS 세션, 직렬 turn, 25분 종료 분류 |
 | NEW | `src/surfaces/batches.ts` | batch create/list/get/requests/results/cancel |
@@ -92,51 +98,9 @@ export function createXaiTransport(options?: {
 
 DELETE는 없다. `src/commands/image.ts`, `src/commands/video.ts`, `src/commands/models.ts`, `src/commands/capabilities.ts`의 전환은 wp12가 소유한다. wp11에서 먼저 건드리면 두 단계의 diff 소유권이 겹친다.
 
-## MODIFY — 의존성 두 파일
+## NO CHANGE — 의존성 precondition (wp10 소유)
 
-### `package.json:40-50`
-
-before:
-
-```json
-"dependencies": {
-  "commander": "^13.0.0",
-  "express": "^4.21.0",
-  "open": "^10.1.0"
-},
-"devDependencies": {
-  "typescript": "^5.7.0",
-  "tsup": "^8.4.0",
-  "@types/express": "^4.17.0",
-  "@types/node": "^22.0.0",
-  "tsx": "^4.19.0"
-}
-```
-
-after:
-
-```json
-"dependencies": {
-  "commander": "^13.0.0",
-  "express": "^4.21.0",
-  "open": "^10.1.0",
-  "ws": "^8.18.3"
-},
-"devDependencies": {
-  "typescript": "^5.7.0",
-  "tsup": "^8.4.0",
-  "@types/express": "^4.17.0",
-  "@types/node": "^22.0.0",
-  "@types/ws": "^8.18.1",
-  "tsx": "^4.19.0"
-}
-```
-
-정확한 설치 명령은 `npm install ws@^8.18.3 && npm install -D @types/ws@^8.18.1`이다. wp10이 같은 의존성을 먼저 추가했더라도 최종 manifest는 위 상태여야 하며 중복 항목을 만들지 않는다.
-
-### `package-lock.json:7-28`
-
-before의 root package에는 `open`까지만 있고 `@types/node`까지만 있다. after의 root package에 각각 `"ws": "^8.18.3"`, `"@types/ws": "^8.18.1"`가 추가되고 npm이 만든 `node_modules/ws`, `node_modules/@types/ws` 항목을 그대로 커밋한다. lockfile을 손으로 쓰지 않는다.
+wp10 완료 결과로 `package.json`에 `ws: ^8.18.3`, `@types/ws: ^8.18.1`이 있고 `package-lock.json`이 동기화돼 있어야 한다. wp11은 두 파일을 수정하지 않으며 `npm install ws`도 실행하지 않는다. 항목이 없거나 lock이 맞지 않으면 wp11 변경으로 보충하지 말고 wp10 precondition 실패로 중단한다.
 
 ## NEW — 공통 경계
 
@@ -323,6 +287,8 @@ export const SURFACE_REGISTRY = [
 ] as const satisfies readonly SurfaceDescriptor[];
 ```
 
+마지막 `/v1/*` 항목은 wp6 D2 제한을 통과한 일반 fallback만 뜻한다. `/deployment/config`와 `/feedback*`를 다시 자동 등록하는 wildcard가 아니다.
+
 ## NEW — Responses WebSocket
 
 ### `src/surfaces/responses-ws.ts`
@@ -334,7 +300,7 @@ import WebSocket from "ws";
 import { getValidBearer } from "../auth/token-store.js";
 import type { AdapterEvent } from "../core/events.js";
 import type { ResponsesRequest } from "../core/types.js";
-import { decodeResponsesEvent } from "../wire/responses-stream.js";
+import { reduceResponsesStream } from "../wire/responses-stream.js";
 
 export type ResponsesWsCreate = Omit<ResponsesRequest, "stream" | "background"> & {
   type: "response.create";
@@ -364,6 +330,27 @@ const defaultDeps: ResponsesWsDeps = {
   createSocket: (url, headers) => new WebSocket(url, { headers }),
 };
 
+const encoder = new TextEncoder();
+
+function createTurnReducer(emit: (event: AdapterEvent) => void) {
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  let suppressTruncated = false;
+  const source = new ReadableStream<Uint8Array>({ start(value) { controller = value; } });
+  const done = (async () => {
+    for await (const event of reduceResponsesStream(source)) {
+      if (!suppressTruncated) emit(event);
+    }
+  })();
+  return {
+    push(wire: unknown) {
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(wire)}\n\n`));
+    },
+    close() { controller.close(); },
+    finishProtocolError() { suppressTruncated = true; controller.close(); },
+    done,
+  };
+}
+
 export async function connectResponsesWebSocket(
   deps: ResponsesWsDeps = defaultDeps,
 ): Promise<ResponsesWsSession> {
@@ -380,29 +367,40 @@ export async function connectResponsesWebSocket(
   const waiters: Array<(value: IteratorResult<AdapterEvent | ResponsesWsError>) => void> = [];
   let ended = false;
   let sendTail = Promise.resolve();
+  let activeTurn: ReturnType<typeof createTurnReducer> | undefined;
+
+  const push = (value: AdapterEvent | ResponsesWsError) => {
+    const waiter = waiters.shift();
+    if (waiter) waiter({ value, done: false });
+    else queue.push(value);
+  };
 
   socket.on("message", (data) => {
     const wire: unknown = JSON.parse(data.toString());
     const object = wire as { type?: unknown };
-    const values = object.type === "error"
-      ? [wire as ResponsesWsError]
-      : decodeResponsesEvent(wire);
-    for (const value of values) {
-      const waiter = waiters.shift();
-      if (waiter) waiter({ value, done: false });
-      else queue.push(value);
+    if (object.type === "error") {
+      push(wire as ResponsesWsError);
+      activeTurn?.finishProtocolError();
+      return;
     }
+    if (!activeTurn) throw new Error("Responses event arrived without an active turn");
+    activeTurn.push(wire);
   });
   socket.once("close", () => {
+    activeTurn?.close();
     ended = true;
     for (const waiter of waiters.splice(0)) waiter({ value: undefined, done: true });
   });
 
   return {
     async send(request) {
-      sendTail = sendTail.then(() => new Promise<void>((resolve, reject) => {
-        socket.send(JSON.stringify(request), (error) => error ? reject(error) : resolve());
-      }));
+      sendTail = sendTail.then(async () => {
+        if (activeTurn) await activeTurn.done;
+        activeTurn = createTurnReducer(push);
+        await new Promise<void>((resolve, reject) => {
+          socket.send(JSON.stringify(request), (error) => error ? reject(error) : resolve());
+        });
+      });
       await sendTail;
     },
     async *events() {
@@ -429,11 +427,12 @@ export async function connectResponsesWebSocket(
 
 구현 시 추가할 규칙:
 
-1. 두 번째 `response.create`는 첫 turn의 `response.completed|response.failed|response.incomplete` terminal event 전까지 로컬 큐에서 대기시킨다. 위 골격의 send 직렬화만으로는 “socket write”만 직렬화하므로, 실제 구현은 wp7 terminal reducer와 turn gate를 연결한다.
-2. `previous_response_not_found`는 자동으로 full context를 재구성하지 않는다. 호출자가 `previous_response_id`를 제거하고 전체 input으로 재시작하게 typed error를 반환한다.
-3. `websocket_connection_limit_reached`는 25분 정상 수명 만료로 분류한다. `store=true`면 호출자가 새 연결에서 이어갈 수 있지만 클라이언트가 임의 재전송하지 않는다.
-4. `generate:false` warmup도 response ID를 terminal 결과로 노출한다.
-5. 한 연결에서 multiplex하지 않는다. 병렬 turn은 별도 세션을 열어야 한다.
+1. WS JSON은 turn마다 만든 synthetic SSE byte stream(`data: <json>\n\n`)에 넣고 wp7의 실제 공개 API `reduceResponsesStream(source)`를 정확히 한 번 실행한다. 별도 단일-event decoder를 만들지 않는다.
+2. 두 번째 `response.create`는 첫 turn의 `response.completed|response.failed|response.incomplete` terminal event 전까지 `activeTurn.done`에서 대기한다. reducer state를 turn 사이에 재사용하지 않는다.
+3. `previous_response_not_found`는 자동으로 full context를 재구성하지 않는다. 호출자가 `previous_response_id`를 제거하고 전체 input으로 재시작하게 typed error를 반환한다.
+4. `websocket_connection_limit_reached`는 25분 정상 수명 만료로 분류한다. `store=true`면 호출자가 새 연결에서 이어갈 수 있지만 클라이언트가 임의 재전송하지 않는다.
+5. `generate:false` warmup도 response ID를 terminal 결과로 노출한다.
+6. 한 연결에서 multiplex하지 않는다. 병렬 turn은 별도 세션을 열어야 한다.
 
 ## NEW — JSON·multipart 표면
 
@@ -853,7 +852,7 @@ export class VideosClient {
 }
 ```
 
-submit은 비멱등이므로 transport가 네트워크 reset이나 5xx를 자동 재실행하지 않게 `retry: "never"` 정책을 전달해야 한다. poll/list/get 같은 GET만 wp6 기본 retry를 허용한다. wp6 `XaiTransport`가 이 구분을 아직 표현하지 못하면 `RequestInit` 확장 대신 `request(path, init, { replayable })`로 계약을 먼저 보강한다.
+submit은 비멱등이므로 transport가 네트워크 reset이나 5xx를 자동 재실행하지 않게 `request(path, init, { replayable: false })`를 전달해야 한다. poll/list/get 같은 GET만 wp6 기본 retry를 허용한다. 이 세 번째 인자는 wp6 `XaiTransport` 계약의 일부이며 wp11이 별도 retry option을 만들지 않는다.
 
 ## 테스트 설계
 
@@ -873,7 +872,7 @@ submit은 비멱등이므로 transport가 네트워크 reset이나 5xx를 자동
 - Authorization bearer가 socket upgrade header에만 들어가고 event payload에는 나타나지 않는다.
 - `response.create`에서 `stream`/`background`가 타입상 허용되지 않는다(`@ts-expect-error` fixture는 `src/` 밖이므로 별도 `tsc` fixture 대신 runtime key rejection test를 둔다).
 - 두 turn이 동시에 제출되면 첫 terminal event 전까지 두 번째 socket send가 발생하지 않는다.
-- raw WS JSON event가 wp7 `decodeResponsesEvent`를 거쳐 `AdapterEvent`가 된다.
+- raw WS JSON event가 turn 단위 synthetic SSE byte stream으로 들어가 wp7 `reduceResponsesStream`을 거쳐 `AdapterEvent`가 된다.
 - `previous_response_not_found`, `websocket_connection_limit_reached`가 code를 잃지 않는다.
 - close와 abort가 iterator를 반드시 종료한다.
 
@@ -886,8 +885,8 @@ submit은 비멱등이므로 transport가 네트워크 reset이나 5xx를 자동
 
 ## 구현 순서와 검증
 
-1. `npm install` 명령으로 manifest/lock을 갱신한다.
-2. `client.ts`, `registry.ts`와 REST 클라이언트를 추가한다.
+1. wp7의 core/reducer 파일과 wp10의 `ws` manifest/lock 상태가 충족됐는지 읽기 전용으로 확인한다. 누락 시 해당 소유 단계로 돌려보낸다.
+2. `client.ts`, `index.ts`, `registry.ts`와 REST 클라이언트를 추가한다.
 3. REST와 media 단위 테스트를 먼저 통과시킨다.
 4. Responses WS 세션과 fake-socket 테스트를 추가한다.
 5. 타입체크·빌드·전체 테스트를 실행한다.
@@ -908,7 +907,7 @@ npm test
 - `~/.progrok/auth.json`: 필드 추가·삭제·이름 변경 없음. `getValidBearer()`를 통해 같은 파일을 읽는다.
 - CLI: 명령·옵션·출력 변경 없음. wp12 전까지 새 클라이언트는 내부 API다.
 - `/health`: `src/proxy/server.ts:42-44`의 `{ status:"ok", upstream:"xAI Grok", proxy:"progrok" }`를 그대로 유지한다.
-- `/v1/*`: `src/proxy/server.ts:46-48`의 모든 HTTP 경로 릴레이를 유지한다. 타입드 클라이언트가 whitelist로 바꾸지 않는다.
+- `/v1/*`: `src/proxy/server.ts:46-48`의 일반 HTTP 경로 릴레이를 유지한다. wp6가 고정한 `/deployment/config` 별도 credential과 `/feedback*` 자동 라우팅 금지를 wp11이 우회하지 않는다.
 - WebSocket: 로컬 프록시가 WS를 대리하지 않는 기존 계약을 유지한다. 새 클라이언트는 `wss://api.x.ai/v1/responses`에 직접 연결한다.
 - npm API: `src/surfaces/*`는 아직 `package.json` exports에 넣지 않는다. 외부 공개 SDK로 약속하지 않으며, wp12 내부 CLI가 직접 import한다.
 
@@ -916,11 +915,11 @@ npm test
 
 ## 완료 조건
 
-- 매니페스트의 NEW/MODIFY 파일만 변경됐다.
+- 매니페스트의 NEW 파일만 생성됐고, `package.json`/`package-lock.json`은 wp10 결과에서 변경되지 않았다.
 - 모든 표면이 `SURFACE_REGISTRY`에 있고 근거 종류가 명시됐다.
 - OpenAPI-only 경로가 일반 공식 문서 경로로 잘못 표시되지 않았다.
 - Responses WS가 `response.create`, `previous_response_id`, 25분 종료, serial turn을 테스트로 증명한다.
 - multipart와 binary가 JSON 공통 경로에 강제로 들어가지 않는다.
 - 비멱등 media submit은 자동 재시도되지 않는다.
 - `npm run typecheck`, 집중 테스트, `npm run build`, `npm test`가 모두 exit 0이다.
-- auth 파일, 기존 CLI, `/health`, `/v1/*` 계약에 diff가 없다.
+- auth 파일, 기존 CLI, `/health`, D2 제한 외 `/v1/*` 계약에 diff가 없다.

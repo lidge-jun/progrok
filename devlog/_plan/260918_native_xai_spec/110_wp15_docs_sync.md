@@ -7,14 +7,14 @@ wp5–wp14에서 실제로 구현되고 검증된 표면만 공개 문서에 반
 모델, 인증, 포트를 말해야 한다. 런타임 `GET /v1/models`가 모델 카탈로그의 권위이며,
 정적 가격표는 OAuth 세션의 권위가 아니다.
 
-문서는 다음 네 경로를 명확히 구분한다.
+문서는 다음 네 연결 방식을 명확히 구분한다.
 
-| 경로 | 로컬 진입점 | upstream | 인증 |
-|---|---|---|---|
-| HTTP REST | `http://127.0.0.1:18645/v1/*` | `https://api.x.ai/v1/*` | progrok이 `~/.progrok/auth.json`에서 주입 |
-| Responses WS | `ws://127.0.0.1:18645/v1/responses` | `wss://api.x.ai/v1/responses` | server-side bearer |
-| Voice WS | `ws://127.0.0.1:18645/v1/realtime|stt|tts` | 같은 xAI WS path | server-side bearer 또는 browser client-secret subprotocol |
-| 웹앱 | `http://127.0.0.1:18646` | 로컬 REST/WS | OAuth 값을 브라우저에 직렬화하지 않음 |
+| 경로 | client endpoint | 인증 |
+|---|---|---|
+| HTTP REST | `http://127.0.0.1:18645/v1/*` → `https://api.x.ai/v1/*` | progrok이 `~/.progrok/auth.json`에서 주입 |
+| Responses WS | `wss://api.x.ai/v1/responses` 직접 연결 | server-side bearer |
+| Voice WS | `wss://api.x.ai/v1/realtime`, `wss://api.x.ai/v1/stt`, `wss://api.x.ai/v1/tts` 직접 연결 | server-side bearer 또는 browser `xai-client-secret.<token>` subprotocol |
+| 웹앱 | `http://127.0.0.1:18646`; REST는 same-origin, Voice WS는 xAI 직접 연결 | same-origin `POST /v1/realtime/client_secrets`로 ephemeral token을 발급하며 OAuth 값을 브라우저에 직렬화하지 않음 |
 
 ima2-gen v3.16.1은 더 이상 progrok package나 프록시 process를 번들·실행하지 않는다.
 두 프로젝트의 유일한 외부 호환 계약은 `~/.progrok/auth.json`의 경로와 스키마다.
@@ -28,7 +28,7 @@ ima2-gen v3.16.1은 더 이상 progrok package나 프록시 process를 번들·�
 - `README.md:282`, `docs/api.md:25-27,430-434`, `skills/progrok/SKILL.md:169-171,292`,
   `site/src/pages/docs/voice/overview.astro:8`,
   `site/src/pages/docs/concepts/oauth-bridge.astro:101`은 WebSocket을 progrok이
-  지원하지 않는다고 적는다. 재작성 후 local native WS와 충돌한다.
+  지원하지 않는다고 적는다. 재작성 후 direct xAI WS client와 충돌한다.
 - `docs/api.md:258-259`와 `skills/progrok/SKILL.md:240`은
   `grok-voice-think-fast-1.0`/`grok-voice-fast-1.0`을 현재 모델처럼 제시한다.
   기본 별칭은 `grok-voice-latest`, 핀은 `grok-voice-think-fast-2.0`으로 교정한다.
@@ -64,21 +64,23 @@ an OpenAI-compatible localhost proxy that forwards `/v1/*` requests to
 After:
 
 ```md
-a native localhost xAI bridge that parses and renders HTTP/SSE/WebSocket
-contracts for `/v1/*`, while retaining verified binary/multipart passthroughs
+a native localhost xAI bridge that parses and renders HTTP/SSE contracts for
+`/v1/*`, provides typed clients for direct xAI WebSockets, and retains verified
+binary/multipart passthroughs
 ```
 
 활성 표에 다음 row를 추가한다.
 
 ```md
-| Responses WebSocket | `ws://127.0.0.1:18645/v1/responses` | Typed Responses events over a serial WebSocket session. |
-| Voice WebSockets | `ws://127.0.0.1:18645/v1/realtime`, `/v1/stt`, `/v1/tts` | Realtime speech, streaming transcription, and streaming synthesis. |
-| Local web app | `http://127.0.0.1:18646` | Text, streaming, and realtime voice UI without exposing OAuth tokens to browser code. |
+| Responses WebSocket | `wss://api.x.ai/v1/responses` | Direct typed Responses session with server-side bearer auth. |
+| Voice WebSockets | `wss://api.x.ai/v1/realtime`, `wss://api.x.ai/v1/stt`, `wss://api.x.ai/v1/tts` | Direct realtime speech, streaming transcription, and streaming synthesis. Browser clients use an ephemeral subprotocol token. |
+| Local web app | `http://127.0.0.1:18646` | Same-origin HTTP plus direct xAI Voice WebSockets without exposing OAuth tokens to browser code. |
 ```
 
-`Proxy Coverage`의 “WebSocket endpoints are not proxied” 단락은 삭제하고 local relay와
-direct browser 연결을 구분한 표로 바꾼다. `How It Works` 도식에는 canonical IR,
-typed event, protocol renderer 단계를 넣는다.
+`Proxy Coverage`의 “WebSocket endpoints are not proxied” 계약은 유지하되 local relay가
+없고 Node/browser client가 xAI에 직접 연결한다고 명시한다. browser 흐름은 same-origin
+`POST /v1/realtime/client_secrets` → ephemeral token → direct `wss://api.x.ai` 순서로
+적는다. `How It Works` 도식에는 canonical IR, typed event, protocol renderer 단계를 넣는다.
 
 `Relationship ...` 절 끝에 다음 사실을 추가한다.
 
@@ -99,7 +101,7 @@ After:
 
 ```md
 **HTTP base:** `http://127.0.0.1:18645/v1`
-**WebSocket base:** `ws://127.0.0.1:18645/v1`
+**Direct WebSocket base:** `wss://api.x.ai/v1`
 **Web app:** `http://127.0.0.1:18646`
 ```
 
@@ -107,7 +109,8 @@ After:
 
 1. `## Native protocol behavior`: canonical request/event 변환, passthrough 대상, first
    terminal wins, pre-header만 retry, mid-stream 무재시도.
-2. `## Responses WebSocket`: URL, serial request 규칙, 25분 연결 한도, request와
+2. `## Responses WebSocket`: direct `wss://api.x.ai/v1/responses` URL, server-side
+   bearer, serial request 규칙, 25분 연결 한도, request와
    response lifecycle event, `previous_response_not_found`,
    `websocket_connection_limit_reached`.
 3. `## Realtime Voice WebSocket`: `model`, `call_id`, `conversation_id`,
@@ -117,9 +120,10 @@ After:
    `speech_final`이 최종 transcript이고 `transcript.done.text`가 비어 있을 수 있다는
    실측 주의.
 5. `## Streaming TTS WebSocket`: query와 `text.delta`/`text.done`, binary/audio event.
-6. `## Browser authentication`: backend-minted client secret과
-   `xai-client-secret.<token>` subprotocol. OAuth/API key/client secret 값을 URL query에
-   넣지 않는다.
+6. `## Browser authentication`: same-origin `POST /v1/realtime/client_secrets`로
+   backend-minted client secret을 받고 direct xAI socket에
+   `xai-client-secret.<token>` subprotocol로 전달한다. OAuth/API key/client secret 값을
+   URL query에 넣지 않는다.
 
 Voice model snippet은 다음으로 교체한다.
 
@@ -128,8 +132,8 @@ Voice model snippet은 다음으로 교체한다.
 `grok-voice-think-fast-2.0` for production reproducibility.
 ```
 
-`Limitations`에서는 WS 미지원 bullet을 삭제하고 management API, account gate,
-연결 시간, 브라우저 origin 제한만 남긴다.
+`Limitations`에서는 local proxy가 WebSocket upgrade를 처리하지 않는다고 명시하고
+management API, account gate, 연결 시간, 브라우저 origin 제한을 함께 남긴다.
 
 ### MODIFY — `skills/progrok/SKILL.md`
 
@@ -143,15 +147,26 @@ proxy does **not** forward.
 After:
 
 ```md
-progrok exposes native local WebSocket relays at `/v1/responses`, `/v1/realtime`,
-`/v1/stt`, and `/v1/tts`. Browser-direct xAI connections must first mint a
-short-lived client secret and use the `xai-client-secret.<token>` subprotocol.
+progrok's WebSocket clients connect directly to `wss://api.x.ai/v1/responses`,
+`wss://api.x.ai/v1/realtime`, `wss://api.x.ai/v1/stt`, and
+`wss://api.x.ai/v1/tts`; the localhost HTTP proxy does not
+relay WebSocket upgrades. Browser Voice clients first mint a short-lived secret
+through `POST http://127.0.0.1:18645/v1/realtime/client_secrets`, then use the
+`xai-client-secret.<token>` subprotocol on the direct xAI socket.
 ```
 
 실제 사용 pattern을 추가한다.
 
 ```ts
-const ws = new WebSocket("ws://127.0.0.1:18645/v1/realtime?model=grok-voice-think-fast-2.0");
+const secret = await fetch("http://127.0.0.1:18645/v1/realtime/client_secrets", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ expires_after: { seconds: 300 } }),
+}).then((response) => response.json());
+const ws = new WebSocket(
+  "wss://api.x.ai/v1/realtime?model=grok-voice-think-fast-2.0",
+  [`xai-client-secret.${secret.value}`],
+);
 ws.addEventListener("open", () => ws.send(JSON.stringify({
   type: "session.update",
   session: { voice: "eve", resumption: { enabled: true } },
@@ -160,7 +175,7 @@ ws.addEventListener("open", () => ws.send(JSON.stringify({
 
 모델 표의 `-fast-1.0`/`-think-fast-1.0`을 제거하고 alias/pinned 2.0을 분리한다.
 가격 숫자는 삭제하고 “runtime catalog and xAI account terms are authoritative”로
-바꾼다. ports/path에 four WS path와 웹앱 URL을 넣는다.
+바꾼다. ports/path에는 네 direct xAI WS URL과 웹앱 URL을 넣고 local WS URL은 넣지 않는다.
 
 ### MODIFY — `site/src/components/DocsSidebar.astro`
 
@@ -189,7 +204,7 @@ Before: Core path와 Voice 목록에 WS와 웹앱이 없다.
 
 After: Core path에 `Web app`, Text에 `Responses WebSocket`, Voice에 `Realtime voice`,
 `Streaming TTS/STT` link를 추가한다. 개요 첫 문장은 “proxy and direct commands”에서
-“native HTTP/SSE/WS bridge, direct commands, and web app”으로 바꾼다.
+“native HTTP/SSE bridge, direct WebSocket clients and commands, and web app”으로 바꾼다.
 
 ### NEW — `site/src/pages/docs/text/responses-websocket.astro`
 
@@ -200,7 +215,7 @@ const title = 'Responses WebSocket';
 ---
 <DocsLayout title={title}>
   <h1>Responses WebSocket</h1>
-  <p>Connect to <code>ws://127.0.0.1:18645/v1/responses</code>. Requests are processed serially on one connection.</p>
+  <p>Connect directly to <code>wss://api.x.ai/v1/responses</code> with a server-side bearer. Requests are processed serially on one connection; the localhost proxy does not relay WebSocket upgrades.</p>
   <h2>Lifecycle</h2>
   <pre><code>{`open -> response.create -> typed delta events -> response.completed|failed|incomplete`}</code></pre>
   <h2>Rules</h2>
@@ -221,12 +236,12 @@ const title = 'Realtime Voice';
 ---
 <DocsLayout title={title}>
   <h1>Realtime Voice</h1>
-  <p>Use <code>ws://127.0.0.1:18645/v1/realtime?model=grok-voice-think-fast-2.0</code> for native speech-to-speech.</p>
+  <p>Use <code>wss://api.x.ai/v1/realtime?model=grok-voice-think-fast-2.0</code> directly for native speech-to-speech.</p>
   <h2>Session</h2>
   <pre><code>{`{"type":"session.update","session":{"voice":"eve","resumption":{"enabled":true}}}`}</code></pre>
   <p>Document audio formats, VAD, resumption, pronunciation replacement, tools, function calls, MCP, DTMF, cancellation, and ping/pong.</p>
   <h2>Browser-direct authentication</h2>
-  <p>Mint a short-lived client secret on a trusted backend and pass it as <code>xai-client-secret.&lt;token&gt;</code>. Never expose the OAuth refresh token.</p>
+  <p>The local web app mints a short-lived client secret through same-origin <code>POST /v1/realtime/client_secrets</code>, then passes it as <code>xai-client-secret.&lt;token&gt;</code> on the direct xAI socket. Never expose the OAuth refresh token.</p>
 </DocsLayout>
 ```
 
@@ -240,10 +255,10 @@ const title = 'Streaming TTS and STT';
 <DocsLayout title={title}>
   <h1>Streaming TTS and STT</h1>
   <h2>STT</h2>
-  <p>Send binary audio frames to <code>/v1/stt</code>, then <code>finalize</code> and <code>audio.done</code>.</p>
+  <p>Send binary audio frames directly to <code>wss://api.x.ai/v1/stt</code>, then <code>finalize</code> and <code>audio.done</code>.</p>
   <p>Treat a partial event with <code>speech_final=true</code> as final even when <code>transcript.done.text</code> is empty.</p>
   <h2>TTS</h2>
-  <p>Configure voice, language, codec, sample rate, latency optimization, speed, normalization, and timestamps in the query string.</p>
+  <p>Connect directly to <code>wss://api.x.ai/v1/tts</code> and configure voice, language, codec, sample rate, latency optimization, speed, normalization, and timestamps in the query string.</p>
 </DocsLayout>
 ```
 
@@ -258,8 +273,8 @@ const title = 'Local Web App';
   <h1>Local Web App</h1>
   <pre><code>{`progrok chat
 # open http://127.0.0.1:18646`}</code></pre>
-  <p>The web app supports text Responses streaming and realtime voice through same-origin local endpoints.</p>
-  <p>OAuth access tokens, refresh tokens, and upstream client secrets are never serialized into HTML, JavaScript, storage, or browser logs.</p>
+  <p>The web app uses same-origin local HTTP for text Responses and client-secret minting, then connects Voice directly to <code>wss://api.x.ai</code>.</p>
+  <p>OAuth access and refresh tokens are never serialized into HTML, JavaScript, storage, or browser logs. The ephemeral client secret exists only in memory and the WebSocket subprotocol.</p>
 </DocsLayout>
 ```
 
@@ -267,12 +282,12 @@ const title = 'Local Web App';
 
 | 경로 | Before | After |
 |---|---|---|
-| `site/src/pages/docs/voice/overview.astro` | “WebSocket endpoints are not proxied” | REST, local native WS, browser-direct ephemeral flow를 표로 비교 |
-| `site/src/pages/docs/voice/tts.astro` | REST만 설명 | REST와 `/v1/tts` WS 링크, object `output_format` 유지 |
-| `site/src/pages/docs/voice/stt.astro` | streaming은 progrok 미지원 | local `/v1/stt` WS query/event/final 규칙 링크 |
+| `site/src/pages/docs/voice/overview.astro` | “WebSocket endpoints are not proxied” | REST proxy, direct xAI WS, browser ephemeral flow를 표로 비교 |
+| `site/src/pages/docs/voice/tts.astro` | REST만 설명 | REST와 direct `wss://api.x.ai/v1/tts` 링크, object `output_format` 유지 |
+| `site/src/pages/docs/voice/stt.astro` | streaming은 progrok 미지원 | direct `wss://api.x.ai/v1/stt` query/event/final 규칙 링크 |
 | `site/src/pages/docs/cli/chat.astro` | “web-based chat UI” 한 문장 | text SSE, Responses WS, realtime voice, 보안 경계, URL 설명 |
-| `site/src/pages/docs/cli/proxy.astro` | HTTP `/v1/*`만 | HTTP와 WS upgrade path, passthrough/native 분류 표 |
-| `site/src/pages/docs/concepts/oauth-bridge.astro` | WS를 proxy하지 않음 | OAuth는 server-side에 남고 webapp은 short-lived local session만 사용 |
+| `site/src/pages/docs/cli/proxy.astro` | HTTP `/v1/*`만 | HTTP relay와 direct xAI WS client를 구분하고 local WS upgrade가 없음을 명시 |
+| `site/src/pages/docs/concepts/oauth-bridge.astro` | WS를 proxy하지 않음 | OAuth는 server-side에 남고 webapp은 same-origin client-secret mint 후 direct xAI WS 사용 |
 | `site/src/pages/docs/advanced/smoke-matrix.astro` | WS는 external setup 없어 미검증 | wp14의 STT streaming/client-secret 결과, 날짜, artifact field를 기록 |
 
 ### MODIFY — 모델과 계약 오류가 있는 사이트 페이지
@@ -300,7 +315,7 @@ const title = 'Local Web App';
 ## 문서 검증 명령
 
 ```bash
-rg -n 'grok-voice-(fast|think-fast)-1\.0|WebSocket endpoints are not proxied|does \*\*not\*\* forward' \
+rg -n 'grok-voice-(fast|think-fast)-1\.0|ws://127\.0\.0\.1:18645/v1/(responses|realtime|stt|tts)|local WebSocket relay' \
   README.md docs/api.md skills/progrok/SKILL.md site/src/pages/docs
 rg -n 'gpt-4o|"size": "1024x1024"' site/src/pages/docs
 rg -n 'ima2-gen.*(bundl|supervis|18645)' README.md docs skills site/src/pages/docs
@@ -319,9 +334,9 @@ rg -n 'ima2-gen v3\.16\.1.*no longer bundles|only share.*~/.progrok/auth\.json' 
 
 ## 완료 조건
 
-- README, API reference, packaged skill, site가 같은 HTTP/WS/webapp URL을 말한다.
-- four local WS path와 direct browser ephemeral auth가 각각 copy-paste 가능한 예제를 가진다.
-- `grok-voice-think-fast-1.0`, `grok-voice-fast-1.0`, `gpt-4o`, WS 미지원 문구가
+- README, API reference, packaged skill, site가 같은 HTTP/direct-WS/webapp URL을 말한다.
+- 네 direct `wss://api.x.ai/v1/...` endpoint와 browser ephemeral auth 흐름이 copy-paste 가능한 예제를 가진다.
+- `grok-voice-think-fast-1.0`, `grok-voice-fast-1.0`, `gpt-4o`, local WS URL/relay 문구가
   공개 문서에서 0건이다.
 - `grok-voice-latest`는 rolling alias, `grok-voice-think-fast-2.0`은 production pin으로
   설명된다.

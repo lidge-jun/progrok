@@ -11,6 +11,7 @@ wp5–wp13의 공개 경계에 있어야 하며, 없다면 소유 단계로 되�
 
 - `src/auth/`, `src/transport/`, `src/wire/`, `src/voice/`, `src/surfaces/`,
   `src/proxy/`, `src/web/`가 구현돼 있다.
+- wp5 소유 `src/auth/token-manager.ts`와 wp11 소유 `src/surfaces/index.ts`가 각 소유 단계에서 구현·export돼 있다. wp14는 두 모듈을 생성하거나 시그니처를 재정의하지 않고 검증 코드에서만 import한다.
 - 각 모듈의 public export와 오류 타입이 확정돼 있다.
 - `npm run typecheck`가 성공한다.
 - 단위 테스트는 외부 네트워크를 사용하지 않는다. 라이브 호출은 이 문서의 opt-in
@@ -157,7 +158,7 @@ describe("TokenManager", () => {
 });
 ```
 
-필수 구현 시그니처는 다음과 같이 고정한다.
+아래 import 대상과 시그니처는 wp5의 선행 계약이다. wp14는 이 파일을 만들거나 구현을 보강하지 않는다.
 
 ```ts
 export interface TokenManagerDependencies {
@@ -172,15 +173,15 @@ export function createTokenManager(
 ): { getValidBearer(signal?: AbortSignal): Promise<string> };
 ```
 
-### NEW — `tests/transport.test.ts`
+### MODIFY — `tests/transport.test.ts`
 
 ```ts
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { resolveUpstreamUrl } from "../src/transport/base-url.js";
 import { buildUpstreamHeaders } from "../src/transport/headers.js";
-import { classifyRetry } from "../src/transport/retry.js";
-import { executeRequest } from "../src/transport/fetch.js";
+import { classifyReplay } from "../src/transport/retry.js";
+import { xaiFetch } from "../src/transport/fetch.js";
 
 describe("transport", () => {
   it("routes every public API and Voice path to api.x.ai", () => {});
@@ -263,7 +264,7 @@ describe("ToolCallAssembler", () => {
 });
 ```
 
-### NEW — `tests/voice-rest.test.ts`
+### MODIFY — `tests/voice-rest.test.ts`
 
 ```ts
 import { describe, it } from "node:test";
@@ -275,13 +276,13 @@ describe("Voice REST", () => {
   it("serializes TTS output_format as an object", async () => {});
   it("returns audio bytes and preserves content-type", async () => {});
   it("puts multipart STT file after every metadata field", async () => {});
-  it("supports URL STT without creating multipart", async () => {});
+  it("sends URL STT as multipart without a file part", async () => {});
   it("rejects simultaneous file and url inputs", async () => {});
   it("propagates 401, 403, 422 and 429 as distinct typed errors", async () => {});
 });
 ```
 
-### NEW — `tests/voice-ws.test.ts`
+### MODIFY — `tests/voice-ws.test.ts`
 
 ```ts
 import { describe, it } from "node:test";
@@ -309,7 +310,17 @@ message promise, close promise를 사용한다.
 ```ts
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createSurfaceClient } from "../src/surfaces/index.js";
+import {
+  BatchesClient,
+  CollectionsSearchClient,
+  EmbeddingsClient,
+  FilesClient,
+  ImagesClient,
+  MiscClient,
+  ModelsClient,
+  SkillsClient,
+  VideosClient,
+} from "../src/surfaces/index.js";
 
 describe("REST surfaces", () => {
   it("serializes responses, compact and input_items paths", async () => {});
@@ -320,6 +331,10 @@ describe("REST surfaces", () => {
   it("never sends management-api credentials to api.x.ai", async () => {});
 });
 ```
+
+`src/surfaces/index.ts`의 위 re-export는 wp11 선행 계약이다. 존재하지 않는 aggregate
+`createSurfaceClient()`를 wp14에서 새로 만들지 않는다. 각 client에는 같은 fake
+`XaiTransport`를 constructor로 주입한다.
 
 테이블 기반 case는 각 row에 `method`, `path`, `request`, `expectedStatus`를 literal로
 둔다. 구현의 route registry를 expected 목록으로 재사용하지 않는다.
@@ -343,10 +358,14 @@ it("forwards an unknown /v1 path with method, query and body intact", async () =
     headers: { "content-type": "application/octet-stream" },
     chunks: [Buffer.from([0, 1, 2, 255])],
   }));
-  const app = createProxyApp({ apiBaseUrl: fake.baseUrl, getBearer: async () => "unit-token" });
+  const transportFetch: typeof globalThis.fetch = async (input, init) => {
+    const upstream = new URL(String(input));
+    return fetch(new URL(`${upstream.pathname}${upstream.search}`, fake.baseUrl), init);
+  };
+  const app = createProxyApp({ transport: { fetch: transportFetch } });
   // local app on port 0, POST /v1/future/path?a=1&a=2 with binary body
   // assert fake.requests[0] exact method/path/search/body
-  // assert upstream authorization is Bearer unit-token and caller placeholder is absent
+  // assert upstream authorization is the temporary wp5 fixture bearer and caller placeholder is absent
   // assert response status 207 and bytes [0, 1, 2, 255]
   await fake.close();
 });
@@ -358,10 +377,8 @@ it("forwards an unknown /v1 path with method, query and body intact", async () =
 - SSE chunk가 분리된 순서대로 전달되고 terminal 뒤 데이터는 전달하지 않는다.
 - 요청 abort가 upstream AbortSignal로 전파된다.
 - 100 MB 한계를 1 byte 넘으면 upstream 요청 없이 413이다.
-- `upgrade` 경로가 `/v1/responses`, `/v1/realtime`, `/v1/stt`, `/v1/tts`만 WS
-  handler로 넘기고 다른 path는 닫는다.
 
-### NEW — `tests/webapp.test.ts`
+### MODIFY — `tests/webapp.test.ts`
 
 ```ts
 import { describe, it } from "node:test";
@@ -371,14 +388,17 @@ import { createWebApp } from "../src/web/server.js";
 describe("web app", () => {
   it("serves the app and immutable hashed assets", async () => {});
   it("does not serialize OAuth bearer or refresh tokens into HTML", async () => {});
-  it("mints a short-lived same-origin websocket session", async () => {});
-  it("rejects an untrusted Origin and expired websocket session", async () => {});
-  it("supports one text response and one realtime voice connection", async () => {});
+  it("mints an ephemeral client secret through same-origin HTTP", async () => {});
+  it("builds a direct wss://api.x.ai socket with xai-client-secret subprotocol", () => {});
+  it("supports one text response while voice bypasses the local HTTP server", async () => {});
 });
 ```
 
 브라우저 렌더링 smoke는 wp13의 UI 테스트가 소유한다. WP14는 서버 계약과 secret
-비노출을 검증하고, 사이트가 제공하는 observable 상태를 사용한다.
+비노출을 검증하고, Voice가 로컬 HTTP 서버를 거치지 않고
+`wss://api.x.ai/v1/realtime`, `wss://api.x.ai/v1/stt`, `wss://api.x.ai/v1/tts`에
+직접 연결하는지 확인한다. 별도 WebSocket relay/session/origin 검증 계층은 만들거나
+테스트하지 않는다.
 
 ### MODIFY — `tests/cli-skill-contract.test.ts`
 
@@ -393,13 +413,28 @@ assert.match(skill, /x_search/);
 After:
 
 ```ts
-const capabilities = buildCapabilities();
-assert.equal(capabilities.auth.file, AUTH_FILE);
+import { buildCapabilities } from "../src/commands/capabilities.js";
+import { COMMAND_MANIFEST } from "../src/commands/command-manifest.js";
+import { SURFACE_REGISTRY } from "../src/surfaces/registry.js";
+
+const capabilities = await buildCapabilities({ offline: true });
+assert.equal(capabilities.schemaVersion, 2);
+assert.deepEqual(capabilities.commands, COMMAND_MANIFEST);
+assert.deepEqual(capabilities.endpoints, SURFACE_REGISTRY);
 assert.deepEqual(
-  capabilities.websockets.map((item) => item.path).sort(),
-  ["/v1/realtime", "/v1/responses", "/v1/stt", "/v1/tts"],
+  capabilities.endpoints
+    .filter((item) => item.transport === "websocket")
+    .map((item) => item.path)
+    .sort(),
+  [
+    "wss://api.x.ai/v1/realtime",
+    "wss://api.x.ai/v1/responses",
+    "wss://api.x.ai/v1/stt",
+    "wss://api.x.ai/v1/tts",
+  ],
 );
-assert.equal(capabilities.webApp.url, "http://127.0.0.1:18646");
+assert.equal(capabilities.proxy.baseUrl, "http://127.0.0.1:18645/v1");
+assert.equal(capabilities.modelCatalog.status, "offline");
 ```
 
 파일 존재와 frontmatter parse는 유지하되, prose 문구 존재 검사는 동적 metadata와
@@ -407,7 +442,7 @@ assert.equal(capabilities.webApp.url, "http://127.0.0.1:18646");
 
 ### NO CHANGE — `scripts/run-tests.mjs`
 
-새 `*.test.ts`는 모두 `tests/` 바로 아래에 있으므로 현재 탐색 규칙이 자동으로 포함한다.
+wp14가 다루는 `*.test.ts`는 모두 `tests/` 바로 아래에 있으므로 현재 탐색 규칙이 자동으로 포함한다.
 테스트 폴더를 재귀화하거나 별도 glob 라이브러리를 추가하지 않는다. 다음 자체 계약만
 새 테스트 중 하나에서 검증한다.
 
@@ -544,7 +579,8 @@ git diff --check
 
 ## 완료 조건
 
-- 현재 7개 테스트와 새 auth/transport/wire/voice/surfaces/proxy/web 테스트가 실패 0이다.
+- 현재 7개 테스트, 생성 단계에서 보강한 auth/transport/voice/proxy/web 테스트,
+  wp14 신규 wire/surfaces 테스트가 실패 0이다.
 - 기본 test run은 외부 네트워크, 사용자 credential, 고정 포트에 의존하지 않는다.
 - `tests/proxy.test.ts`에 `assert.ok(true)` 또는 동등한 무행동 단언이 없다.
 - malformed wire, abort, timeout, 4xx/429, mid-stream failure, terminal 중복, secret

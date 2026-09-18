@@ -1,8 +1,8 @@
-# wp12 — 기존 CLI 계약을 유지하면서 Voice 명령과 동적 capabilities를 붙인다
+# wp12 — 기존 명령을 유지하고 3.0.0 Voice·동적 capabilities 표면을 붙인다
 
 ## 결론
 
-wp12는 기존 12개 명령(`login/logout/status/proxy/chat/models/search/image/video/billing/capabilities/skill`)을 이름과 핵심 옵션 그대로 유지하고 `tts`, `stt`, `live`를 추가한다. top-level 등록 목록과 capabilities의 command 목록은 하나의 manifest에서 생성해 드리프트를 막는다. `capabilities`의 모델 정보는 더 이상 소스에 박힌 가격·별칭·Voice 1.0 스냅샷을 권위로 내보내지 않고, 실행 시 `/v1/models` 계열을 조회한 결과와 조회 상태를 함께 내보낸다.
+wp12는 기존 12개 명령(`login/logout/status/proxy/chat/models/search/image/video/billing/capabilities/skill`)의 이름과 핵심 옵션을 유지하고 `tts`, `stt`, `live`를 추가한다. 단, `capabilities --json`의 `commands`는 `string[]`에서 객체 배열로 바뀌므로 이 단계는 호환 릴리스가 아니라 **progrok 3.0.0의 major contract change**다. top-level 등록 목록과 capabilities의 command 목록은 하나의 manifest에서 생성해 드리프트를 막는다. `capabilities`의 모델 정보는 더 이상 소스에 박힌 가격·별칭·Voice 1.0 스냅샷을 권위로 내보내지 않고, 실행 시 `/v1/models` 계열을 조회한 결과와 조회 상태를 함께 내보낸다.
 
 `live`는 마이크/스피커 장치 제어가 아니라 stdin/stdout NDJSON Realtime event bridge다. 네이티브 오디오 장치·ffmpeg 의존성을 wp12에 추가하지 않으면서 `src/voice/realtime.ts`를 완전히 구동하고 자동화 가능한 계약을 제공한다. 브라우저/마이크 UX는 wp13이 소유한다.
 
@@ -32,6 +32,14 @@ Commander 객체 자체를 capabilities가 import하는 설계는 순환 의존�
 
 capabilities가 정적 fallback 모델을 계속 내보내는 안은 거절한다. 네트워크나 인증이 없으면 `models: []`와 구조화된 `modelCatalog.status`를 내보낸다. “오래됐지만 그럴듯한 모델”보다 “현재 조회 불가”가 기계 소비자에게 안전하다.
 
+## 진입 조건 — 앞 단계 공개 계약
+
+- wp6 소유 `src/transport/fetch.ts`가 `XaiTransport.request(path, init?, policy?): Promise<Response>`와 `createXaiTransport(options?: { signal?: AbortSignal; timeoutMs?: number }): XaiTransport`를 export해야 한다. wp12는 이 파일을 만들거나 transport 계약을 재정의하지 않고 import만 한다. 둘 중 하나라도 없으면 wp12 구현을 시작하지 않고 wp6 산출물을 먼저 완료한다.
+- wp9 소유 `src/voice/tts.ts`의 `createTtsClient(options?).synthesize(request, signal?)`와 `src/voice/stt.ts`의 `createSttClient(options?).transcribe(request, signal?)`가 존재해야 한다.
+- wp10 소유 `src/voice/realtime.ts`의 `createRealtimeClient(options, deps?)`와 반환 `RealtimeClient`의 semantic methods가 존재해야 한다.
+
+위 세 모듈은 이 단계에서 `NO CHANGE — precondition`이다. wp12는 편의를 위해 `synthesizeSpeech`, `transcribeSpeech`, `connectRealtime` 같은 alias나 transport shim을 추가하지 않는다.
+
 ## 변경 매니페스트
 
 | 상태 | 정확한 경로 | 책임 |
@@ -42,7 +50,7 @@ capabilities가 정적 fallback 모델을 계속 내보내는 안은 거절한�
 | NEW | `src/commands/stt.ts` | REST STT CLI |
 | NEW | `src/commands/live.ts` | Realtime NDJSON event bridge |
 | MODIFY | `src/index.ts` | 수동 import/등록/REAL_COMMANDS를 registry로 교체 |
-| MODIFY | `src/commands/capabilities.ts` | endpoint registry 재사용, live catalog, schemaVersion 2 |
+| MODIFY | `src/commands/capabilities.ts` | endpoint registry 재사용, live catalog, 3.0.0의 schemaVersion 2 |
 | MODIFY | `src/commands/models.ts` | wp11 `ModelsClient`로 전환, `--kind` 추가 |
 | MODIFY | `src/commands/image.ts` | wp11 `ImagesClient`로 direct fetch 제거 |
 | MODIFY | `src/commands/video.ts` | wp11 `VideosClient`로 submit/poll 제거 |
@@ -164,30 +172,34 @@ export function createRegisteredCommands(): Command[] {
 
 ## NEW — Voice 명령
 
-wp9/wp10은 다음 공개 함수를 제공해야 한다. 이름이 다르면 wp12 전에 해당 단계 문서를 이 계약으로 정정한다.
+wp12는 wp9/wp10이 이미 소유한 factory 계약을 그대로 사용한다.
 
 ```ts
 // src/voice/tts.ts
-export function synthesizeSpeech(request: TtsRequest, signal?: AbortSignal): Promise<TtsResult>;
+export function createTtsClient(options?: VoiceClientOptions): TtsClient;
+// TtsClient.synthesize(request: TtsRequest, signal?: AbortSignal): Promise<TtsResult>
 // src/voice/stt.ts
-export function transcribeSpeech(request: SttRequest, signal?: AbortSignal): Promise<SttResult>;
+export function createSttClient(options?: VoiceClientOptions): SttClient;
+// SttClient.transcribe(request: SttRequest, signal?: AbortSignal): Promise<SttResponse>
 // src/voice/realtime.ts
-export function connectRealtime(options: RealtimeConnectOptions): Promise<RealtimeSession>;
+export function createRealtimeClient(
+  options: CreateRealtimeClientOptions,
+  deps?: VoiceWsDeps,
+): Promise<RealtimeClient>;
 ```
 
 ### `src/commands/tts.ts`
 
 ```ts
 import { Command } from "commander";
+import { Buffer } from "node:buffer";
 import { writeFileSync } from "node:fs";
-import { synthesizeSpeech } from "../voice/tts.js";
+import { createTtsClient } from "../voice/tts.js";
 import { log } from "../utils/logger.js";
 
-const DEFAULT_TTS_MODEL = "grok-tts";
 const DEFAULT_TTS_VOICE = "eve";
 
 export interface TtsCliOptions {
-  model?: string;
   voice?: string;
   language?: string;
   format?: "mp3" | "wav" | "pcm" | "mulaw" | "alaw";
@@ -200,7 +212,6 @@ export function ttsCommand(): Command {
   return new Command("tts")
     .description("Synthesize speech with xAI TTS")
     .argument("<text>", "text to synthesize")
-    .option("--model <id>", "TTS model", DEFAULT_TTS_MODEL)
     .option("--voice <id>", "voice ID", DEFAULT_TTS_VOICE)
     .option("--language <code>", "BCP-47 language or auto", "auto")
     .option("--format <format>", "mp3|wav|pcm|mulaw|alaw", "mp3")
@@ -212,21 +223,32 @@ export function ttsCommand(): Command {
         if (opts.stdout && (opts.output || opts.json)) {
           throw new Error("--stdout cannot be combined with --output or --json");
         }
-        const result = await synthesizeSpeech({
-          model: opts.model ?? DEFAULT_TTS_MODEL,
+        const result = await createTtsClient().synthesize({
           voice_id: opts.voice ?? DEFAULT_TTS_VOICE,
           language: opts.language ?? "auto",
           text,
           output_format: { codec: opts.format ?? "mp3" },
         });
+        const bytes = result.kind === "audio"
+          ? result.bytes
+          : new Uint8Array(Buffer.from(result.value.audio, "base64"));
+        const contentType = result.kind === "audio"
+          ? result.contentType
+          : result.value.content_type;
         if (opts.stdout) {
-          process.stdout.write(result.audio);
+          process.stdout.write(bytes);
           return;
         }
         const path = opts.output ?? `progrok-tts.${opts.format ?? "mp3"}`;
-        writeFileSync(path, result.audio);
+        writeFileSync(path, bytes);
         if (opts.json) {
-          console.log(JSON.stringify({ path, bytes: result.audio.byteLength, contentType: result.contentType }, null, 2));
+          console.log(JSON.stringify({
+            path,
+            bytes: bytes.byteLength,
+            contentType,
+            kind: result.kind,
+            ...(result.kind === "json" ? { duration: result.value.duration } : {}),
+          }, null, 2));
         } else {
           log.success(`Audio saved: ${path}`);
         }
@@ -238,7 +260,7 @@ export function ttsCommand(): Command {
 }
 ```
 
-`output_format`은 문자열이 아니라 객체라는 라이브 근거(`001_endpoint_inventory.md:92`)를 유지한다. binary stdout에서는 로그를 stdout에 섞지 않는다.
+`TtsRequest`에는 `model`이 없으므로 CLI에도 `--model`을 만들지 않는다. `output_format`은 문자열이 아니라 객체라는 라이브 근거(`001_endpoint_inventory.md:92`)를 유지한다. `TtsResult.kind === "audio"`이면 `bytes/contentType`, `kind === "json"`이면 base64 `value.audio`와 `value.content_type`을 사용한다. binary stdout에서는 로그를 stdout에 섞지 않는다.
 
 ### `src/commands/stt.ts`
 
@@ -246,14 +268,11 @@ export function ttsCommand(): Command {
 import { Command } from "commander";
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
-import { transcribeSpeech } from "../voice/stt.js";
+import { createSttClient } from "../voice/stt.js";
 import { collectRefs } from "../utils/collect-refs.js";
 import { log } from "../utils/logger.js";
 
-const DEFAULT_STT_MODEL = "grok-stt";
-
 export interface SttCliOptions {
-  model?: string;
   language?: string;
   diarize?: boolean;
   multichannel?: boolean;
@@ -265,7 +284,6 @@ export function sttCommand(): Command {
   return new Command("stt")
     .description("Transcribe an audio file with xAI STT")
     .argument("<file>", "audio file path")
-    .option("--model <id>", "STT model", DEFAULT_STT_MODEL)
     .option("--language <code>", "BCP-47 language hint")
     .option("--diarize", "enable speaker diarization")
     .option("--multichannel", "transcribe channels separately")
@@ -273,8 +291,7 @@ export function sttCommand(): Command {
     .option("--json", "output the full structured transcript")
     .action(async (file: string, opts: SttCliOptions) => {
       try {
-        const result = await transcribeSpeech({
-          model: opts.model ?? DEFAULT_STT_MODEL,
+        const result = await createSttClient().transcribe({
           file: new Blob([new Uint8Array(readFileSync(file))]),
           filename: basename(file),
           language: opts.language,
@@ -292,21 +309,27 @@ export function sttCommand(): Command {
 }
 ```
 
-wp9 client가 multipart를 만들 때 `file` part를 마지막에 append한다. CLI는 multipart 세부사항을 알지 않는다.
+wp9 `SttRequest`에도 `model` 필드가 없으므로 STT CLI에 `--model`을 만들지 않는다. wp9 client가 multipart를 만들 때 `file` part를 마지막에 append한다. CLI는 multipart 세부사항을 알지 않는다.
 
 ### `src/commands/live.ts`
 
 ```ts
 import { Command } from "commander";
 import { createInterface } from "node:readline";
-import { connectRealtime, type RealtimeClientEvent } from "../voice/realtime.js";
+import {
+  createRealtimeClient,
+  type RealtimeClient,
+  type RealtimeClientEvent,
+  type RealtimeReasoningEffort,
+  type RealtimeVoiceModel,
+} from "../voice/realtime.js";
 import { log } from "../utils/logger.js";
 import { DEFAULT_LIVE_MODEL } from "./command-manifest.js";
 
 export interface LiveCliOptions {
-  model?: string;
+  model?: RealtimeVoiceModel;
   conversationId?: string;
-  reasoning?: string;
+  reasoning?: RealtimeReasoningEffort;
   event?: string[];
   stdin?: boolean;
   once?: boolean;
@@ -316,43 +339,75 @@ function collectEvent(value: string, previous: string[]): string[] {
   return previous.concat(value);
 }
 
-function parseClientEvent(line: string): RealtimeClientEvent {
+type LiveClientEvent = Exclude<RealtimeClientEvent, { type: "pong" }>;
+
+function parseRealtimeModel(value: string): RealtimeVoiceModel {
+  if (value !== "grok-voice-think-fast-2.0" && value !== "grok-voice-latest") {
+    throw new Error("--model must be grok-voice-think-fast-2.0 or grok-voice-latest");
+  }
+  return value;
+}
+
+function parseReasoningEffort(value: string): RealtimeReasoningEffort {
+  if (value !== "high" && value !== "none") throw new Error("--reasoning must be high or none");
+  return value;
+}
+
+function parseClientEvent(line: string): LiveClientEvent {
   const wire: unknown = JSON.parse(line);
   if (wire === null || typeof wire !== "object" || Array.isArray(wire)) throw new Error("live event must be a JSON object");
   const type = (wire as { type?: unknown }).type;
   if (typeof type !== "string" || type.length === 0) throw new Error("live event.type is required");
-  return wire as RealtimeClientEvent;
+  if (type === "pong") throw new Error("pong is managed automatically by the realtime client");
+  return wire as LiveClientEvent;
+}
+
+function sendClientEvent(client: RealtimeClient, event: LiveClientEvent): void {
+  switch (event.type) {
+    case "session.update": client.updateSession(event.session); return;
+    case "input_audio_buffer.append": client.appendAudioBase64(event.audio); return;
+    case "input_audio_buffer.commit": client.commitAudio(); return;
+    case "input_audio_buffer.clear": client.clearAudio(); return;
+    case "conversation.item.create": client.createItem(event.item, event.previous_item_id); return;
+    case "conversation.item.delete": client.deleteItem(event.item_id); return;
+    case "conversation.item.truncate": client.truncateItem(event.item_id, event.content_index, event.audio_end_ms); return;
+    case "response.create": client.createResponse(event.response); return;
+    case "response.cancel": client.cancelResponse(event.response_id); return;
+  }
 }
 
 export function liveCommand(): Command {
   return new Command("live")
     .description("Bridge xAI Realtime events over NDJSON stdin/stdout (no microphone capture)")
-    .option("--model <id>", "pinned Voice model", DEFAULT_LIVE_MODEL)
+    .option("--model <id>", "pinned Voice model or latest alias", parseRealtimeModel, DEFAULT_LIVE_MODEL)
     .option("--conversation-id <id>", "resume an existing conversation")
-    .option("--reasoning <effort>", "reasoning effort")
+    .option("--reasoning <effort>", "high|none", parseReasoningEffort)
     .option("--event <json>", "send one client event (repeatable)", collectEvent, [])
     .option("--no-stdin", "do not read additional NDJSON events from stdin")
     .option("--once", "exit after the first response.done or error")
     .action(async (opts: LiveCliOptions) => {
-      const session = await connectRealtime({
-        model: opts.model ?? DEFAULT_LIVE_MODEL,
-        conversationId: opts.conversationId,
-        reasoningEffort: opts.reasoning,
-      });
       const stop = new AbortController();
       process.once("SIGINT", () => stop.abort());
+      let session: RealtimeClient | undefined;
 
       try {
-        for (const encoded of opts.event ?? []) await session.send(parseClientEvent(encoded));
+        session = await createRealtimeClient({
+          auth: { kind: "oauth" },
+          model: opts.model ?? DEFAULT_LIVE_MODEL,
+          conversationId: opts.conversationId,
+          reasoningEffort: opts.reasoning,
+          signal: stop.signal,
+        });
+        for (const encoded of opts.event ?? []) sendClientEvent(session, parseClientEvent(encoded));
         if (opts.stdin !== false) {
           const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
           void (async () => {
             for await (const line of lines) {
-              if (line.trim()) await session.send(parseClientEvent(line));
+              if (line.trim()) sendClientEvent(session!, parseClientEvent(line));
             }
           })().catch((error) => stop.abort(error));
         }
-        for await (const event of session.events({ signal: stop.signal })) {
+        for await (const event of session.events()) {
           process.stdout.write(`${JSON.stringify(event)}\n`);
           if (opts.once && (event.type === "response.done" || event.type === "error")) break;
         }
@@ -360,11 +415,13 @@ export function liveCommand(): Command {
         log.error((error as Error).message); // logger must use stderr in this command
         process.exitCode = 1;
       } finally {
-        await session.close();
+        session?.close();
       }
     });
 }
 ```
+
+`RealtimeClient`에는 generic `send()`, signal을 받는 `events(options)`, async `close()`가 없다. NDJSON 입력은 위 dispatcher가 wp10의 semantic method로 변환하고, abort signal은 `createRealtimeClient` options에 한 번 전달하며, `events()`와 `close()`는 각각 인자 없이 호출한다. `pong`은 wp10 client가 수신 `ping`에 자동 응답하므로 CLI 입력으로 받지 않는다.
 
 `grok-voice-think-fast-2.0`은 catalog snapshot이 아니라 의도적으로 핀한 CLI 기본값이다. `grok-voice-latest`를 기본으로 쓰지 않는다. capabilities에서는 이 값을 `recommendations.liveDefaultModel`로 표시하되 “사용 가능한 모델 목록”에 합성하지 않는다.
 
@@ -449,6 +506,13 @@ const ENDPOINTS = [
 after:
 
 ```ts
+import {
+  AUTH_FILE,
+  CHAT_DEFAULT_PORT,
+  PROXY_DEFAULT_HOST,
+  PROXY_DEFAULT_PORT,
+  XAI_API_BASE_URL,
+} from "../auth/constants.js";
 import { COMMAND_MANIFEST, DEFAULT_LIVE_MODEL } from "./command-manifest.js";
 import { SURFACE_REGISTRY } from "../surfaces/registry.js";
 import { ModelsClient, type ModelFamily, type XaiModel } from "../surfaces/models.js";
@@ -558,6 +622,18 @@ export async function buildCapabilities(options: { offline?: boolean; client?: M
   const modelCatalog = await loadCatalogSnapshot(options);
   const models = modelCatalog.families.models ?? [];
   const voiceModels = models.filter((model) => /(^|-)voice(-|$)|(^|-)tts(-|$)|(^|-)stt(-|$)/.test(model.id));
+  const websockets = SURFACE_REGISTRY
+    .filter((surface) => surface.transport === "websocket")
+    .map((surface) => {
+      const url = new URL(surface.path);
+      return {
+        path: url.pathname,
+        url: surface.path,
+        family: surface.family,
+        evidence: surface.evidence,
+        proxied: false as const,
+      };
+    });
   return {
     schemaVersion: 2,
     ok: true,
@@ -566,13 +642,24 @@ export async function buildCapabilities(options: { offline?: boolean; client?: M
     source: "local",
     upstream: XAI_API_BASE_URL,
     commands: COMMAND_MANIFEST,
+    auth: {
+      kind: "oauth" as const,
+      file: AUTH_FILE,
+      inboundAuthorization: "ignored-and-replaced-with-stored-oauth" as const,
+    },
     proxy: {
       host: PROXY_DEFAULT_HOST,
       port: PROXY_DEFAULT_PORT,
       baseUrl: `http://${PROXY_DEFAULT_HOST}:${PROXY_DEFAULT_PORT}/v1`,
       forwarding: "all HTTP /v1/* paths — no whitelist",
     },
+    webApp: {
+      host: PROXY_DEFAULT_HOST,
+      port: CHAT_DEFAULT_PORT,
+      url: `http://${PROXY_DEFAULT_HOST}:${CHAT_DEFAULT_PORT}`,
+    },
     endpoints: SURFACE_REGISTRY,
+    websockets,
     modelCatalog,
     models,
     voiceModels,
@@ -601,6 +688,8 @@ export function capabilitiesCommand(): Command {
 ```
 
 `printText`는 `cap.commands`가 문자열이 아니라 manifest entry이므로 `entry.name`을 출력하고, catalog 상태와 family별 개수를 출력한다. 오류 메시지는 token이나 응답 본문 전체를 포함하지 않는다.
+
+`auth`, `websockets`, `webApp`은 wp14가 읽는 실제 schema field다. `websockets`는 별도 수동 endpoint 배열이 아니라 `SURFACE_REGISTRY`의 `transport === "websocket"` projection이며 path는 URL의 pathname이다. `webApp`은 기존 chat server의 이름만 metadata에서 명확히 한 것으로 port를 바꾸지 않는다. `buildCapabilities`는 async이므로 wp14 consumer는 `await buildCapabilities({ offline: true })`로 이 필드들을 읽는다.
 
 ## MODIFY — `src/commands/models.ts`
 
@@ -787,12 +876,13 @@ it("includes the voice commands", () => {
 
 ### `tests/voice-cli.test.ts`
 
-- `ttsCommand().name()`, 기본 model/voice/format, `--stdout` 충돌 검증.
-- TTS mock 결과가 파일에 정확한 bytes로 기록되고 `--json` stdout은 JSON 하나뿐인지 검증.
-- `sttCommand()`의 model/language/diarize/multichannel/repeatable keyterm mapping 검증.
+- `ttsCommand().name()`, 기본 voice/format, `--model` 부재, `--stdout` 충돌 검증.
+- TTS mock의 `kind:"audio"`와 `kind:"json"` 각각이 파일에 정확한 bytes로 기록되고 `--json` stdout은 JSON 하나뿐인지 검증.
+- `sttCommand()`의 `--model` 부재와 language/diarize/multichannel/repeatable keyterm mapping 검증.
 - 존재하지 않는 STT 파일은 upstream을 부르기 전에 실패한다.
 - `liveCommand()` 기본 모델이 정확히 `grok-voice-think-fast-2.0`인지 검증.
-- NDJSON 한 줄이 하나의 typed client event로 전송되고 server event가 한 줄 JSON으로 출력되는지 검증.
+- NDJSON 각 event가 `RealtimeClient`의 대응 semantic method로 정확히 한 번 전달되고 server event가 한 줄 JSON으로 출력되는지 검증.
+- `createRealtimeClient`에 `{auth:{kind:"oauth"}, signal}`이 전달되고 `events()`/`close()`를 인자 없이 호출하는지 검증.
 - malformed JSON, object가 아닌 JSON, type 없는 event를 각각 거절한다.
 - `--once`가 `response.done`/`error`에서 세션을 닫고 끝나는지 검증.
 - bearer/token 문자열이 stdout/stderr에 나타나지 않는지 검증.
@@ -805,11 +895,12 @@ it("includes the voice commands", () => {
 - `grok-voice-fast-1.0`과 `grok-voice-think-fast-1.0`이 소스 literal이나 합성 fallback으로 존재하지 않는다.
 - `recommendations.liveDefaultModel`은 `grok-voice-think-fast-2.0`이지만 `models` 배열에 upstream 근거 없이 삽입되지 않는다.
 - endpoint 목록은 `SURFACE_REGISTRY`, command 목록은 `COMMAND_MANIFEST`와 deep-equal이다.
+- `auth.file === AUTH_FILE`, `websockets` path가 realtime/responses/stt/tts 네 개, `webApp.url === "http://127.0.0.1:18646"`이다.
 - JSON mode에서 refresh/logging 텍스트가 stdout JSON 앞뒤에 섞이지 않는다.
 
 ## capabilities JSON 마이그레이션
 
-`progrok capabilities --json`은 공개된 기계 소비 표면이므로 schema를 조용히 바꾸지 않는다.
+`progrok capabilities --json`은 공개된 기계 소비 표면이다. 아래 변경은 progrok **3.0.0**에서만 내보내며, 기존 소비자가 그대로 동작한다고 주장하지 않는다. `schemaVersion: 2`는 capabilities 문서 schema의 버전이고 package major `3.0.0`과 별개다.
 
 ### v1에서 v2로
 
@@ -821,8 +912,11 @@ it("includes the voice commands", () => {
 | 정적 `models` | live `/v1/models` 결과 | `modelCatalog.status`가 `live|partial`인지 먼저 확인한다. |
 | 정적 `voiceModels` 1.0 목록 | live catalog에서 식별된 항목만 | 빈 배열을 “지원 안 함”으로 해석하지 않는다. |
 | 없음 | `recommendations.liveDefaultModel` | catalog와 운영 기본값을 구분한다. |
+| `chat` 또는 필드 없음 | `webApp` | 로컬 웹앱 URL은 `webApp.url`에서 읽는다. |
+| `websocketEndpoints` | `websockets` | 각 항목의 `path`, `url`, `proxied:false`를 읽는다. |
+| 필드 없음 | `auth` | credential 경로는 `auth.file`, inbound 처리 정책은 `auth.inboundAuthorization`에서 읽는다. |
 
-한 릴리스 동안 `--legacy-json`을 제공하지 않는다. stale 모델을 다시 내보내는 호환 모드는 문제를 되살린다. 대신 명시적 major schema version과 migration table을 wp15의 docs/skill에 복사한다. endpoint/command만 필요한 소비자는 `--offline`을 쓴다.
+3.0.0에서 `--legacy-json`, 이중 `commands` 필드, string-array shim을 제공하지 않는다. stale 모델을 다시 내보내는 호환 모드도 만들지 않는다. 대신 package major와 `schemaVersion: 2`를 명시하고 이 migration table을 wp15의 docs/skill에 복사한다. endpoint/command만 필요한 소비자는 `--offline`을 쓴다.
 
 ## 나머지 공개 계약
 
@@ -877,6 +971,7 @@ Voice live 호출, TTS 생성, STT 업로드는 비용·외부 상태가 있으�
 - `tts`, `stt`, `live`가 등록되고 help가 빌드 산출물에서 보인다.
 - command manifest, factory registry, capabilities command 목록이 정확히 일치한다.
 - `capabilities --offline --json`은 인증 없이 유효한 schema v2 JSON 하나를 출력한다.
+- 3.0.0의 capabilities는 객체형 `commands`, `auth`, `websockets`, `webApp`을 실제로 내보내며 legacy JSON shim은 없다.
 - live catalog 실패가 명령 전체 실패나 stale fallback으로 바뀌지 않는다.
 - `grok-voice-fast-1.0`, `grok-voice-think-fast-1.0` 정적 capability 항목이 제거됐다.
 - pinned default `grok-voice-think-fast-2.0`은 recommendation/default로만 존재하며 live catalog인 척하지 않는다.

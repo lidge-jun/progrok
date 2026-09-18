@@ -37,16 +37,15 @@
 ```text
 callback-server.ts ─┐
 pkce.ts ────────────┼─> discovery.ts ─> token-client.ts
-device-code.ts ─────┘                         │
-                                             v
-                                      token-store.ts
+device-code.ts ─────┘                         ▲
                                              │
-                                      bearer-session.ts
-                                             │
-                                      WP6 transport/fetch.ts
+token-store.ts facade ─> token-manager.ts ───┘
+        ▲
+        │
+bearer-session.ts <─ WP6 transport/fetch.ts
 ```
 
-`token-client.ts`는 OAuth HTTP와 재시도만 소유한다. `token-store.ts`는 디스크 형식, 세대, refresh 조정만 소유한다. `bearer-session.ts`는 401 한 번 재생 규칙만 소유한다.
+`token-client.ts`는 OAuth HTTP와 재시도만 소유한다. `token-manager.ts`는 주입 가능한 만료 판단, refresh singleflight, terminal negative cache를 소유한다. `token-store.ts`는 디스크 형식, 세대 fence와 기존 `getValidBearer`/`getValidBearerSnapshot` 호환 facade만 소유한다. `bearer-session.ts`는 401 한 번 재생 규칙만 소유한다.
 
 참고 구현에서 가져오는 불변식은 다음으로 한정한다.
 
@@ -92,12 +91,13 @@ export interface TokenData {
 | 상태 | 경로 | 책임 |
 |---|---|---|
 | NEW | `src/auth/token-client.ts` | token endpoint 요청, typed 오류, bounded retry |
+| NEW | `src/auth/token-manager.ts` | 주입 가능한 만료 판단, refresh singleflight, terminal negative cache |
 | NEW | `src/auth/bearer-session.ts` | bearer snapshot과 401 one-shot replay |
 | MODIFY | `src/auth/constants.ts` | refresh/retry 상수의 단일 소유자 추가 |
 | MODIFY | `src/auth/discovery.ts` | `unknown` 파싱과 정확한 endpoint allow-list |
 | MODIFY | `src/auth/pkce.ts` | 직접 fetch를 공용 token client로 교체 |
 | MODIFY | `src/auth/device-code.ts` | polling 오류를 typed code로 분기 |
-| MODIFY | `src/auth/token-store.ts` | atomic 보존 저장, generation fence, account singleflight |
+| MODIFY | `src/auth/token-store.ts` | atomic 보존 저장, generation fence, 기존 bearer facade 유지 |
 | MODIFY | `tests/auth.test.ts` | 저장 호환·경쟁·terminal·retry·401 회귀 테스트 |
 | DELETE | 없음 | 공개 진입점과 기존 파일은 유지한다 |
 
@@ -267,7 +267,47 @@ export async function withBearer401Replay<R extends StatusResponse>(
 
 이 함수는 429/5xx나 stream 오류를 다루지 않는다. WP6이 `discard`로 첫 401 body를 cancel하고 이 함수를 transport 바깥쪽에 한 번만 배치한다.
 
-### 6.3 MODIFY `src/auth/constants.ts`
+### 6.3 NEW `src/auth/token-manager.ts`
+
+WP14의 `tests/auth-refresh.test.ts`가 직접 import하는 공개 이름과 시그니처를 아래처럼 고정한다. `TokenData`와 `SaveTokenInput`은 `token-store.ts`의 기존 공개 타입을 재사용하며 이 파일에서 다시 정의하지 않는다.
+
+```ts
+import type { SaveTokenInput, TokenData } from "./token-store.js";
+
+export interface TokenManagerDependencies {
+  now(): number;
+  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+  load(): TokenData | null;
+  save(input: SaveTokenInput): Promise<void>;
+}
+
+interface RefreshFlight {
+  generation: string;
+  startedAt: number;
+  promise: Promise<string>;
+}
+
+export function createTokenManager(
+  dependencies: TokenManagerDependencies,
+): { getValidBearer(signal?: AbortSignal): Promise<string> } {
+  const flights = new Map<string, RefreshFlight>();
+  const terminalFailures = new Map<string, number>();
+
+  async function getValidBearer(signal?: AbortSignal): Promise<string> {
+    // 아래 6.8의 세대 비교, singleflight, terminal cache 순서를 이 상태와
+    // dependencies만 사용해 실행한다. 실제 홈 디렉터리나 전역 fetch를 직접 읽지 않는다.
+    return resolveValidBearer({ dependencies, flights, terminalFailures, signal });
+  }
+
+  return { getValidBearer };
+}
+```
+
+같은 파일의 비공개 `resolveValidBearer`는 6.8의 1–7 순서를 구현하고 `refreshXaiToken`에 `dependencies.fetch`와 `signal`을 전달한다. `finally`에서는 자신이 넣은 promise와 현재 map 값이 같은 경우에만 flight를 삭제한다. production의 `token-store.ts`는 모듈 단위 기본 manager 한 개를 만들고 기존 `getValidBearer(): Promise<string>`를 그 manager에 위임한다. WP6가 기대하는 `getValidBearerSnapshot(options?)`와 `withBearer401Replay` 이름은 각각 `token-store.ts`와 `bearer-session.ts`에 그대로 둔다.
+
+이 모듈은 bearer의 목적 host를 선택하거나 직접 추론 요청을 보내지 않는다. WP6 transport가 OAuth 요청을 기본적으로 `https://api.x.ai/v1`에 보내며, `https://cli-chat-proxy.grok.com/v1`은 명시적 opt-in 전용 클라이언트에서만 선택할 수 있다.
+
+### 6.4 MODIFY `src/auth/constants.ts`
 
 현재 `src/auth/constants.ts:20-26`:
 
@@ -295,7 +335,7 @@ export const XAI_REFRESH_FLIGHT_STALE_MS = 2 * 60 * 1000;
 export const XAI_TERMINAL_FAILURE_TTL_MS = 30 * 1000;
 ```
 
-### 6.4 MODIFY `src/auth/discovery.ts`
+### 6.5 MODIFY `src/auth/discovery.ts`
 
 현재 `src/auth/discovery.ts:12-24`는 suffix `*.x.ai` 전체와 port/userinfo를 허용한다.
 
@@ -340,7 +380,7 @@ export async function fetchOIDCDiscovery(signal?: AbortSignal): Promise<OIDCDisc
 }
 ```
 
-### 6.5 MODIFY `src/auth/pkce.ts`
+### 6.6 MODIFY `src/auth/pkce.ts`
 
 현재 `src/auth/pkce.ts:100-118`의 직접 `fetch`와 cast를 제거한다.
 
@@ -365,7 +405,7 @@ await saveTokensFromOAuthPayload(tokens, { tokenEndpoint: discovery.tokenEndpoin
 
 `loginWithPKCE(options?: { manualPaste?: boolean })` 시그니처와 분기 `src/auth/pkce.ts:77-96`은 유지한다. manual paste에서도 state를 URL로 받았으면 검증하도록 `extractCodeFromInput`은 `{ code, state? }`를 반환하고, state가 존재하면서 예상값과 다르면 거부한다. bare code는 기존 호환 때문에 허용한다.
 
-### 6.6 MODIFY `src/auth/device-code.ts`
+### 6.7 MODIFY `src/auth/device-code.ts`
 
 현재 `src/auth/device-code.ts:60-92`는 각 poll 응답을 직접 JSON cast한다.
 
@@ -403,7 +443,7 @@ throw new Error("Device code expired or was denied. Please try again.");
 
 초기 device authorization 요청도 공용 form POST helper를 사용하되, token payload 타입과 섞지 않는다.
 
-### 6.7 MODIFY `src/auth/token-store.ts`
+### 6.8 MODIFY `src/auth/token-store.ts`
 
 현재 저장은 `src/auth/token-store.ts:46-72`에서 새 객체를 만들어 unknown 키를 버리고 직접 `writeFileSync`한다. refresh는 `src/auth/token-store.ts:92-149`에서 동시성 fence 없이 바로 저장한다.
 
@@ -470,9 +510,9 @@ async function persistIfGeneration(
 }
 ```
 
-singleflight map은 `Map<accountKey, {generation, startedAt, promise}>`다. 기존 flight가 120초 이내이고 같은 generation이면 join한다. 다른 generation이면 새 디스크 세대를 다시 읽고 새 flight를 만든다. terminal cache 키는 `${accountKey}\0${generation}`다. refresh 성공 시 그 키를 삭제한다.
+`token-manager.ts`의 singleflight map은 `Map<accountKey, {generation, startedAt, promise}>`다. 기존 flight가 120초 이내이고 같은 generation이면 join한다. 다른 generation이면 새 디스크 세대를 다시 읽고 새 flight를 만든다. terminal cache 키는 `${accountKey}\0${generation}`다. refresh 성공 시 그 키를 삭제한다. `token-store.ts`의 기본 facade와 WP14가 직접 만드는 manager가 모두 이 같은 factory 상태 배치를 사용한다.
 
-`getValidBearerSnapshot`의 순서는 반드시 다음과 같다.
+manager의 비공개 `resolveValidBearer`와 이를 쓰는 `getValidBearerSnapshot` 호환 facade의 순서는 반드시 다음과 같다.
 
 1. 매 호출마다 디스크를 다시 읽는다.
 2. `rejectedAccessToken`과 현재 access token이 다르면 현재 snapshot을 즉시 반환한다.
@@ -484,7 +524,7 @@ singleflight map은 `Map<accountKey, {generation, startedAt, promise}>`다. 기�
 
 `expires_in`이 없으면 이전 `expiresAt`을 상속하지 않고 삭제한다. 새 refresh token이 없으면 기존 refresh token을 보존한다. ID token의 JWT payload는 표시용 `sub`/`email` 추출에만 쓰고 권한 판단에는 쓰지 않는다.
 
-### 6.8 MODIFY `tests/auth.test.ts`
+### 6.9 MODIFY `tests/auth.test.ts`
 
 현재 하나의 장시간 테스트 `tests/auth.test.ts:55-172`를 다음 독립 테스트로 분리한다.
 
@@ -508,7 +548,7 @@ singleflight map은 `Map<accountKey, {generation, startedAt, promise}>`다. 기�
 
 1. 상수와 typed token client를 추가하고 retry 단위 테스트를 먼저 통과시킨다.
 2. token store의 읽기/atomic write/unknown-key 보존을 구현한다.
-3. generation/account key와 singleflight/terminal cache를 구현한다.
+3. `token-manager.ts`에 generation/account key와 singleflight/terminal cache를 구현하고 token store facade를 연결한다.
 4. PKCE와 device-code의 직접 fetch를 token client로 교체한다.
 5. bearer 401 helper를 추가하고 WP6이 사용할 공개 경계를 고정한다.
 6. 기존 CLI 계약 테스트와 전체 테스트를 실행한다.

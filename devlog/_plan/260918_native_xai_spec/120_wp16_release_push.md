@@ -15,20 +15,24 @@
 
 ## 버전 정책
 
-기본 다음 버전은 **2.1.0**이다.
+이번 릴리스 버전은 **3.0.0**으로 확정한다.
 
 근거:
 
 - 네이티브 auth/transport/wire 구현과 Voice/Responses WS, 웹앱은 큰 기능 추가다.
 - localhost HTTP `/v1/*`, CLI command 이름, `~/.progrok/auth.json` 경로/스키마를
-  호환 유지하므로 계획상 public breaking change가 아니다.
-- patch `2.0.5`는 기능 폭을 표현하지 못하고, major `3.0.0`은 현재 계획의
-  호환성 약속과 맞지 않는다.
+  호환 유지한다.
+- 그러나 공개 기계 소비 표면인 `progrok capabilities --json`의 `commands`가
+  `string[]`에서 `CommandManifestEntry[]`로 바뀐다. 기존 소비자는 `entry.name`을
+  읽도록 마이그레이션해야 하므로 schema v2 표시는 있어도 SemVer상 breaking change다.
+- 따라서 기능 폭이나 내부 재작성 규모가 아니라 이 capabilities JSON break를 근거로
+  major를 올린다. legacy shim으로 minor를 유지하지 않는다.
 
-단, 최종 diff가 다음 중 하나를 포함하면 version bump를 실행하지 말고 `3.0.0`으로
-재판정한다: 기존 CLI 제거/rename, 기존 HTTP request/response의 비호환 변경,
-`~/.progrok/auth.json` 무마이그레이션 schema 변경, Node engine 상향, 기존 proxy
-placeholder-auth 계약 제거.
+최종 diff에 기존 CLI 제거/rename, 기존 HTTP request/response 비호환 변경,
+`~/.progrok/auth.json` 무마이그레이션 schema 변경, Node engine 상향 같은 추가 break가
+발견되면 3.0.0 자체를 재판정하지 않고 migration table과 changelog에 빠짐없이 반영한 뒤
+bump한다. inbound Authorization을 저장된 OAuth bearer로 교체하는 기존 동작은 계속
+유지되며 공개 계약이나 major 판정 근거로 취급하지 않는다.
 
 ## 변경 명세
 
@@ -43,14 +47,14 @@ Before:
 After:
 
 ```json
-"version": "2.1.0"
+"version": "3.0.0"
 ```
 
 직접 한 파일만 고치지 말고 검증이 모두 녹색인 frozen head에서 다음 명령으로 lockfile과
 동시에 갱신한다.
 
 ```bash
-npm version 2.1.0 --no-git-tag-version
+npm version 3.0.0 --no-git-tag-version
 ```
 
 ### MODIFY — `package-lock.json`
@@ -72,11 +76,11 @@ After:
 ```json
 {
   "name": "progrok",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "packages": {
     "": {
       "name": "progrok",
-      "version": "2.1.0"
+      "version": "3.0.0"
 ```
 
 transitive dependency의 우연한 `2.0.4` 문자열은 바꾸지 않는다.
@@ -91,12 +95,12 @@ transitive dependency의 우연한 `2.0.4` 문자열은 바꾸지 않는다.
 
 All notable changes to progrok are documented here.
 
-## [2.1.0] - 2026-09-18
+## [3.0.0] - 2026-09-18
 
 ### Added
 
 - Native typed auth, transport, SSE, Chat, and Responses protocol cores.
-- Responses, realtime voice, streaming STT, and streaming TTS WebSocket surfaces.
+- Direct Responses, realtime voice, streaming STT, and streaming TTS WebSocket clients.
 - Native Voice REST clients, remaining xAI REST surfaces, and the local web app.
 - Offline contract suites and opt-in OAuth live smoke verification.
 
@@ -104,6 +108,7 @@ All notable changes to progrok are documented here.
 
 - Replaced conditional byte passthrough with canonical request and typed-event handling where parsing adds correctness.
 - Kept validated passthrough for binary, multipart, and unknown future endpoints.
+- Changed `capabilities --json` to schema v2; `commands` entries are objects and command names now come from `entry.name`.
 - Updated public documentation and the packaged skill to the 2026-09-18 xAI surface.
 
 ### Compatibility
@@ -115,12 +120,12 @@ All notable changes to progrok are documented here.
 
 - Previous published release. See Git history and tag `v2.0.4` for details.
 
-[2.1.0]: https://github.com/lidge-jun/progrok/compare/v2.0.4...main
+[3.0.0]: https://github.com/lidge-jun/progrok/compare/v2.0.4...main
 [2.0.4]: https://github.com/lidge-jun/progrok/releases/tag/v2.0.4
 ```
 
-`2.1.0`이 tag/publish되기 전에는 compare link 끝을 `main`으로 둔다. npm/GitHub release
-후 별도 작업에서 `v2.1.0`으로 바꾼다.
+`3.0.0`이 tag/publish되기 전에는 compare link 끝을 `main`으로 둔다. npm/GitHub release
+후 별도 작업에서 `v3.0.0`으로 바꾼다.
 
 ### NO CHANGE — `scripts/release.sh`, `scripts/release-preview.sh`
 
@@ -146,7 +151,7 @@ All notable changes to progrok are documented here.
 | 9 | wp13 web app + UI/server tests | `feat(web): ship the local xAI web app` |
 | 10 | wp14 test harness와 live smoke script | `test: verify native xAI contracts and OAuth smoke` |
 | 11 | wp15 public docs/site/skill | `docs: document native xAI surfaces` |
-| 12 | version, lockfile, changelog만 | `chore: prepare v2.1.0 source release` |
+| 12 | version, lockfile, changelog만 | `chore: prepare v3.0.0 source release` |
 
 각 커밋 전 `git diff --cached --name-only`로 범위를 확인한다. 다른 작업자의 변경이나
 미완성 다음 wp 파일을 stage하지 않는다. rebase, reset, force push로 범위를 정리하지 않는다.
@@ -238,19 +243,18 @@ local/remote SHA만 보고하고 멈춘다.
 
 - `npm publish` 또는 `npm publish --provenance`
 - npm trusted publishing/OIDC 설정
-- `v2.1.0` tag 생성과 push
+- `v3.0.0` tag 생성과 push
 - GitHub Release 생성 및 changelog link 확정
 - 전역 설치 후 `progrok --version`, 로그인, proxy/webapp 실행 smoke
 
-따라서 이번 완료 보고에서 “npm에 2.1.0이 배포됐다” 또는 “v2.1.0 release가 발행됐다”고
-말하지 않는다. 말할 수 있는 범위는 “2.1.0 source metadata가 준비되어 검증된 exact
+따라서 이번 완료 보고에서 “npm에 3.0.0이 배포됐다” 또는 “v3.0.0 release가 발행됐다”고
+말하지 않는다. 말할 수 있는 범위는 “3.0.0 source metadata가 준비되어 검증된 exact
 commit이 origin/main에 push됐다”까지다.
 
 ## 완료 조건
 
-- 호환성이 계획대로 유지되어 version이 `2.1.0`으로 결정됐다. breaking change가 있으면
-  bump 전에 멈추고 major 재판정 기록이 있다.
-- `package.json`과 root package의 `package-lock.json` version이 모두 `2.1.0`이다.
+- capabilities schema v2의 `commands` 객체 배열 전환을 근거로 version이 `3.0.0`으로 결정됐고 migration table과 changelog가 같은 break를 설명한다.
+- `package.json`과 root package의 `package-lock.json` version이 모두 `3.0.0`이다.
 - 새 `CHANGELOG.md`가 실제 구현과 wp14 검증 결과만 말한다.
 - wp5–wp15가 단계별 원자 커밋으로 분리되고 unrelated file이 없다.
 - frozen SHA에서 typecheck, test, build, site build, OAuth smoke, package dry-run,

@@ -62,11 +62,14 @@ voice/{tts,stt,custom-voices,client-secrets}.ts
 
 ## 3. 공개 계약 보존과 마이그레이션
 
+- Voice REST 공개 API의 권위자는 factory인 `createTtsClient(options?: VoiceClientOptions): TtsClient`와 `createSttClient(options?: VoiceClientOptions): SttClient`다. 호출 계약은 각각 `createTtsClient().synthesize(request, signal?)`와 `createSttClient().transcribe(request, signal?)`이며, wp12 CLI와 wp13 웹앱은 이 이름을 그대로 사용한다. `synthesizeSpeech`/`transcribeSpeech` 같은 별도 top-level helper를 만들지 않는다.
+- `TtsRequest`에는 `model` 필드가 없고, `TtsResult`는 `kind: "audio" | "json"`으로 분기하는 discriminated union이다. wp12도 factory 반환값과 이 union을 그대로 소비한다.
 - `~/.progrok/auth.json`의 camelCase 스키마는 읽지도 쓰지도 않는다. wp5의 accessor만 간접 사용한다. 마이그레이션 없음.
 - 기존 CLI 명령과 옵션은 변경하지 않는다. 새 Voice CLI는 wp12 소유다.
 - `GET /health` payload는 변경하지 않는다.
 - 모든 HTTP `/v1/*` 포워딩은 유지한다. wp8 정책대로 TTS binary와 STT multipart는 opaque relay이며 이 클라이언트 추가가 proxy whitelist를 만들지 않는다.
 - localhost client가 기존처럼 `/v1/tts`, `/v1/stt`, custom voice 경로를 호출하면 status/header/body가 그대로 relay된다.
+- 위 두 문장의 relay는 HTTP에만 해당한다. 로컬 WebSocket relay는 만들지 않으며 STT/TTS/realtime WebSocket client는 `wss://api.x.ai`에 직접 연결한다.
 - `src/commands/capabilities.ts`와 `skills/progrok/SKILL.md`의 갱신은 wp12/wp15에 맡긴다.
 
 ## 4. 파일 변경 manifest
@@ -82,7 +85,7 @@ voice/{tts,stt,custom-voices,client-secrets}.ts
 | MODIFY | 없음 | 현재 `src/voice/`가 없으므로 기존 소스에 병렬 소유자를 만들지 않는다 |
 | DELETE | 없음 | HTTP 패스스루와 기존 공개 계약을 유지한다 |
 
-`100_wp14_verification.md:266-281`은 같은 `tests/voice-rest.test.ts`를 NEW로 적었지만 소유자는 wp9이다. wp14는 이 파일을 NEW로 다시 만들지 말고 보강/감사한다. 또한 그 문서의 “URL STT without creating multipart” 기대는 001의 multipart SSOT와 공식 request schema에 맞게 “URL source도 multipart이며 file part는 없음”으로 수정해야 한다.
+`tests/voice-rest.test.ts`의 생성 소유자는 wp9이다. `100_wp14_verification.md:266-281`은 같은 파일을 NEW로 적지 않고 **MODIFY만** 하여 보강/감사한다. 또한 그 문서의 “URL STT without creating multipart” 기대는 001의 multipart SSOT와 공식 request schema에 맞게 “URL source도 multipart이며 file part는 없음”으로 수정해야 한다.
 
 ## 5. NEW `src/voice/http.ts`
 

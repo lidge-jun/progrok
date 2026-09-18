@@ -92,3 +92,65 @@ src/
 goalplan의 c-1..c-8을 따른다. 요약하면 typecheck exit 0, 테스트 실패 0,
 OAuth 라이브 스모크(STT 배치/스트리밍, TTS, realtime client_secret) 기록,
 엔드포인트 인벤토리와 근거 대조, 크리덴셜 호환 유지, 작동하는 웹앱, 그리고 origin push.
+
+## 확정 결정 (A 감사 1회차 결과 반영)
+
+독립 감사가 BLOCKER 6건으로 FAIL을 냈다. 단계 간 계약 충돌이 원인이었고, 아래를 로드맵 차원에서 확정한다.
+이 절이 개별 단계 문서보다 우선한다. 충돌하는 서술은 이 결정에 맞춰 고친다.
+
+### D1. 로컬 WebSocket relay는 만들지 않는다
+
+progrok의 HTTP 서버는 HTTP 전용이다. `/v1/responses`, `/v1/realtime`, `/v1/stt`, `/v1/tts`의 WebSocket은
+클라이언트가 `wss://api.x.ai`에 **직접** 연결한다. 브라우저는 `POST /v1/realtime/client_secrets`로 받은
+ephemeral token을 `Sec-WebSocket-Protocol: xai-client-secret.<token>`으로 실어 붙는다.
+
+이유: 로컬 relay는 바이너리 오디오 프레임을 한 번 더 복사하면서 지연을 얹고, origin/세션 인증 계층을 새로 만들어야 하며,
+백프레셔 책임까지 떠안는다. ephemeral token이 이미 그 문제를 브라우저 쪽에서 푼다.
+
+### D2. OAuth 레인은 `api.x.ai` 하나다
+
+라이브 판정(001 부록)에 따라 모든 OAuth 기본 경로는 `https://api.x.ai/v1`로 간다.
+`cli-chat-proxy.grok.com`은 **명시적 opt-in** 뒤에 격리한 전용 클라이언트로만 노출한다.
+`/deployment/config`는 OAuth bearer가 아니라 `GROK_DEPLOYMENT_KEY`를 쓰므로 별도 credential 종류로 분리한다.
+근거 URL이 확정되지 않은 `/feedback*`는 자동 라우팅하지 않는다.
+
+### D3. 모듈 소유권
+
+| 모듈 | 소유 단계 |
+|---|---|
+| `src/core/types.ts`, `src/core/errors.ts`, `src/core/events.ts` | wp7 |
+| `src/transport/fetch.ts`의 `XaiTransport`, `createXaiTransport` | wp6 |
+| `src/auth/token-manager.ts` | wp5 |
+| `src/surfaces/index.ts` | wp11 |
+
+Responses 스트림의 공개 API 이름은 wp7이 정한 `reduceResponsesStream`이다. `decodeResponsesEvent`는 쓰지 않는다.
+
+### D4. Voice 공개 API는 factory 형태다
+
+`createTtsClient().synthesize()`, `createSttClient().transcribe()`, `createRealtimeClient()`가 권위다.
+CLI는 이 API를 그대로 쓴다. `synthesizeSpeech` 같은 별도 이름을 만들지 않는다.
+TTS 요청에 `model` 필드는 없다. `TtsResult`는 discriminated union이며 `kind`로 분기한다.
+
+### D5. 테스트 소유권은 생성 단계에 있다
+
+`tests/transport.test.ts`는 wp6, `tests/voice-rest.test.ts`는 wp9, `tests/voice-ws.test.ts`는 wp10,
+`tests/webapp.test.ts`는 wp13이 만든다. wp14는 그 파일들을 MODIFY하거나 새 파일만 NEW로 만든다.
+
+### D6. 이번 릴리스는 3.0.0이다
+
+`capabilities --json`의 `commands`가 문자열 배열에서 객체 배열로 바뀐다. 기계 소비자가 깨지므로 major다.
+legacy shim을 만들어 minor로 우기지 않는다.
+
+### D7. wp10이 browser-safe 프로토콜 모듈을 소유한다
+
+`src/voice/protocol.ts`에 realtime/stt/tts의 이벤트 이름과 타입을 Node 의존 없이 둔다.
+wp13의 브라우저 코드는 이 모듈을 import한다. 두 벌로 구현하지 않는다.
+
+### D8. inbound Authorization 헤더는 계속 무시한다
+
+동작은 그대로 유지한다(무엇이 오든 저장된 OAuth bearer로 교체). 다만 이것은 공개 계약이 아니며,
+wp16의 major 재판정 조건에서 제외한다. 3.0.0 판정 근거는 D6이다.
+
+### D9. `ws` 의존성은 wp10이 추가한다
+
+wp11은 같은 변경을 `NO CHANGE — precondition`으로 표기한다.

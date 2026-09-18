@@ -11,6 +11,8 @@
 - 바이트 경계와 UTF-8/SSE framing은 `src/wire/sse.ts`만 소유한다.
 - Chat/Responses 의미 해석은 각각 별도 reducer가 소유한다.
 - tool-call wire 검증과 증분 조립은 `src/wire/tool-calls.ts` 한 곳이 소유한다.
+- 요청·메시지·도구의 공통 DTO는 `src/core/types.ts`가 소유한다.
+- 공개 오류 code/detail과 unknown 오류의 안전한 축약은 `src/core/errors.ts`가 소유한다.
 - reducer의 출력 계약은 `src/core/events.ts`의 discriminated union 하나다.
 - 첫 terminal 이벤트가 성공/불완전/실패의 최종 권위자다. 이후 프레임은 해석하지 않는다.
 - EOF는 terminal이 아니다. terminal 없이 EOF가 오면 반드시 `stream_truncated` 오류다.
@@ -42,6 +44,8 @@
 
 | 상태 | 정확한 경로 | 책임 |
 |---|---|---|
+| NEW | `src/core/types.ts` | 요청·메시지·도구의 canonical DTO |
+| NEW | `src/core/errors.ts` | typed 오류 code/detail과 unknown 오류의 안전한 축약 |
 | NEW | `src/core/events.ts` | `AdapterEvent`, terminal 타입, terminal 판별 |
 | NEW | `src/wire/sse.ts` | UTF-8 바이트 디코딩, line/event framing, residual byte budget |
 | NEW | `src/wire/tool-calls.ts` | Chat/Responses tool-call 증분 조립과 fail-closed 검증 |
@@ -51,14 +55,183 @@
 | NEW | `tests/tool-calls.test.ts` | 증분 조립, 충돌, 타입 및 JSON 완결성 검증 |
 | NEW | `tests/chat-stream.test.ts` | finish_reason, `[DONE]`, strict EOF, first-terminal 검증 |
 | NEW | `tests/responses-stream.test.ts` | output item/delta/completed/incomplete/failed 검증 |
+| NEW | `tests/core-errors.test.ts` | typed 오류 보존과 unknown 오류의 비노출 축약 검증 |
 
 이 단계에는 MODIFY와 DELETE가 없다. 현재 `src/`에는 `core/`와 `wire/`가 없으므로 기존 구현을 우회하거나 중복 소유자를 만들지 않는다.
 
-## 3. NEW — `src/core/events.ts`
+## 3. NEW — canonical core 계약
+
+### 3.1 `src/core/types.ts`
+
+wp11의 HTTP/WS surface를 포함한 후속 단계는 아래 타입을 import하고 같은 DTO를 다시 선언하지 않는다. `ResponsesRequest`에 index signature를 두지 않는 이유는 wp11의 `Omit<ResponsesRequest, "stream" | "background">`가 WebSocket create에서 두 필드를 실제로 금지하게 하기 위해서다.
+
+```ts
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
+export interface JsonObject { [key: string]: JsonValue }
+
+export type MessageRole = "system" | "developer" | "user" | "assistant" | "tool";
+
+export type MessageContentPart =
+  | { type: "text" | "input_text" | "output_text"; text: string }
+  | { type: "image_url" | "input_image"; image_url: string; detail?: "auto" | "low" | "high" };
+
+export interface ToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
+export interface CanonicalMessage {
+  role: MessageRole;
+  content: string | readonly MessageContentPart[] | null;
+  name?: string;
+  tool_call_id?: string;
+  tool_calls?: readonly ToolCall[];
+}
+
+export interface FunctionTool {
+  type: "function";
+  function: {
+    name: string;
+    description?: string;
+    parameters: JsonObject;
+    strict?: boolean;
+  };
+}
+
+export type HostedTool =
+  | ({ type: "web_search" } & JsonObject)
+  | ({ type: "x_search" } & JsonObject)
+  | ({ type: "code_interpreter" } & JsonObject)
+  | ({ type: "file_search" } & JsonObject)
+  | ({ type: "mcp" } & JsonObject);
+
+export type ToolDefinition = FunctionTool | HostedTool;
+
+export type ToolChoice =
+  | "none"
+  | "auto"
+  | "required"
+  | { type: "function"; function: { name: string } };
+
+export interface ChatCompletionsRequest {
+  model: string;
+  messages: readonly CanonicalMessage[];
+  tools?: readonly ToolDefinition[];
+  tool_choice?: ToolChoice;
+  parallel_tool_calls?: boolean;
+  stream?: boolean;
+  temperature?: number;
+  top_p?: number;
+  max_tokens?: number;
+}
+
+export type ResponsesInputItem =
+  | CanonicalMessage
+  | { type: "function_call"; call_id: string; name: string; arguments: string }
+  | { type: "function_call_output"; call_id: string; output: string };
+
+export interface ResponsesRequest {
+  model?: string;
+  input: string | readonly ResponsesInputItem[];
+  instructions?: string;
+  tools?: readonly ToolDefinition[];
+  tool_choice?: ToolChoice;
+  parallel_tool_calls?: boolean;
+  stream?: boolean;
+  background?: boolean;
+  store?: boolean;
+  previous_response_id?: string;
+  conversation?: string | { id: string };
+  include?: readonly string[];
+  max_output_tokens?: number;
+  temperature?: number;
+  top_p?: number;
+  metadata?: Readonly<Record<string, string>>;
+}
+```
+
+`CanonicalMessage`는 두 API가 공유하는 최소 공통 계약이다. endpoint 전용 필드가 생기면 해당 surface에 좁은 타입을 두되 이 파일의 동일 개념을 복제하지 않는다. passthrough를 위해 `[key: string]: unknown`을 붙이는 방식은 금지한다. 새 wire 필드는 boundary decoder에서 검증한 뒤 이 canonical 계약에 명시적으로 추가한다.
+
+### 3.2 `src/core/errors.ts`
+
+오류 detail은 공개 가능한 필드만 가진다. unknown `Error.message`, stack, cause, response body, URL, header는 그대로 내보내지 않는다.
+
+```ts
+export type AdapterErrorCode =
+  | "invalid_utf8"
+  | "sse_buffer_limit"
+  | "malformed_sse_json"
+  | "invalid_wire_shape"
+  | "invalid_tool_call"
+  | "tool_call_buffer_limit"
+  | "stream_truncated"
+  | "upstream_error";
+
+export interface SafeErrorDiagnostic {
+  field?: string;
+  valueType?: string;
+  callIndex?: number;
+}
+
+export interface AdapterErrorDetail {
+  code: AdapterErrorCode;
+  message: string;
+  status?: number;
+  retryable: false;
+  diagnostic?: SafeErrorDiagnostic;
+}
+
+export class AdapterError extends Error {
+  readonly retryable = false as const;
+
+  constructor(
+    readonly code: AdapterErrorCode,
+    message: string,
+    readonly options: {
+      status?: number;
+      diagnostic?: SafeErrorDiagnostic;
+      cause?: unknown;
+    } = {},
+  ) {
+    super(message, { cause: options.cause });
+    this.name = "AdapterError";
+  }
+}
+
+export function toSafeErrorDetail(
+  error: unknown,
+  fallback: Pick<AdapterErrorDetail, "code" | "message">,
+): AdapterErrorDetail {
+  if (!(error instanceof AdapterError)) {
+    return {
+      ...fallback,
+      retryable: false,
+      diagnostic: {
+        valueType: error === null ? "null" : Array.isArray(error) ? "array" : typeof error,
+      },
+    };
+  }
+  return {
+    code: error.code,
+    message: error.message.slice(0, 512),
+    retryable: false,
+    ...(error.options.status !== undefined ? { status: error.options.status } : {}),
+    ...(error.options.diagnostic ? { diagnostic: error.options.diagnostic } : {}),
+  };
+}
+```
+
+`AdapterError` 생성자는 호출자가 이미 공개용으로 정제한 message만 받는다. `toSafeErrorDetail`은 typed 오류만 그 message를 보존하고 나머지는 caller가 준 고정 fallback으로 치환한다. `cause`는 디버깅용 chain에만 남고 반환 detail에는 포함하지 않는다.
+
+### 3.3 `src/core/events.ts`
 
 아래 타입을 그대로 공개 계약으로 만든다. `unknown` wire payload를 이 타입으로 cast하지 말고 reducer가 검증 후 생성한다.
 
 ```ts
+import type { AdapterErrorDetail } from "./errors.js";
+
 export interface AdapterUsage {
   inputTokens?: number;
   outputTokens?: number;
@@ -81,26 +254,7 @@ export type AdapterTerminalEvent =
       responseId?: string;
       usage?: AdapterUsage;
     }
-  | {
-      type: "error";
-      code:
-        | "invalid_utf8"
-        | "sse_buffer_limit"
-        | "malformed_sse_json"
-        | "invalid_wire_shape"
-        | "invalid_tool_call"
-        | "tool_call_buffer_limit"
-        | "stream_truncated"
-        | "upstream_error";
-      message: string;
-      status?: number;
-      retryable: false;
-      diagnostic?: {
-        field?: string;
-        valueType?: string;
-        callIndex?: number;
-      };
-    };
+  | ({ type: "error" } & AdapterErrorDetail);
 
 export type AdapterEvent =
   | { type: "heartbeat" }
@@ -660,11 +814,17 @@ export async function* reduceResponsesStream(
 - output item done만 있고 EOF면 `stream_truncated`다.
 - completed 뒤 failed를 붙여도 done 하나만 나온다.
 
+### `tests/core-errors.test.ts`
+
+- `AdapterError`의 code/status/diagnostic은 `toSafeErrorDetail`에 보존되고 `cause`와 stack은 결과에 없다.
+- 일반 `Error`, string, object, null은 원문을 노출하지 않고 caller가 준 고정 fallback message를 반환한다.
+- typed message는 512자에서 잘리고 `retryable`은 항상 `false`다.
+
 테스트 helper는 각 테스트 파일 안의 작은 `chunks(...strings): AsyncIterable<Uint8Array>`로 둔다. 프로덕션 소스에 테스트 전용 export를 추가하지 않는다.
 
 ## 9. 구현 순서
 
-1. `events.ts` 타입을 먼저 추가하고 typecheck한다.
+1. `types.ts`, `errors.ts`, `events.ts`를 먼저 추가하고 `core-errors.test.ts`와 typecheck를 통과시킨다.
 2. `sse.ts`와 `sse.test.ts`를 red-green으로 완성한다.
 3. `tool-calls.ts`와 해당 테스트를 완성한다.
 4. Chat reducer와 테스트를 완성한다.
@@ -675,6 +835,7 @@ export async function* reduceResponsesStream(
 
 ```bash
 cd /Users/jun/Developer/progrok
+node --import tsx --test tests/core-errors.test.ts
 node --import tsx --test tests/sse.test.ts
 node --import tsx --test tests/tool-calls.test.ts
 node --import tsx --test tests/chat-stream.test.ts
@@ -693,9 +854,10 @@ node --import tsx -e 'import { reduceChatStream } from "./src/wire/chat-stream.t
 
 ## 11. 완료 조건
 
-- manifest의 9개 NEW 파일이 존재하고 다른 파일은 바뀌지 않는다.
-- 네 focused test 명령과 `npm run typecheck`, `npm test`가 exit 0이다.
+- manifest의 12개 NEW 파일이 존재하고 다른 파일은 바뀌지 않는다.
+- 다섯 focused test 명령과 `npm run typecheck`, `npm test`가 exit 0이다.
 - 모든 reducer 경로가 정확히 하나의 terminal을 내거나 호출자가 generator를 중단한다.
 - terminal 없는 EOF, malformed tool call, byte budget 초과가 성공으로 바뀌지 않는다.
 - 오류/진단에 tool arguments 원문이나 전체 upstream payload가 포함되지 않는다.
+- wp11이 `ResponsesRequest`를 `src/core/types.ts`에서 import할 수 있고, unknown 오류는 `src/core/errors.ts`의 고정 fallback 경계를 우회하지 않는다.
 - wp8이 `reduceChatStream`, `reduceResponsesStream`, `AdapterEvent` 외의 내부 상태에 의존하지 않아도 된다.

@@ -34,8 +34,9 @@
 
 ```text
 voice/stt.ts, client-secrets.ts      (wp9 REST 계약)
-voice/ws-client.ts                   (WS dial/auth/frame queue + STT/TTS)
-voice/realtime.ts                    (S2S wire types/reducer/session)
+voice/protocol.ts                    (browser-safe event 이름·타입·상수)
+voice/ws-client.ts                   (WS dial/auth/frame queue + STT/TTS session)
+voice/realtime.ts                    (S2S reducer/client/session)
 voice/sip.ts                         (SIP REST + webhook wire types)
        │
        ├─ auth/token-store.ts        OAuth bearer snapshot
@@ -46,8 +47,9 @@ voice/sip.ts                         (SIP REST + webhook wire types)
 
 구조 선택:
 
-- `ws-client.ts`는 socket lifecycle, byte budget, auth handshake, STT/TTS wire만 소유한다.
-- `realtime.ts`는 S2S client/server event와 reducer만 소유한다.
+- `protocol.ts`는 STT/TTS/realtime event 이름·타입·공유 상수와 순수 decoder의 단일 소유자다. Node import가 전혀 없어 wp13 browser bundle이 직접 import한다.
+- `ws-client.ts`는 socket lifecycle, byte budget, auth handshake, STT/TTS reducer/session만 소유하고 wire 계약과 decoder는 `protocol.ts`에서 import한다.
+- `realtime.ts`는 S2S reducer/client/session만 소유하고 wire 계약과 decoder는 `protocol.ts`에서 import한다.
 - `sip.ts`는 `/v2/phone-numbers`, call control, incoming webhook wire 타입만 소유한다.
 - browser에서는 custom Authorization header를 만들 수 없으므로 ephemeral token을 `Sec-WebSocket-Protocol`에만 넣는다.
 - server-side Node 연결은 OAuth bearer header를 쓴다. token을 URL query에 넣지 않는다.
@@ -63,13 +65,14 @@ voice/sip.ts                         (SIP REST + webhook wire types)
 
 ## 3. 공개 계약과 마이그레이션
 
+- Voice 공개 API의 권위자는 `createTtsClient(options?: VoiceClientOptions): TtsClient`, `createSttClient(options?: VoiceClientOptions): SttClient`, `createRealtimeClient(options: CreateRealtimeClientOptions, deps?: VoiceWsDeps): Promise<RealtimeClient>` 세 factory다. 호출 계약은 `createTtsClient().synthesize()`, `createSttClient().transcribe()`, `createRealtimeClient()`이며 wp12 CLI와 wp13 웹앱은 이 이름을 그대로 쓴다. `synthesizeSpeech`, `transcribeSpeech`, `connectRealtime` 같은 별도 top-level helper를 만들지 않는다.
 - `~/.progrok/auth.json` 스키마와 저장 경로는 변경하지 않는다. server-side WS는 wp5의 `getValidBearerSnapshot()`을 읽기 전용으로 사용한다.
 - 기존 CLI 명령은 변경하지 않는다. Voice CLI는 wp12가 추가한다.
 - `/health` payload는 변경하지 않는다.
-- HTTP `/v1/*` opaque relay는 유지한다. wp10 client는 direct `wss://api.x.ai` 연결이며 proxy whitelist를 만들지 않는다.
+- HTTP `/v1/*` opaque relay는 유지한다. 로컬 WebSocket relay는 만들지 않으며 wp10 client와 wp13 browser는 `wss://api.x.ai`에 직접 연결한다. proxy whitelist나 WS upgrade route를 추가하지 않는다.
 - browser에는 raw OAuth token을 전달하지 않는다. wp9 `POST /v1/realtime/client_secrets`로 받은 short-lived secret만 전달한다.
 - SIP `call_id` 연결에는 ephemeral secret을 허용하지 않는다. 공식 계약대로 server bearer만 허용한다.
-- 새 `ws` dependency는 npm package 공개 계약에 포함되지만 CLI/HTTP behavior migration은 필요 없다.
+- 새 `ws`/`@types/ws` 의존성 추가와 lockfile 갱신의 단독 소유자는 wp10이다. wp11 이후 단계는 이를 추가·재설치하지 않고 `NO CHANGE — precondition`으로만 적는다. npm package 공개 계약에는 포함되지만 CLI/HTTP behavior migration은 필요 없다.
 
 ## 4. 파일 변경 manifest
 
@@ -78,6 +81,7 @@ voice/sip.ts                         (SIP REST + webhook wire types)
 | MODIFY | `package.json` | Node 18용 `ws`, TypeScript용 `@types/ws` 추가 |
 | MODIFY | `package-lock.json` | npm이 생성한 exact dependency graph |
 | MODIFY | `src/transport/base-url.ts` | `/v2/phone-numbers`를 `/v1/v2/...`로 오염시키지 않는 versioned path 지원 |
+| NEW | `src/voice/protocol.ts` | Node 의존 없는 STT/TTS/realtime event 이름·타입·공유 상수·decoder; wp13 browser import 경계 |
 | NEW | `src/voice/ws-client.ts` | WS 인증·bounded queue·STT/TTS session |
 | NEW | `src/voice/realtime.ts` | realtime session/event/reducer/resumption |
 | NEW | `src/voice/sip.ts` | phone-number 등록, webhook 타입, refer/hangup |
@@ -85,7 +89,7 @@ voice/sip.ts                         (SIP REST + webhook wire types)
 | NEW | `tests/voice-sip.test.ts` | fake HTTP transport 기반 SIP tests |
 | DELETE | 없음 | 기존 HTTP relay와 auth 저장소 유지 |
 
-`tests/voice-ws.test.ts`는 wp10 소유다. `100_wp14_verification.md:284-305`는 이를 NEW로 다시 만들지 않고 이 단계 테스트를 보강/감사한다. `package.json`의 같은 의존성을 wp11도 계획하므로 wp11 구현자는 중복 추가하지 않고 설치된 버전을 재사용한다.
+`tests/voice-ws.test.ts`의 생성 소유자는 wp10이다. `100_wp14_verification.md:284-305`는 이를 NEW로 다시 만들지 않고 **MODIFY만** 하여 보강/감사한다. `ws`/`@types/ws`와 lockfile의 추가도 wp10 단독 소유다. wp11은 같은 변경을 수행하지 않고 `NO CHANGE — precondition`으로만 기록한다.
 
 ## 5. MODIFY `package.json`
 
@@ -211,20 +215,163 @@ export function resolveUpstreamUrl(pathname: string, authKind: UpstreamAuthKind)
 
 테스트는 `/v1/models`, `models`, `/v2/phone-numbers`, `https://evil.invalid/v2/phone-numbers?x=1`을 넣는다. 마지막 입력은 host를 버리고 `https://api.x.ai/v2/phone-numbers?x=1`로 정규화되어야 한다. session-only 경로의 기존 판정은 유지한다.
 
-## 8. NEW `src/voice/ws-client.ts`
+## 8. NEW `src/voice/protocol.ts`
 
-### 8.1 공통 WS 타입과 인증
+이 파일은 wp10이 만드는 browser-safe wire SSOT다. **어떤 Node builtin, `ws`, auth, transport 모듈도 import하지 않는다.** `src/voice/ws-client.ts`와 `src/voice/realtime.ts`는 아래 계약을 import하고, wp13의 `src/web/client/voice.ts`도 `../../voice/protocol.js`에서 동일한 이벤트 이름·타입·상수를 import한다.
 
 ```ts
-import WebSocket, { type RawData } from "ws";
-import { randomUUID } from "node:crypto";
-import { getValidBearerSnapshot } from "../auth/token-store.js";
-import { buildUpstreamHeaders } from "../transport/headers.js";
-import { readPackageVersion } from "../utils/version.js";
+export const XAI_VOICE_WS_ORIGIN = "wss://api.x.ai" as const;
+export const PINNED_REALTIME_MODEL = "grok-voice-think-fast-2.0" as const;
+export const REALTIME_MODEL_ALIAS = "grok-voice-latest" as const;
+export const XAI_EPHEMERAL_PROTOCOL_PREFIX = "xai-client-secret." as const;
+export const OPENAI_REALTIME_PROTOCOLS = ["realtime", "openai-beta.realtime-v1"] as const;
 
-export const VOICE_WS_MAX_MESSAGE_BYTES = 16 * 1024 * 1024;
-export const VOICE_WS_MAX_QUEUE_BYTES = 32 * 1024 * 1024;
-export const VOICE_WS_OPEN_TIMEOUT_MS = 30_000;
+export const STT_CLIENT_EVENT_TYPES = ["finalize", "Finalize", "audio.done"] as const;
+export const STT_SERVER_EVENT_TYPES = ["transcript.created", "transcript.partial", "transcript.done", "error"] as const;
+export const TTS_CLIENT_EVENT_TYPES = ["text.delta", "text.done"] as const;
+export const TTS_SERVER_EVENT_TYPES = ["audio.delta", "audio.done", "error"] as const;
+export const REALTIME_CLIENT_EVENT_TYPES = [
+  "session.update", "input_audio_buffer.append", "input_audio_buffer.commit", "input_audio_buffer.clear",
+  "conversation.item.create", "conversation.item.delete", "conversation.item.truncate",
+  "response.create", "response.cancel", "pong",
+] as const;
+export const REALTIME_SERVER_EVENT_TYPES = [
+  "session.created", "session.updated", "conversation.created", "conversation.item.added",
+  "conversation.item.created", "conversation.item.deleted", "conversation.item.truncated",
+  "conversation.item.input_audio_transcription.updated", "conversation.item.input_audio_transcription.completed",
+  "input_audio_buffer.speech_started", "input_audio_buffer.speech_stopped", "input_audio_buffer.committed",
+  "input_audio_buffer.cleared", "input_audio_buffer.timeout_triggered", "input_audio_buffer.dtmf_event_received",
+  "response.created", "response.done", "response.output_item.added", "response.output_item.done",
+  "response.content_part.added", "response.content_part.done", "response.output_audio.delta",
+  "response.output_audio.done", "response.output_audio_transcript.delta", "response.output_audio_transcript.done",
+  "response.text.delta", "response.output_text.delta", "response.function_call_arguments.delta",
+  "response.function_call_arguments.done", "mcp_list_tools.in_progress", "mcp_list_tools.completed",
+  "mcp_list_tools.failed", "response.mcp_call_arguments.delta", "response.mcp_call_arguments.done",
+  "response.mcp_call.in_progress", "response.mcp_call.completed", "response.mcp_call.failed",
+  "response.cancelled", "ping", "error",
+] as const;
+
+export type EphemeralProtocolStyle = "xai" | "openai-compatible";
+export function ephemeralProtocols(secret: string, style: EphemeralProtocolStyle = "xai"): string[] {
+  if (!secret || /[\r\n,]/.test(secret)) throw new RangeError("invalid ephemeral client secret");
+  return style === "xai"
+    ? [`${XAI_EPHEMERAL_PROTOCOL_PREFIX}${secret}`]
+    : [OPENAI_REALTIME_PROTOCOLS[0], `openai-insecure-api-key.${secret}`, OPENAI_REALTIME_PROTOCOLS[1]];
+}
+
+export interface StreamingSttWord {
+  text: string; start: number; end: number; confidence?: number; speaker?: number;
+}
+export type SttClientControl =
+  | { type: "finalize" | "Finalize"; channel?: number }
+  | { type: "audio.done" };
+export type SttServerEvent =
+  | { type: "transcript.created"; id: string }
+  | { type: "transcript.partial"; text: string; words: StreamingSttWord[]; is_final: boolean; speech_final: boolean; start: number; duration: number; channel_index?: number; end_of_turn_confidence?: number }
+  | { type: "transcript.done"; text: string; words: StreamingSttWord[]; duration: number; channel_index?: number }
+  | { type: "error"; message: string };
+
+export type TtsClientEvent =
+  | { type: "text.delta"; delta: string }
+  | { type: "text.done" };
+export interface StreamingAudioTimestamps { graph_chars: string[]; graph_times: [number, number][] }
+export type TtsServerEvent =
+  | { type: "audio.delta"; delta: string; audio_timestamps?: StreamingAudioTimestamps; audio_duration?: number }
+  | { type: "audio.done"; trace_id?: string }
+  | { type: "error"; message: string };
+
+export type RealtimeVoiceModel = typeof PINNED_REALTIME_MODEL | typeof REALTIME_MODEL_ALIAS;
+export type RealtimeReasoningEffort = "high" | "none";
+export type RealtimeAudioType = "audio/pcm" | "audio/pcmu" | "audio/pcma" | "audio/opus";
+export type RealtimeAudioRate = 8000 | 11025 | 16000 | 22050 | 24000 | 32000 | 44100 | 48000;
+export type RealtimeAudioTransport = "json" | "binary";
+export interface RealtimeAudioFormat { type: RealtimeAudioType; rate?: RealtimeAudioRate }
+export interface RealtimeTurnDetection {
+  type: "server_vad";
+  threshold?: number;
+  silence_duration_ms?: number;
+  prefix_padding_ms?: number;
+  idle_timeout_ms?: number | null;
+}
+export interface RealtimeInputTranscription { model?: "grok-transcribe"; language_hint?: string; keyterms?: string[] }
+export interface RealtimeAudioConfig {
+  input?: { format?: RealtimeAudioFormat; transport?: RealtimeAudioTransport; transcription?: RealtimeInputTranscription };
+  output?: { format?: RealtimeAudioFormat; transport?: RealtimeAudioTransport; speed?: number };
+}
+export type RealtimeTool =
+  | { type: "function"; function: { name: string; description?: string; parameters: Record<string, unknown> } }
+  | { type: "web_search"; location?: { country?: string; city?: string; region?: string; timezone?: string }; allowed_domains?: string[]; excluded_domains?: string[]; enable_image_understanding?: boolean }
+  | { type: "x_search"; allowed_x_handles?: string[]; excluded_x_handles?: string[]; from_date?: string; to_date?: string; enable_image_understanding?: boolean; enable_video_understanding?: boolean }
+  | { type: "file_search"; vector_store_ids: string[]; max_num_results?: number }
+  | { type: "mcp"; server_label: string; server_url: string; server_description?: string; allowed_tools?: string[]; authorization?: string; headers?: Record<string, string> };
+export interface RealtimeSessionConfig {
+  model?: RealtimeVoiceModel;
+  instructions?: string;
+  reasoning?: { effort?: RealtimeReasoningEffort };
+  voice?: string;
+  turn_detection?: RealtimeTurnDetection | null;
+  resumption?: { enabled: boolean };
+  audio?: RealtimeAudioConfig;
+  tools?: RealtimeTool[];
+  replace?: Record<string, string> | null;
+}
+export type RealtimeContentPart =
+  | { type: "input_text" | "text"; text: string }
+  | { type: "input_audio" | "audio"; audio: string; transcript?: string };
+export type RealtimeConversationItem =
+  | { type: "message"; id?: string; role: "user" | "assistant" | "system"; content: RealtimeContentPart[] }
+  | { type: "function_call"; id?: string; name: string; arguments: string; call_id?: string }
+  | { type: "function_call_output"; id?: string; call_id: string; output: string }
+  | { type: "force_message"; role: "assistant"; content: [{ type: "output_text"; text: string }]; interruptible?: boolean };
+export type RealtimeClientEvent =
+  | { type: "session.update"; session: RealtimeSessionConfig }
+  | { type: "input_audio_buffer.append"; audio: string }
+  | { type: "input_audio_buffer.commit" }
+  | { type: "input_audio_buffer.clear" }
+  | { type: "conversation.item.create"; item: RealtimeConversationItem; previous_item_id?: string }
+  | { type: "conversation.item.delete"; item_id: string }
+  | { type: "conversation.item.truncate"; item_id: string; content_index: number; audio_end_ms: number }
+  | { type: "response.create"; response?: { modalities?: ("text" | "audio")[] | null; instructions?: string | null; metadata?: Record<string, string> | null } }
+  | { type: "response.cancel"; response_id?: string }
+  | { type: "pong"; ping_timestamp: number };
+
+export interface RealtimeEventBase { event_id?: string }
+export type RealtimeServerEvent =
+  | (RealtimeEventBase & { type: "session.created" | "session.updated"; session: Record<string, unknown> })
+  | (RealtimeEventBase & { type: "conversation.created"; conversation: { id: string } })
+  | (RealtimeEventBase & { type: "conversation.item.added" | "conversation.item.created"; previous_item_id?: string; item: Record<string, unknown> })
+  | (RealtimeEventBase & { type: "conversation.item.deleted"; item_id: string })
+  | (RealtimeEventBase & { type: "conversation.item.truncated"; item_id: string; content_index: number; audio_end_ms: number; transcript?: string })
+  | (RealtimeEventBase & { type: "conversation.item.input_audio_transcription.updated" | "conversation.item.input_audio_transcription.completed"; item_id: string; transcript: string })
+  | (RealtimeEventBase & { type: "input_audio_buffer.speech_started"; item_id: string; audio_start_ms: number })
+  | (RealtimeEventBase & { type: "input_audio_buffer.speech_stopped"; item_id: string; audio_end_ms: number })
+  | (RealtimeEventBase & { type: "input_audio_buffer.committed"; item_id: string; previous_item_id?: string })
+  | (RealtimeEventBase & { type: "input_audio_buffer.cleared" })
+  | (RealtimeEventBase & { type: "input_audio_buffer.timeout_triggered"; item_id: string; audio_start_ms: number; audio_end_ms: number; previous_item_id?: string })
+  | (RealtimeEventBase & { type: "input_audio_buffer.dtmf_event_received"; event: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"*"|"#"; received_at: number })
+  | (RealtimeEventBase & { type: "response.created" | "response.done"; response: Record<string, unknown> })
+  | (RealtimeEventBase & { type: "response.output_item.added" | "response.output_item.done"; response_id: string; output_index: number; item: Record<string, unknown> })
+  | (RealtimeEventBase & { type: "response.content_part.added" | "response.content_part.done"; response_id: string; item_id: string; output_index: number; content_index: number; part: Record<string, unknown> })
+  | (RealtimeEventBase & { type: "response.output_audio.delta"; response_id: string; item_id: string; output_index: number; content_index: number; delta: string })
+  | (RealtimeEventBase & { type: "response.output_audio.done"; response_id: string; item_id: string; output_index: number; content_index: number })
+  | (RealtimeEventBase & { type: "response.output_audio_transcript.delta"; response_id: string; item_id: string; output_index: number; content_index: number; delta: string })
+  | (RealtimeEventBase & { type: "response.output_audio_transcript.done"; response_id: string; item_id: string; output_index: number; content_index: number; transcript: string })
+  | (RealtimeEventBase & { type: "response.text.delta" | "response.output_text.delta"; response_id: string; item_id: string; delta: string; output_index?: number; content_index?: number })
+  | (RealtimeEventBase & { type: "response.function_call_arguments.delta"; response_id: string; item_id: string; output_index: number; call_id: string; delta: string })
+  | (RealtimeEventBase & { type: "response.function_call_arguments.done"; response_id: string; item_id: string; output_index: number; call_id: string; name: string; arguments: string })
+  | (RealtimeEventBase & { type: "mcp_list_tools.in_progress" | "mcp_list_tools.completed"; item_id: string })
+  | (RealtimeEventBase & { type: "mcp_list_tools.failed"; item_id: string; error: Record<string, unknown> })
+  | (RealtimeEventBase & { type: "response.mcp_call_arguments.delta"; response_id: string; item_id: string; call_id: string; delta: string })
+  | (RealtimeEventBase & { type: "response.mcp_call_arguments.done"; response_id: string; item_id: string; call_id: string; name: string; arguments: string })
+  | (RealtimeEventBase & { type: "response.mcp_call.in_progress" | "response.mcp_call.completed"; item_id: string; output_index: number })
+  | (RealtimeEventBase & { type: "response.mcp_call.failed"; item_id: string; output_index: number; error: Record<string, unknown> })
+  | (RealtimeEventBase & { type: "response.cancelled"; response_id?: string })
+  | { type: "ping"; timestamp: number }
+  | (RealtimeEventBase & { type: "error"; error: { code?: string; type?: string; message: string } });
+
+export type RealtimeNormalizedEvent =
+  | RealtimeServerEvent
+  | { type: "response.output_audio.binary"; bytes: Uint8Array };
 
 export class VoiceProtocolError extends Error {
   constructor(
@@ -236,7 +383,145 @@ export class VoiceProtocolError extends Error {
   }
 }
 
-export type EphemeralProtocolStyle = "xai" | "openai-compatible";
+function protocolRecord(wire: unknown, label: string): Record<string, unknown> {
+  if (!wire || typeof wire !== "object" || Array.isArray(wire)) {
+    throw new VoiceProtocolError("invalid_event", `${label} must be object`);
+  }
+  return wire as Record<string, unknown>;
+}
+
+function protocolString(value: Record<string, unknown>, key: string): string {
+  if (typeof value[key] !== "string") throw new VoiceProtocolError("invalid_event", `${key} must be string`);
+  return value[key] as string;
+}
+
+export function parseSttServerEvent(text: string): SttServerEvent {
+  let wire: unknown;
+  try { wire = JSON.parse(text) as unknown; }
+  catch { throw new VoiceProtocolError("invalid_event", "STT server event was not JSON"); }
+  const value = protocolRecord(wire, "STT event");
+  if (value.type === "transcript.created" && typeof value.id === "string") return { type: value.type, id: value.id };
+  if (value.type === "error" && typeof value.message === "string") return { type: value.type, message: value.message };
+  if (value.type === "transcript.partial" || value.type === "transcript.done") {
+    if (typeof value.text !== "string" || typeof value.duration !== "number" || !Array.isArray(value.words)) {
+      throw new VoiceProtocolError("invalid_event", "transcript event fields are invalid");
+    }
+    const words = value.words.map((rawWord): StreamingSttWord => {
+      const word = protocolRecord(rawWord, "STT word");
+      if (typeof word.start !== "number" || typeof word.end !== "number") {
+        throw new VoiceProtocolError("invalid_event", "STT word fields are invalid");
+      }
+      return {
+        text: protocolString(word, "text"), start: word.start, end: word.end,
+        ...(typeof word.confidence === "number" ? { confidence: word.confidence } : {}),
+        ...(Number.isInteger(word.speaker) ? { speaker: word.speaker as number } : {}),
+      };
+    });
+    if (value.type === "transcript.done") {
+      return { type: value.type, text: value.text, words, duration: value.duration,
+        ...(Number.isInteger(value.channel_index) ? { channel_index: value.channel_index as number } : {}) };
+    }
+    if (typeof value.is_final !== "boolean" || typeof value.speech_final !== "boolean" || typeof value.start !== "number") {
+      throw new VoiceProtocolError("invalid_event", "transcript.partial state fields are invalid");
+    }
+    return {
+      type: value.type, text: value.text, words, duration: value.duration, start: value.start,
+      is_final: value.is_final, speech_final: value.speech_final,
+      ...(Number.isInteger(value.channel_index) ? { channel_index: value.channel_index as number } : {}),
+      ...(typeof value.end_of_turn_confidence === "number" ? { end_of_turn_confidence: value.end_of_turn_confidence } : {}),
+    };
+  }
+  throw new VoiceProtocolError("invalid_event", `unsupported STT event type: ${String(value.type)}`);
+}
+
+export function parseTtsServerEvent(text: string): TtsServerEvent {
+  let wire: unknown;
+  try { wire = JSON.parse(text) as unknown; }
+  catch { throw new VoiceProtocolError("invalid_event", "TTS server event was not JSON"); }
+  const value = protocolRecord(wire, "TTS event");
+  if (value.type === "audio.done") return { type: value.type, ...(typeof value.trace_id === "string" ? { trace_id: value.trace_id } : {}) };
+  if (value.type === "error" && typeof value.message === "string") return { type: value.type, message: value.message };
+  if (value.type === "audio.delta" && typeof value.delta === "string") {
+    return { type: value.type, delta: value.delta,
+      ...(typeof value.audio_duration === "number" ? { audio_duration: value.audio_duration } : {}) };
+  }
+  throw new VoiceProtocolError("invalid_event", "unsupported TTS event");
+}
+
+export function parseRealtimeServerEvent(text: string): RealtimeServerEvent {
+  let wire: unknown;
+  try { wire = JSON.parse(text) as unknown; }
+  catch { throw new VoiceProtocolError("invalid_event", "realtime event was not JSON"); }
+  const value = protocolRecord(wire, "realtime event");
+  const type = protocolString(value, "type");
+  // 실제 파일은 RealtimeServerEvent의 모든 discriminant를 exhaustive switch로 나누고
+  // required scalar/object를 검사해 새 객체를 만든다. default cast는 두지 않는다.
+  switch (type) {
+    case "ping":
+      if (typeof value.timestamp !== "number") throw new VoiceProtocolError("invalid_event", "ping timestamp is invalid");
+      return { type, timestamp: value.timestamp };
+    case "conversation.created": {
+      const conversation = protocolRecord(value.conversation, "conversation");
+      return { type, conversation: { id: protocolString(conversation, "id") },
+        ...(typeof value.event_id === "string" ? { event_id: value.event_id } : {}) };
+    }
+    case "input_audio_buffer.dtmf_event_received": {
+      const event = protocolString(value, "event");
+      if (!/^[0-9*#]$/.test(event) || typeof value.received_at !== "number") {
+        throw new VoiceProtocolError("invalid_event", "DTMF event is invalid");
+      }
+      return { type, event: event as Extract<RealtimeServerEvent, {type: typeof type}>["event"], received_at: value.received_at,
+        ...(typeof value.event_id === "string" ? { event_id: value.event_id } : {}) };
+    }
+    case "session.created":
+    case "session.updated":
+      return { type, session: protocolRecord(value.session, "session"),
+        ...(typeof value.event_id === "string" ? { event_id: value.event_id } : {}) };
+    case "error": {
+      const error = protocolRecord(value.error, "error");
+      return { type, error: {
+        message: protocolString(error, "message"),
+        ...(typeof error.code === "string" ? { code: error.code } : {}),
+        ...(typeof error.type === "string" ? { type: error.type } : {}),
+      }, ...(typeof value.event_id === "string" ? { event_id: value.event_id } : {}) };
+    }
+    // 나머지 case는 위 union 순서대로 구현하고 assertNever로 누락을 막는다.
+  }
+  throw new VoiceProtocolError("invalid_event", `unsupported realtime event type: ${type}`);
+}
+```
+
+`protocol.ts`의 runtime export는 문자열/배열, 순수 `ephemeralProtocols()`, browser-safe event decoder와 typed 오류뿐이다. browser bundle은 `ws-client.ts`나 `realtime.ts`를 경유하지 않는다. wp13은 `ephemeralProtocols`, `parseRealtimeServerEvent`, `parseSttServerEvent`, `RealtimeClientEvent`, `RealtimeServerEvent`, `SttClientControl`, `SttServerEvent`를 여기서 직접 import한다. Streaming TTS도 같은 SSOT를 쓰도록 `TtsClientEvent`/`TtsServerEvent`와 `parseTtsServerEvent`를 함께 둔다.
+
+## 9. NEW `src/voice/ws-client.ts`
+
+### 9.1 공통 WS 타입과 인증
+
+```ts
+import WebSocket, { type RawData } from "ws";
+import { randomUUID } from "node:crypto";
+import { getValidBearerSnapshot } from "../auth/token-store.js";
+import { buildUpstreamHeaders } from "../transport/headers.js";
+import { readPackageVersion } from "../utils/version.js";
+import {
+  XAI_VOICE_WS_ORIGIN,
+  VoiceProtocolError,
+  ephemeralProtocols,
+  parseSttServerEvent,
+  parseTtsServerEvent,
+  type EphemeralProtocolStyle,
+  type SttClientControl,
+  type SttServerEvent,
+  type TtsClientEvent,
+  type TtsServerEvent,
+} from "./protocol.js";
+
+export { ephemeralProtocols } from "./protocol.js";
+
+export const VOICE_WS_MAX_MESSAGE_BYTES = 16 * 1024 * 1024;
+export const VOICE_WS_MAX_QUEUE_BYTES = 32 * 1024 * 1024;
+export const VOICE_WS_OPEN_TIMEOUT_MS = 30_000;
+
 export type VoiceWsAuth =
   | { kind: "oauth" }
   | { kind: "ephemeral"; clientSecret: string; style?: EphemeralProtocolStyle };
@@ -259,17 +544,11 @@ export interface VoiceWsDeps {
   clientVersion?: string;
 }
 
-export function ephemeralProtocols(secret: string, style: EphemeralProtocolStyle = "xai"): string[] {
-  if (!secret || /[\r\n,]/.test(secret)) throw new RangeError("invalid ephemeral client secret");
-  return style === "xai"
-    ? [`xai-client-secret.${secret}`]
-    : ["realtime", `openai-insecure-api-key.${secret}`, "openai-beta.realtime-v1"];
-}
 ```
 
 `VoiceWsDeps.endpointOrigin`은 local test server 주입용이며 production `create*` factory의 일반 options에 노출하지 않는다. production origin은 상수 `wss://api.x.ai`다.
 
-### 8.2 bounded dial 핵심 본문
+### 9.2 bounded dial 핵심 본문
 
 ```ts
 export async function openVoiceSocket(
@@ -279,7 +558,7 @@ export async function openVoiceSocket(
   deps: VoiceWsDeps,
 ): Promise<VoiceSocket> {
   if (signal?.aborted) throw signal.reason;
-  const origin = deps.endpointOrigin ?? "wss://api.x.ai";
+  const origin = deps.endpointOrigin ?? XAI_VOICE_WS_ORIGIN;
   const url = new URL(path, origin);
   if (!deps.endpointOrigin && (url.protocol !== "wss:" || url.hostname !== "api.x.ai")) {
     throw new Error("Voice WebSocket destination must be api.x.ai over wss");
@@ -361,7 +640,7 @@ export async function openVoiceSocket(
 
 실제 구현은 open promise가 끝나기 전에 message queue를 노출하지 않고, `error` listener와 `unexpected-response` body를 정리한다. 오류에는 URL query/token/header를 넣지 않는다. queue waiter가 close 시 항상 깨어나도록 한다.
 
-### 8.3 Streaming STT 타입 전부
+### 9.3 Streaming STT option·session 타입
 
 ```ts
 export type StreamingSttEncoding = "pcm" | "mulaw" | "alaw" | "opus";
@@ -383,17 +662,6 @@ export interface StreamingSttOptions {
   vad_threshold?: number;
   signal?: AbortSignal;
 }
-export interface StreamingSttWord {
-  text: string; start: number; end: number; confidence?: number; speaker?: number;
-}
-export type SttClientControl =
-  | { type: "finalize" | "Finalize"; channel?: number }
-  | { type: "audio.done" };
-export type SttServerEvent =
-  | { type: "transcript.created"; id: string }
-  | { type: "transcript.partial"; text: string; words: StreamingSttWord[]; is_final: boolean; speech_final: boolean; start: number; duration: number; channel_index?: number; end_of_turn_confidence?: number }
-  | { type: "transcript.done"; text: string; words: StreamingSttWord[]; duration: number; channel_index?: number }
-  | { type: "error"; message: string };
 export interface SttCompletion {
   kind: "completed" | "completed-with-transport-close";
   finalText: string;
@@ -409,7 +677,9 @@ export interface StreamingSttSession {
 }
 ```
 
-### 8.4 STT URL·reducer·factory
+`StreamingSttWord`, `SttClientControl`, `SttServerEvent`는 `protocol.ts`에서 import한다. 이 파일에서 재정의하지 않는다.
+
+### 9.4 STT URL·reducer·factory
 
 ```ts
 function sttUrl(options: StreamingSttOptions): string {
@@ -445,46 +715,6 @@ export function reduceSttEvent(state: SttState, event: SttServerEvent): SttState
   return state;
 }
 
-function parseSttServerEvent(text: string): SttServerEvent {
-  let wire: unknown;
-  try { wire = JSON.parse(text) as unknown; }
-  catch { throw new VoiceProtocolError("invalid_event", "STT server event was not JSON"); }
-  if (!wire || typeof wire !== "object" || Array.isArray(wire)) throw new VoiceProtocolError("invalid_event", "STT event must be an object");
-  const value = wire as Record<string, unknown>;
-  if (typeof value.type !== "string") throw new VoiceProtocolError("invalid_event", "STT event type is missing");
-  if (value.type === "transcript.created" && typeof value.id === "string") return { type: value.type, id: value.id };
-  if (value.type === "error" && typeof value.message === "string") return { type: value.type, message: value.message };
-  if (value.type === "transcript.partial" || value.type === "transcript.done") {
-    if (typeof value.text !== "string" || typeof value.duration !== "number" || !Array.isArray(value.words)) {
-      throw new VoiceProtocolError("invalid_event", "transcript event fields are invalid");
-    }
-    const words = value.words.map((rawWord): StreamingSttWord => {
-      if (!rawWord || typeof rawWord !== "object" || Array.isArray(rawWord)) throw new VoiceProtocolError("invalid_event", "STT word must be object");
-      const word = rawWord as Record<string, unknown>;
-      if (typeof word.text !== "string" || typeof word.start !== "number" || typeof word.end !== "number") throw new VoiceProtocolError("invalid_event", "STT word fields are invalid");
-      return {
-        text: word.text, start: word.start, end: word.end,
-        ...(typeof word.confidence === "number" ? { confidence: word.confidence } : {}),
-        ...(Number.isInteger(word.speaker) ? { speaker: word.speaker as number } : {}),
-      };
-    });
-    if (value.type === "transcript.done") {
-      return { type: value.type, text: value.text, words, duration: value.duration,
-        ...(Number.isInteger(value.channel_index) ? { channel_index: value.channel_index as number } : {}) };
-    }
-    if (typeof value.is_final !== "boolean" || typeof value.speech_final !== "boolean" || typeof value.start !== "number") {
-      throw new VoiceProtocolError("invalid_event", "transcript.partial state fields are invalid");
-    }
-    return {
-      type: value.type, text: value.text, words, duration: value.duration, start: value.start,
-      is_final: value.is_final, speech_final: value.speech_final,
-      ...(Number.isInteger(value.channel_index) ? { channel_index: value.channel_index as number } : {}),
-      ...(typeof value.end_of_turn_confidence === "number" ? { end_of_turn_confidence: value.end_of_turn_confidence } : {}),
-    };
-  }
-  throw new VoiceProtocolError("invalid_event", `unsupported STT event type: ${value.type}`);
-}
-
 export async function createSttSession(
   options: StreamingSttOptions = {},
   deps: VoiceWsDeps = {},
@@ -497,8 +727,14 @@ export async function createSttSession(
       if (state.finishSent) throw new Error("audio.done was already sent");
       socket.sendBinary(bytes);
     },
-    finalize(channel) { socket.sendJson(channel === undefined ? { type: "finalize" } : { type: "finalize", channel }); },
-    finish() { state = { ...state, finishSent: true }; socket.sendJson({ type: "audio.done" }); },
+    finalize(channel) {
+      const event: SttClientControl = channel === undefined ? { type: "finalize" } : { type: "finalize", channel };
+      socket.sendJson(event);
+    },
+    finish() {
+      state = { ...state, finishSent: true };
+      socket.sendJson({ type: "audio.done" } satisfies SttClientControl);
+    },
     async *events() {
       for await (const frame of socket.frames()) {
         if (frame.kind === "binary") throw new VoiceProtocolError("unexpected_binary", "STT server sent a binary frame");
@@ -527,7 +763,7 @@ export async function createSttSession(
 
 `events()`는 `VoiceSocket.frames()`를 한 번만 소비한다. text frame이 object가 아니거나 알려진 event의 필수 field가 틀리면 typed protocol error 후 1002 close한다. `transcript.done.text`가 비어 있으면 `state.speechFinal?.text`를 최종값으로 사용한다.
 
-### 8.5 Streaming TTS 타입·factory
+### 9.5 Streaming TTS option·session·factory
 
 ```ts
 export interface StreamingTtsOptions {
@@ -542,34 +778,11 @@ export interface StreamingTtsOptions {
   with_timestamps?: boolean;
   signal?: AbortSignal;
 }
-export type TtsClientEvent =
-  | { type: "text.delta"; delta: string }
-  | { type: "text.done" };
-export interface StreamingAudioTimestamps { graph_chars: string[]; graph_times: [number, number][] }
-export type TtsServerEvent =
-  | { type: "audio.delta"; delta: string; audio_timestamps?: StreamingAudioTimestamps; audio_duration?: number }
-  | { type: "audio.done"; trace_id?: string }
-  | { type: "error"; message: string };
 export interface StreamingTtsSession {
   sendText(delta: string): void;
   finishUtterance(): void;
   events(): AsyncGenerator<TtsServerEvent>;
   close(): void;
-}
-
-function parseTtsServerEvent(text: string): TtsServerEvent {
-  let wire: unknown;
-  try { wire = JSON.parse(text) as unknown; }
-  catch { throw new VoiceProtocolError("invalid_event", "TTS server event was not JSON"); }
-  if (!wire || typeof wire !== "object" || Array.isArray(wire)) throw new VoiceProtocolError("invalid_event", "TTS event must be object");
-  const value = wire as Record<string, unknown>;
-  if (value.type === "audio.done") return { type: value.type, ...(typeof value.trace_id === "string" ? { trace_id: value.trace_id } : {}) };
-  if (value.type === "error" && typeof value.message === "string") return { type: value.type, message: value.message };
-  if (value.type === "audio.delta" && typeof value.delta === "string") {
-    return { type: value.type, delta: value.delta,
-      ...(typeof value.audio_duration === "number" ? { audio_duration: value.audio_duration } : {}) };
-  }
-  throw new VoiceProtocolError("invalid_event", "unsupported TTS event");
 }
 
 export async function createTtsSession(
@@ -606,185 +819,55 @@ export async function createTtsSession(
 }
 ```
 
+`TtsClientEvent`, `StreamingAudioTimestamps`, `TtsServerEvent`는 `protocol.ts`가 소유한다. Node session 구현은 type-only import만 사용하며 wp13 browser code도 같은 타입을 직접 import한다.
+
 STT/TTS streaming은 bearer auth만 쓴다. ephemeral subprotocol은 realtime browser 연결에만 노출한다.
 
-## 9. NEW `src/voice/realtime.ts`
+## 10. NEW `src/voice/realtime.ts`
 
-### 9.1 모델·session.update 타입
+### 10.1 protocol import·re-export
 
 ```ts
 import {
-  openVoiceSocket, VoiceProtocolError, type EphemeralProtocolStyle, type VoiceSocket,
+  openVoiceSocket, type VoiceSocket,
   type VoiceWsAuth, type VoiceWsDeps,
 } from "./ws-client.js";
+import {
+  PINNED_REALTIME_MODEL,
+  parseRealtimeServerEvent,
+  type EphemeralProtocolStyle,
+  type RealtimeClientEvent,
+  type RealtimeConversationItem,
+  type RealtimeNormalizedEvent,
+  type RealtimeReasoningEffort,
+  type RealtimeSessionConfig,
+  type RealtimeVoiceModel,
+} from "./protocol.js";
 
-export const PINNED_REALTIME_MODEL = "grok-voice-think-fast-2.0" as const;
-export const REALTIME_MODEL_ALIAS = "grok-voice-latest" as const;
-export type RealtimeVoiceModel = typeof PINNED_REALTIME_MODEL | typeof REALTIME_MODEL_ALIAS;
-export type RealtimeReasoningEffort = "high" | "none";
-export type RealtimeAudioType = "audio/pcm" | "audio/pcmu" | "audio/pcma" | "audio/opus";
-export type RealtimeAudioRate = 8000 | 11025 | 16000 | 22050 | 24000 | 32000 | 44100 | 48000;
-export type RealtimeAudioTransport = "json" | "binary";
-
-export interface RealtimeAudioFormat { type: RealtimeAudioType; rate?: RealtimeAudioRate }
-export interface RealtimeTurnDetection {
-  type: "server_vad";
-  threshold?: number;
-  silence_duration_ms?: number;
-  prefix_padding_ms?: number;
-  idle_timeout_ms?: number | null;
-}
-export interface RealtimeInputTranscription {
-  model?: "grok-transcribe";
-  language_hint?: string;
-  keyterms?: string[];
-}
-export interface RealtimeAudioConfig {
-  input?: { format?: RealtimeAudioFormat; transport?: RealtimeAudioTransport; transcription?: RealtimeInputTranscription };
-  output?: { format?: RealtimeAudioFormat; transport?: RealtimeAudioTransport; speed?: number };
-}
-
-export type RealtimeTool =
-  | { type: "function"; function: { name: string; description?: string; parameters: Record<string, unknown> } }
-  | { type: "web_search"; location?: { country?: string; city?: string; region?: string; timezone?: string }; allowed_domains?: string[]; excluded_domains?: string[]; enable_image_understanding?: boolean }
-  | { type: "x_search"; allowed_x_handles?: string[]; excluded_x_handles?: string[]; from_date?: string; to_date?: string; enable_image_understanding?: boolean; enable_video_understanding?: boolean }
-  | { type: "file_search"; vector_store_ids: string[]; max_num_results?: number }
-  | { type: "mcp"; server_label: string; server_url: string; server_description?: string; allowed_tools?: string[]; authorization?: string; headers?: Record<string, string> };
-
-export interface RealtimeSessionConfig {
-  model?: RealtimeVoiceModel;
-  instructions?: string;
-  reasoning?: { effort?: RealtimeReasoningEffort };
-  voice?: string;
-  turn_detection?: RealtimeTurnDetection | null;
-  resumption?: { enabled: boolean };
-  audio?: RealtimeAudioConfig;
-  tools?: RealtimeTool[];
-  replace?: Record<string, string> | null;
-}
+export {
+  PINNED_REALTIME_MODEL,
+  REALTIME_MODEL_ALIAS,
+  type RealtimeClientEvent,
+  type RealtimeConversationItem,
+  type RealtimeNormalizedEvent,
+  type RealtimeReasoningEffort,
+  type RealtimeServerEvent,
+  type RealtimeSessionConfig,
+  type RealtimeVoiceModel,
+} from "./protocol.js";
 ```
 
-VAD validation은 threshold 0.1–0.9, silence/prefix 0–10,000 ms, output speed 0.7–1.5를 강제한다. `allowed_domains`/`excluded_domains`, `allowed_x_handles`/`excluded_x_handles`는 각각 상호 배타다. MCP authorization/header는 error/log에 넣지 않는다.
+model/session/client/server event 계약은 `protocol.ts`가 소유한다. `realtime.ts`는 기존 Node caller가 같은 공개 import 경로를 쓸 수 있도록 위 타입과 model 상수만 re-export한다. wp13 browser는 이 re-export를 거치지 않고 `protocol.ts`를 직접 import한다.
 
-### 9.2 client event 타입 전부
+### 10.2 client event 전송 규칙
 
-```ts
-export type RealtimeContentPart =
-  | { type: "input_text" | "text"; text: string }
-  | { type: "input_audio" | "audio"; audio: string; transcript?: string };
-export type RealtimeConversationItem =
-  | { type: "message"; id?: string; role: "user" | "assistant" | "system"; content: RealtimeContentPart[] }
-  | { type: "function_call"; id?: string; name: string; arguments: string; call_id?: string }
-  | { type: "function_call_output"; id?: string; call_id: string; output: string }
-  | { type: "force_message"; role: "assistant"; content: [{ type: "output_text"; text: string }]; interruptible?: boolean };
+`RealtimeClientEvent`의 전체 union은 §8에 있다. `force_message`는 자체로 완전한 response lifecycle을 시작하므로 전송 뒤 `response.create`를 자동 호출하면 안 된다. VAD validation은 threshold 0.1–0.9, silence/prefix 0–10,000 ms, output speed 0.7–1.5를 강제한다. `allowed_domains`/`excluded_domains`, `allowed_x_handles`/`excluded_x_handles`는 각각 상호 배타다. MCP authorization/header는 error/log에 넣지 않는다.
 
-export type RealtimeClientEvent =
-  | { type: "session.update"; session: RealtimeSessionConfig }
-  | { type: "input_audio_buffer.append"; audio: string }
-  | { type: "input_audio_buffer.commit" }
-  | { type: "input_audio_buffer.clear" }
-  | { type: "conversation.item.create"; item: RealtimeConversationItem; previous_item_id?: string }
-  | { type: "conversation.item.delete"; item_id: string }
-  | { type: "conversation.item.truncate"; item_id: string; content_index: number; audio_end_ms: number }
-  | { type: "response.create"; response?: { modalities?: ("text" | "audio")[] | null; instructions?: string | null; metadata?: Record<string, string> | null } }
-  | { type: "response.cancel"; response_id?: string }
-  | { type: "pong"; ping_timestamp: number };
-```
+### 10.3 server event decoder import·session validation
 
-`force_message`는 자체로 완전한 response lifecycle을 시작한다. 전송 뒤 `response.create`를 자동 호출하면 안 된다.
-
-### 9.3 server event 타입 전부
+`parseRealtimeServerEvent(text: string): RealtimeServerEvent`는 §8의 browser-safe decoder를 그대로 import한다. Node 전용 `realtime.ts` 안에 두 번째 decoder를 만들지 않는다.
 
 ```ts
-export interface RealtimeEventBase { event_id?: string }
-export type RealtimeServerEvent =
-  | (RealtimeEventBase & { type: "session.created" | "session.updated"; session: Record<string, unknown> })
-  | (RealtimeEventBase & { type: "conversation.created"; conversation: { id: string } })
-  | (RealtimeEventBase & { type: "conversation.item.added" | "conversation.item.created"; previous_item_id?: string; item: Record<string, unknown> })
-  | (RealtimeEventBase & { type: "conversation.item.deleted"; item_id: string })
-  | (RealtimeEventBase & { type: "conversation.item.truncated"; item_id: string; content_index: number; audio_end_ms: number; transcript?: string })
-  | (RealtimeEventBase & { type: "conversation.item.input_audio_transcription.updated" | "conversation.item.input_audio_transcription.completed"; item_id: string; transcript: string })
-  | (RealtimeEventBase & { type: "input_audio_buffer.speech_started"; item_id: string; audio_start_ms: number })
-  | (RealtimeEventBase & { type: "input_audio_buffer.speech_stopped"; item_id: string; audio_end_ms: number })
-  | (RealtimeEventBase & { type: "input_audio_buffer.committed"; item_id: string; previous_item_id?: string })
-  | (RealtimeEventBase & { type: "input_audio_buffer.cleared" })
-  | (RealtimeEventBase & { type: "input_audio_buffer.timeout_triggered"; item_id: string; audio_start_ms: number; audio_end_ms: number; previous_item_id?: string })
-  | (RealtimeEventBase & { type: "input_audio_buffer.dtmf_event_received"; event: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"*"|"#"; received_at: number })
-  | (RealtimeEventBase & { type: "response.created" | "response.done"; response: Record<string, unknown> })
-  | (RealtimeEventBase & { type: "response.output_item.added" | "response.output_item.done"; response_id: string; output_index: number; item: Record<string, unknown> })
-  | (RealtimeEventBase & { type: "response.content_part.added" | "response.content_part.done"; response_id: string; item_id: string; output_index: number; content_index: number; part: Record<string, unknown> })
-  | (RealtimeEventBase & { type: "response.output_audio.delta"; response_id: string; item_id: string; output_index: number; content_index: number; delta: string })
-  | (RealtimeEventBase & { type: "response.output_audio.done"; response_id: string; item_id: string; output_index: number; content_index: number })
-  | (RealtimeEventBase & { type: "response.output_audio_transcript.delta"; response_id: string; item_id: string; output_index: number; content_index: number; delta: string })
-  | (RealtimeEventBase & { type: "response.output_audio_transcript.done"; response_id: string; item_id: string; output_index: number; content_index: number; transcript: string })
-  | (RealtimeEventBase & { type: "response.text.delta" | "response.output_text.delta"; response_id: string; item_id: string; delta: string; output_index?: number; content_index?: number })
-  | (RealtimeEventBase & { type: "response.function_call_arguments.delta"; response_id: string; item_id: string; output_index: number; call_id: string; delta: string })
-  | (RealtimeEventBase & { type: "response.function_call_arguments.done"; response_id: string; item_id: string; output_index: number; call_id: string; name: string; arguments: string })
-  | (RealtimeEventBase & { type: "mcp_list_tools.in_progress" | "mcp_list_tools.completed"; item_id: string })
-  | (RealtimeEventBase & { type: "mcp_list_tools.failed"; item_id: string; error: Record<string, unknown> })
-  | (RealtimeEventBase & { type: "response.mcp_call_arguments.delta"; response_id: string; item_id: string; call_id: string; delta: string })
-  | (RealtimeEventBase & { type: "response.mcp_call_arguments.done"; response_id: string; item_id: string; call_id: string; name: string; arguments: string })
-  | (RealtimeEventBase & { type: "response.mcp_call.in_progress" | "response.mcp_call.completed"; item_id: string; output_index: number })
-  | (RealtimeEventBase & { type: "response.mcp_call.failed"; item_id: string; output_index: number; error: Record<string, unknown> })
-  | (RealtimeEventBase & { type: "response.cancelled"; response_id?: string })
-  | { type: "ping"; timestamp: number }
-  | (RealtimeEventBase & { type: "error"; error: { code?: string; type?: string; message: string } });
-
-export type RealtimeNormalizedEvent =
-  | RealtimeServerEvent
-  | { type: "response.output_audio.binary"; bytes: Uint8Array };
-
-function realtimeRecord(wire: unknown, label: string): Record<string, unknown> {
-  if (!wire || typeof wire !== "object" || Array.isArray(wire)) throw new VoiceProtocolError("invalid_event", `${label} must be object`);
-  return wire as Record<string, unknown>;
-}
-
-function realtimeString(value: Record<string, unknown>, key: string): string {
-  if (typeof value[key] !== "string") throw new VoiceProtocolError("invalid_event", `${key} must be string`);
-  return value[key] as string;
-}
-
-export function parseRealtimeServerEvent(text: string): RealtimeServerEvent {
-  let wire: unknown;
-  try { wire = JSON.parse(text) as unknown; }
-  catch { throw new VoiceProtocolError("invalid_event", "realtime event was not JSON"); }
-  const value = realtimeRecord(wire, "realtime event");
-  const type = realtimeString(value, "type");
-  // 실제 파일은 RealtimeServerEvent의 모든 discriminant를 exhaustive switch로 나눈다.
-  // 아래 branch가 중첩 payload를 unknown에서 구성하는 패턴이며 default cast는 두지 않는다.
-  switch (type) {
-    case "ping":
-      if (typeof value.timestamp !== "number") throw new VoiceProtocolError("invalid_event", "ping timestamp is invalid");
-      return { type, timestamp: value.timestamp };
-    case "conversation.created": {
-      const conversation = realtimeRecord(value.conversation, "conversation");
-      return { type, conversation: { id: realtimeString(conversation, "id") },
-        ...(typeof value.event_id === "string" ? { event_id: value.event_id } : {}) };
-    }
-    case "input_audio_buffer.dtmf_event_received": {
-      const event = realtimeString(value, "event");
-      if (!/^[0-9*#]$/.test(event) || typeof value.received_at !== "number") throw new VoiceProtocolError("invalid_event", "DTMF event is invalid");
-      return { type, event: event as Extract<RealtimeServerEvent, {type: typeof type}>["event"], received_at: value.received_at,
-        ...(typeof value.event_id === "string" ? { event_id: value.event_id } : {}) };
-    }
-    case "session.created":
-    case "session.updated":
-      return { type, session: realtimeRecord(value.session, "session"),
-        ...(typeof value.event_id === "string" ? { event_id: value.event_id } : {}) };
-    case "error": {
-      const error = realtimeRecord(value.error, "error");
-      return { type, error: {
-        message: realtimeString(error, "message"),
-        ...(typeof error.code === "string" ? { code: error.code } : {}),
-        ...(typeof error.type === "string" ? { type: error.type } : {}),
-      }, ...(typeof value.event_id === "string" ? { event_id: value.event_id } : {}) };
-    }
-    // 나머지 case는 위 union 순서대로 required scalar/object를 검사해 새 객체를 만든다.
-    // compiler의 assertNever(type)로 새 server event가 추가되면 typecheck가 실패하게 한다.
-  }
-  throw new VoiceProtocolError("invalid_event", `unsupported realtime event type: ${type}`);
-}
-
 function validateSessionConfig(session: RealtimeSessionConfig): void {
   const vad = session.turn_detection;
   if (vad) {
@@ -804,7 +887,7 @@ function validateSessionConfig(session: RealtimeSessionConfig): void {
 
 `conversation.item.created`는 resumption replay에서 관측/문서화된 xAI 형태이고, 현재 WS schema의 `conversation.item.added`도 함께 처리한다. 알 수 없는 `type`은 cast하지 않고 typed protocol error다.
 
-### 9.4 reducer와 client
+### 10.4 reducer와 client
 
 ```ts
 export interface RealtimeState {
@@ -911,9 +994,9 @@ function makeRealtimeClient(socket: VoiceSocket): RealtimeClient {
 
 `openVoiceSocket`은 `ws-client.ts`의 공용 transport seam이며 endpoint별 factory만 호출한다. resumption 절차는 caller가 첫 연결의 `conversation.created.conversation.id`를 저장하고, 새 client에 `conversationId`를 넣은 뒤 첫 메시지로 `session.update({resumption:{enabled:true}})`를 보내는 것이다. replay는 `conversation.item.created|added`로 들어오며 별도 completion event를 기다리지 않는다. SIP 재접속은 공식 FAQ대로 새 `call_id`와 이전 conversation/call identifier를 함께 쓸 수 있다. history는 현재 문서상 30분 inactivity 후 만료된다.
 
-## 10. NEW `src/voice/sip.ts`
+## 11. NEW `src/voice/sip.ts`
 
-### 10.1 endpoint 요청/응답 타입 전부
+### 11.1 endpoint 요청/응답 타입 전부
 
 ```ts
 import { createVoiceHttpClient, expectRecord, expectString, jsonBody, type VoiceClientOptions } from "./http.js";
@@ -986,7 +1069,7 @@ export interface SipClient {
 
 OpenAPI는 `xai_provisioned`를 enum에 남겼지만 현재 SIP 가이드는 API provisioning 미지원이라고 명시한다. 타입은 wire 호환을 위해 둘 다 표현하되, 문서와 CLI는 `byo_trunk`만 지원으로 표시한다. caller가 `xai_provisioned`를 명시하면 upstream 결과를 그대로 받으며 성공을 가정하지 않는다.
 
-### 10.2 핵심 본문
+### 11.2 핵심 본문
 
 ```ts
 function callPath(callId: string, action: "refer" | "hangup"): string {
@@ -1064,7 +1147,7 @@ export function createSipClient(options: VoiceClientOptions = {}): SipClient {
 
 `refer`는 동기 결과다. 200 `{}`는 destination answer까지 완료된 성공이다. 400은 URI 오류, 404는 SIP participant 없음, 502는 downstream SIP 거절, 504는 timeout이다. 실패해도 기존 realtime WS는 유지되며 자동 hangup/reconnect하지 않는다.
 
-## 11. NEW `tests/voice-ws.test.ts`
+## 12. NEW `tests/voice-ws.test.ts`
 
 `ws.WebSocketServer({port: 0})`를 사용하고 sleep을 쓰지 않는다. `once(server, "listening")`, message promise, close promise로 동기화한다.
 
@@ -1074,8 +1157,13 @@ import assert from "node:assert/strict";
 import { WebSocketServer } from "ws";
 import { createSttSession, createTtsSession, ephemeralProtocols } from "../src/voice/ws-client.js";
 import { createRealtimeClient, reduceRealtimeEvent, PINNED_REALTIME_MODEL } from "../src/voice/realtime.js";
+import {
+  parseRealtimeServerEvent, parseSttServerEvent,
+  REALTIME_SERVER_EVENT_TYPES, STT_SERVER_EVENT_TYPES,
+} from "../src/voice/protocol.js";
 
 describe("Voice WebSocket", () => {
+  it("exports the same browser-safe protocol decoders and event names consumed by wp13", () => {});
   it("uses OAuth bearer headers for server-side STT/TTS/realtime", async () => {});
   it("uses xai-client-secret subprotocol without putting the secret in URL", async () => {});
   it("supports the OpenAI-compatible three-subprotocol form", () => {});
@@ -1099,7 +1187,7 @@ describe("Voice WebSocket", () => {
 
 1006 테스트는 server가 실제 `terminate()`를 호출해 abnormal close를 만든다. speech_final fixture text와 done fixture text는 서로 다른 값(예: `"authoritative partial"`, `""`)이어야 precedence가 검증된다.
 
-## 12. NEW `tests/voice-sip.test.ts`
+## 13. NEW `tests/voice-sip.test.ts`
 
 ```ts
 import { describe, it } from "node:test";
@@ -1121,19 +1209,20 @@ describe("Voice SIP", () => {
 
 Type-level XOR은 `// @ts-expect-error` compile fixture로 검증하고 runtime test는 JS/unknown caller가 두 routing target을 함께 넣은 경우 validation이 거부하는지 검사한다.
 
-## 13. 구현 순서
+## 14. 구현 순서
 
 1. wp5/wp6/wp9 실제 exports를 다시 읽고 stale diff를 이 문서에 먼저 반영한다.
-2. `ws`/`@types/ws`를 설치하고 lockfile을 검토한다.
+2. wp10 단독으로 `ws`/`@types/ws`를 설치하고 lockfile을 검토한다.
 3. `/v2` base URL 회귀 테스트를 red로 만든 뒤 `base-url.ts`를 수정한다.
-4. `ws-client.ts`의 bounded dial/auth/abort를 만들고 local server handshake 테스트를 통과시킨다.
-5. STT parser/state를 구현해 speech_final/empty done/1006 순서를 red-green한다.
-6. TTS multi-utterance state를 구현한다.
-7. realtime 타입, parser, reducer, session methods, ping/pong, resumption을 구현한다.
-8. SIP REST 타입과 client를 구현한다.
-9. focused tests, typecheck, 전체 test, build, dependency audit를 실행한다.
+4. Node import가 없는 `protocol.ts`를 먼저 만들고 STT/TTS/realtime event 이름·타입·상수·decoder를 고정한다.
+5. `ws-client.ts`의 bounded dial/auth/abort를 만들고 local test server handshake 테스트를 통과시킨다. production 연결은 항상 `wss://api.x.ai` 직결이다.
+6. STT parser/state를 구현해 speech_final/empty done/1006 순서를 red-green한다.
+7. TTS multi-utterance state를 구현한다.
+8. realtime parser, reducer, session methods, ping/pong, resumption을 구현한다. event 계약은 `protocol.ts`에서만 import한다.
+9. SIP REST 타입과 client를 구현한다.
+10. focused tests, typecheck, 전체 test, browser build, dependency audit를 실행한다.
 
-## 14. 검증 명령
+## 15. 검증 명령
 
 ```bash
 cd /Users/jun/Developer/progrok
@@ -1152,9 +1241,11 @@ PROGROK_LIVE_SMOKE=1 npx tsx scripts/live-oauth-smoke.ts
 
 live evidence에는 status, content type, byte count/hash, terminal event만 남기고 transcript, audio, token, signed secret, raw error body는 남기지 않는다.
 
-## 15. 완료 조건
+## 16. 완료 조건
 
 - `ws`와 `@types/ws`가 manifest/lock에 정확히 한 번 존재하고 high dependency audit가 0이다.
+- `ws`/`@types/ws` 추가와 lockfile 변경은 wp10 diff에만 있고 wp11 이후 단계에는 `NO CHANGE — precondition`으로만 남는다.
+- `src/voice/protocol.ts`가 STT/TTS/realtime event 이름·타입·상수·decoder의 SSOT이며 Node builtin, `ws`, auth, transport를 import하지 않는다. wp13 browser code는 이 파일을 직접 import한다.
 - `/v2/phone-numbers`가 정확히 `https://api.x.ai/v2/phone-numbers`로 간다.
 - STT는 ready 전 audio를 거부하고 binary/finalize/audio.done을 정확히 보낸다.
 - speech_final partial이 최종 text의 권위자이며 empty transcript.done과 1006이 이를 지우지 않는다.
@@ -1164,5 +1255,8 @@ live evidence에는 status, content type, byte count/hash, terminal event만 남
 - ephemeral secret은 subprotocol에만 있고 URL/log에 없다. SIP call_id와 함께 쓸 수 없다.
 - phone registration, refer, hangup의 모든 요청/응답 타입과 error status가 검증된다.
 - automatic reconnect와 post-commit replay가 없다.
+- 로컬 WS upgrade/relay route가 없고 모든 Voice WebSocket production URL은 `wss://api.x.ai` 직결이다.
+- 공개 factory는 `createTtsClient`, `createSttClient`, `createRealtimeClient`이며 wp12/wp13 소비자용 별칭 helper를 추가하지 않는다.
+- `tests/voice-ws.test.ts`는 wp10이 NEW로 만들고 wp14는 MODIFY만 한다.
 - focused tests, typecheck, 전체 test, build, audit가 모두 exit 0이다.
 - `auth.json`, CLI 명령, `/health`, HTTP `/v1/*` 포워딩 계약에 breaking change가 없다.

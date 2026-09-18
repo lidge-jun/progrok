@@ -3,7 +3,7 @@
 ## 0. 문서 계약
 
 - 상태: 구현 전 diff-level PRD
-- 선행 단계: wp10(Voice WS/realtime) 완료, wp8의 네이티브 `createProxyApp()` 사용 가능
+- 선행 단계: wp10(Voice WS/realtime과 browser-safe `src/voice/protocol.ts`) 완료, wp8의 네이티브 `createProxyApp()` 사용 가능
 - 구현 범위: 로컬 브라우저 앱, 브라우저용 빌드, 정적 자산 패키징, 웹앱 회귀 테스트
 - 제외 범위: 공개 문서/사이트/skill 동기화(wp15), 릴리스/푸시(wp16), SIP UI, custom voice 관리, 이미지·비디오 편집/연장 UI
 - 변경 금지: `~/.progrok/auth.json` 스키마, 장기 OAuth 토큰의 브라우저 노출, xAI WS를 로컬 서버가 중계하는 새 프록시
@@ -58,7 +58,8 @@ src/commands/chat.ts
 
 src/web/client/app.ts
   -> chat.ts -> api.ts -> same-origin /v1/responses, /v1/models
-  -> voice.ts -> api.ts -> same-origin POST /v1/realtime/client_secrets
+  -> voice.ts -> ../../voice/protocol.ts (wp10의 event/control 타입과 parser)
+             -> api.ts -> same-origin POST /v1/realtime/client_secrets
                         -> direct wss://api.x.ai/v1/stt|realtime
   -> media.ts -> api.ts -> same-origin image/video REST
 
@@ -1128,6 +1129,15 @@ export class ChatController {
 ```ts
 import { mintClientSecret } from "./api.js";
 import type { EphemeralClientSecret, VoiceMode, VoiceStatus } from "./contracts.js";
+import {
+  ephemeralProtocols,
+  parseRealtimeServerEvent,
+  parseSttServerEvent,
+  type RealtimeClientEvent,
+  type RealtimeServerEvent,
+  type SttClientControl,
+  type SttServerEvent,
+} from "../../voice/protocol.js";
 
 const XAI_WS_BASE = "wss://api.x.ai/v1";
 
@@ -1165,7 +1175,7 @@ export function buildVoiceSocketSpec(
   }
   return {
     url: `${XAI_WS_BASE}/${mode === "stt" ? "stt" : "realtime"}?${query}`,
-    protocols: [`xai-client-secret.${secret.value}`],
+    protocols: ephemeralProtocols(secret.value),
   };
 }
 
@@ -1232,14 +1242,14 @@ export class VoiceController {
     if (this.#socket?.readyState === WebSocket.OPEN) {
       if (this.el.mode.value === "stt" && drainStt) {
         this.#stoppingStt = true;
-        this.#socket.send(JSON.stringify({ type: "audio.done" }));
+        this.sendJson({ type: "audio.done" } satisfies SttClientControl);
         await this.stopMedia();
         this.setStatus("stopped");
         this.#drainTimer = window.setTimeout(() => this.closeSocket(), 2_000);
         return;
       }
       if (this.el.mode.value === "realtime") {
-        this.#socket.send(JSON.stringify({ type: "response.cancel" }));
+        this.sendJson({ type: "response.cancel" } satisfies RealtimeClientEvent);
       }
     }
     this.closeSocket();
@@ -1250,13 +1260,13 @@ export class VoiceController {
 
   finalizeUtterance(): void {
     if (this.el.mode.value === "stt" && this.#socket?.readyState === WebSocket.OPEN) {
-      this.#socket.send(JSON.stringify({ type: "finalize" }));
+      this.sendJson({ type: "finalize" } satisfies SttClientControl);
     }
   }
 
   private async onOpen(mode: VoiceMode): Promise<void> {
     if (!this.#socket || !this.#stream) return;
-    if (mode === "realtime") this.#socket.send(JSON.stringify(this.sessionUpdate()));
+    if (mode === "realtime") this.sendJson(this.sessionUpdate());
     const rate = mode === "stt" ? 16000 : 24000;
     this.#context = new AudioContext();
     await this.#context.audioWorklet.addModule("/assets/pcm-worklet.js");
@@ -1279,41 +1289,52 @@ export class VoiceController {
       if (mode === "realtime") this.enqueuePcm(event.data, 24000);
       return;
     }
-    let wire: Record<string, unknown>;
-    try { wire = JSON.parse(event.data) as Record<string, unknown>; } catch { return; }
-    const type = String(wire.type ?? "");
-    if (type === "ping") {
-      this.#socket?.send(JSON.stringify({ type: "pong", ping_timestamp: wire.timestamp }));
-    } else if (type === "conversation.created") {
-      const conversation = wire.conversation as Record<string, unknown> | undefined;
-      if (typeof conversation?.id === "string") this.#conversationId = conversation.id;
-    } else if (type === "input_audio_buffer.speech_started") {
-      this.cancelPlayback();
-      this.setStatus("listening");
-    } else if (type === "transcript.partial") {
-      const text = typeof wire.text === "string" ? wire.text : "";
-      this.el.userTranscript.textContent = text;
-      if (wire.speech_final === true) this.el.userTranscript.dataset.final = "true";
-    } else if (type === "transcript.done") {
-      if (typeof wire.text === "string" && wire.text) this.el.userTranscript.textContent = wire.text;
-      if (this.#stoppingStt) this.closeSocket();
-    } else if (type === "conversation.item.input_audio_transcription.updated" || type === "conversation.item.input_audio_transcription.completed") {
-      this.el.userTranscript.textContent = String(wire.transcript ?? wire.text ?? "");
-    } else if (type === "response.output_audio_transcript.delta") {
-      this.el.assistantTranscript.textContent += String(wire.delta ?? "");
-    } else if (type === "response.done") {
-      this.setStatus("listening");
-    } else if (type === "response.cancelled") {
-      this.setStatus("stopped");
-    } else if (type === "error") {
-      const detail = typeof wire.error === "object" && wire.error !== null
-        ? wire.error as Record<string, unknown>
-        : undefined;
-      this.fail(String(detail?.message ?? wire.message ?? "Voice API error"));
+    try {
+      if (mode === "stt") this.onSttEvent(parseSttServerEvent(event.data));
+      else this.onRealtimeEvent(parseRealtimeServerEvent(event.data));
+    } catch {
+      this.fail("Voice API returned an invalid event");
     }
   }
 
-  private sessionUpdate(): Record<string, unknown> {
+  private onSttEvent(event: SttServerEvent): void {
+    if (event.type === "transcript.partial") {
+      this.el.userTranscript.textContent = event.text;
+      if (event.speech_final) this.el.userTranscript.dataset.final = "true";
+    } else if (event.type === "transcript.done") {
+      if (event.text) this.el.userTranscript.textContent = event.text;
+      if (this.#stoppingStt) this.closeSocket();
+    } else if (event.type === "error") {
+      this.fail(event.message);
+    }
+  }
+
+  private onRealtimeEvent(event: RealtimeServerEvent): void {
+    if (event.type === "ping") {
+      this.sendJson({ type: "pong", ping_timestamp: event.timestamp } satisfies RealtimeClientEvent);
+    } else if (event.type === "conversation.created") {
+      this.#conversationId = event.conversation.id;
+    } else if (event.type === "input_audio_buffer.speech_started") {
+      this.cancelPlayback();
+      this.setStatus("listening");
+    } else if (event.type === "conversation.item.input_audio_transcription.updated" || event.type === "conversation.item.input_audio_transcription.completed") {
+      this.el.userTranscript.textContent = event.transcript;
+    } else if (event.type === "response.output_audio_transcript.delta") {
+      this.el.assistantTranscript.textContent += event.delta;
+    } else if (event.type === "response.done") {
+      this.setStatus("listening");
+    } else if (event.type === "response.cancelled") {
+      this.setStatus("stopped");
+    } else if (event.type === "error") {
+      this.fail(event.error.message);
+    }
+  }
+
+  private sendJson(event: SttClientControl | RealtimeClientEvent): void {
+    this.#socket?.send(JSON.stringify(event));
+  }
+
+  private sessionUpdate(): Extract<RealtimeClientEvent, { type: "session.update" }> {
     return {
       type: "session.update",
       session: {
@@ -1869,7 +1890,7 @@ describe("progrok web app", () => {
 });
 ```
 
-`src/web/client/voice.ts`는 import 시 browser global을 실행하지 않아야 이 Node test가 가능하다. `window` 접근은 `VoiceController.init/start` 내부로 제한한다.
+`src/web/client/voice.ts`는 wp10의 browser-safe `src/voice/protocol.ts`만 import한다. Node 전용 `ws-client.ts`나 `ws` package를 browser bundle에 넣지 않는다. import 시 browser global을 실행하지 않아야 이 Node test가 가능하므로 `window` 접근은 `VoiceController.init/start` 내부로 제한한다.
 
 ## 8. 구현 순서
 
@@ -1940,8 +1961,8 @@ node dist/index.js chat --host 127.0.0.1 --port 18646
 | Chat/model | `/v1/models` 성공 후 model 변경, prompt 전송 | 정적 fallback 없이 실제 응답, stream 중 Stop 노출, 완료 후 숨김 |
 | Chat/reasoning | reasoning model prompt | 실제 reasoning summary event가 있을 때만 disclosure 표시 |
 | Chat/tools | web/X search 또는 function tool | queued/running/complete 상태, 실제 인자/출처 표시; 가짜 tool panel 없음 |
-| STT | Voice → Live transcription → Start/말하기/Finish/Stop | Network의 WS URL은 `/v1/stt`, protocol은 `xai-client-secret.*`, `speech_final` 문장 보존 |
-| Realtime | Voice → Speech to speech → Start/대화/끼어들기/Stop | `/v1/realtime`, assistant audio와 양쪽 transcript, barge-in 시 playback 중단 |
+| STT | Voice → Live transcription → Start/말하기/Finish/Stop | Network의 WS URL은 `wss://api.x.ai/v1/stt`, protocol은 `xai-client-secret.*`, `speech_final` 문장 보존 |
+| Realtime | Voice → Speech to speech → Start/대화/끼어들기/Stop | `wss://api.x.ai/v1/realtime`, assistant audio와 양쪽 transcript, barge-in 시 playback 중단 |
 | Image | Media → Image → prompt | 실제 image 표시, alt text 존재 |
 | Video | Media → Video → prompt | request id 생성, real progress만 표시, done 뒤 controls 있는 video 표시 |
 | Security | DevTools storage/console 검사 | OAuth/ephemeral token 없음; token은 WS subprotocol 외 URL/DOM/log/storage에 없음 |
@@ -1980,9 +2001,9 @@ viewport는 1440×900, 1024×768, 768×1024, 390×844에서 확인한다. keyboa
 - [ ] `npm pack --dry-run --json`에 네 정적 산출물이 포함된다.
 - [ ] 네 viewport와 keyboard/VoiceOver 최소 smoke 결과가 wp14 evidence로 인계된다.
 
-## 12. 구현 중 재확인할 경계
+## 12. 고정된 선행 계약과 구현 중 재확인할 경계
 
-- wp10이 확정한 event/type 이름이 이 문서와 다르면 wp10의 실제 exported contract를 우선하고, 구현 전에 이 문서의 signatures/event table을 수정한다.
+- wp10의 `src/voice/protocol.ts`가 `ephemeralProtocols`, `parseRealtimeServerEvent`, `parseSttServerEvent`, `RealtimeClientEvent`, `RealtimeServerEvent`, `SttClientControl`, `SttServerEvent`를 browser-safe export한다. wp13은 이 계약을 그대로 import하며 event 이름·decoder·client control을 다시 선언하지 않는다.
 - wp8의 `createProxyApp()` signature가 달라지면 `src/web/server.ts`만 조정한다. browser는 계속 same-origin `/v1/*`만 호출한다.
 - 라이브 realtime server가 binary output transport를 거부하면 JSON `response.output_audio.delta` base64 경로로 바꾸되, browser OAuth/ephemeral 경계는 바꾸지 않는다.
 - `/v1/models`에 media model이 나오지 않고 전용 model endpoint만 권위로 확정되면 Media selector만 `/v1/image-generation-models`와 `/v1/video-generation-models`로 분리한다. Chat selector의 `/v1/models` 권위는 유지한다.
