@@ -10,6 +10,7 @@ import { log } from "../utils/logger.js";
 import { PayloadTooLargeError, readBoundedBody } from "./body.js";
 import { prepareGrokRequestObject } from "./composer-inject.js";
 import { serveNativeStream } from "./native-stream.js";
+import { safeErrorMessage } from "./redact.js";
 import { filterRequestHeaders, relayUpstreamResponse } from "./relay.js";
 import { decideProxyRoute } from "./route-policy.js";
 
@@ -28,14 +29,14 @@ function sendUpstreamError(res: Response, error: unknown): void {
   if (!res.headersSent) {
     res.status(502).json({
       error: {
-        message: `Upstream error: ${(error as Error).message}`,
+        message: `Upstream error: ${safeErrorMessage(error)}`,
         type: "upstream_error",
       },
     });
     return;
   }
   log.dim(
-    `[progrok] stream interrupted after response commit: ${(error as Error).message}`,
+    `[progrok] stream interrupted after response commit: ${safeErrorMessage(error)}`,
   );
   res.end();
 }
@@ -74,7 +75,7 @@ async function handleProxy(
     bearer = await deps.getBearer();
   } catch (error) {
     res.status(401).json({
-      error: { message: (error as Error).message, type: "auth_error" },
+      error: { message: safeErrorMessage(error), type: "auth_error" },
     });
     return;
   }

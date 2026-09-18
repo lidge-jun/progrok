@@ -1,4 +1,3 @@
-import { once } from "node:events";
 import type { Response as ExpressResponse } from "express";
 
 export const HOP_BY_HOP_HEADERS = new Set([
@@ -83,10 +82,34 @@ export async function relayUpstreamResponse(
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (!res.write(value)) await once(res, "drain");
+      if (!res.write(value)) {
+        // A paused socket resumes with "drain" — unless the client goes away
+        // first, in which case "drain" never fires and waiting for it alone
+        // strands this promise and the upstream reader with it.
+        const resumed = await waitForDrainOrClose(res);
+        if (!resumed) return;
+      }
     }
     res.end();
   } finally {
     reader.releaseLock();
   }
+}
+
+/** Resolves true when the socket drains, false when it closes or errors first. */
+function waitForDrainOrClose(res: ExpressResponse): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const settle = (resumed: boolean) => () => {
+      res.off("drain", onDrain);
+      res.off("close", onClose);
+      res.off("error", onError);
+      resolve(resumed);
+    };
+    const onDrain = settle(true);
+    const onClose = settle(false);
+    const onError = settle(false);
+    res.once("drain", onDrain);
+    res.once("close", onClose);
+    res.once("error", onError);
+  });
 }
