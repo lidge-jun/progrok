@@ -10,12 +10,21 @@ export function decodeBase64Pcm(value: string): ArrayBuffer {
 export class PcmPlaybackQueue {
   #sources: AudioBufferSourceNode[] = [];
   #nextPlaybackAt = 0;
+  readonly #bus: GainNode;
+  readonly analyser: AnalyserNode;
 
   constructor(
     private readonly context: AudioContext,
     private readonly onActive: () => void,
     private readonly onIdle: () => void,
-  ) {}
+  ) {
+    this.#bus = context.createGain();
+    this.analyser = context.createAnalyser();
+    this.analyser.fftSize = 256;
+    this.analyser.smoothingTimeConstant = 0.72;
+    this.#bus.connect(this.analyser);
+    this.#bus.connect(context.destination);
+  }
 
   get active(): boolean {
     return this.#sources.length > 0;
@@ -31,7 +40,7 @@ export class PcmPlaybackQueue {
     }
     const source = this.context.createBufferSource();
     source.buffer = audio;
-    source.connect(this.context.destination);
+    source.connect(this.#bus);
     this.#nextPlaybackAt = Math.max(
       this.context.currentTime,
       this.#nextPlaybackAt,
@@ -56,5 +65,11 @@ export class PcmPlaybackQueue {
     }
     this.#sources = [];
     this.#nextPlaybackAt = 0;
+  }
+
+  dispose(): void {
+    this.cancel();
+    this.#bus.disconnect();
+    this.analyser.disconnect();
   }
 }

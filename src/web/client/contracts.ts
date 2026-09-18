@@ -46,6 +46,7 @@ export type VoiceStatus =
   | "minting-secret"
   | "connecting"
   | "listening"
+  | "responding"
   | "speaking"
   | "stopped"
   | "failed";
