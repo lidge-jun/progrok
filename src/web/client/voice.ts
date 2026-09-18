@@ -15,6 +15,7 @@ import {
   PcmPlaybackQueue,
 } from "./pcm-playback.js";
 import { createVoiceMeter, type VoiceMeter } from "./voice-meter.js";
+import { buildSessionUpdate, describeMediaError } from "./voice-session.js";
 import { buildVoiceSocketSpec } from "./voice-socket.js";
 export {
   buildVoiceSocketSpec,
@@ -64,20 +65,6 @@ export interface VoiceElements {
   networkRow: HTMLElement;
   network: HTMLElement;
   events: HTMLElement;
-}
-
-function describeMediaError(error: unknown): string {
-  const name = error instanceof DOMException ? error.name : "";
-  if (name === "NotAllowedError" || name === "SecurityError") {
-    return "Microphone permission was denied. Allow it for this site in your browser settings, then start again.";
-  }
-  if (name === "NotFoundError" || name === "OverconstrainedError") {
-    return "No microphone input was found. Connect a device and start again.";
-  }
-  if (name === "NotReadableError") {
-    return "The microphone is busy in another application. Close it and start again.";
-  }
-  return error instanceof Error ? error.message : String(error);
 }
 
 function followBottom(element: HTMLElement, update: () => void): void {
@@ -337,7 +324,7 @@ export class VoiceController {
 
   private async onOpen(mode: VoiceMode, socket: WebSocket): Promise<void> {
     if (this.#socket !== socket || !this.#stream) return;
-    if (mode === "realtime") this.sendJson(this.sessionUpdate());
+    if (mode === "realtime") this.sendJson(buildSessionUpdate(this.el.voice.value));
     const rate = mode === "stt" ? 16000 : 24000;
     const context = new AudioContext();
     this.#context = context;
@@ -487,39 +474,6 @@ export class VoiceController {
     if (this.#socket?.readyState === WebSocket.OPEN) {
       this.#socket.send(JSON.stringify(event));
     }
-  }
-
-  private sessionUpdate(): Extract<
-    RealtimeClientEvent,
-    { type: "session.update" }
-  > {
-    return {
-      type: "session.update",
-      session: {
-        voice: this.el.voice.value,
-        reasoning: { effort: "high" },
-        turn_detection: {
-          type: "server_vad",
-          threshold: 0.85,
-          silence_duration_ms: 500,
-          prefix_padding_ms: 333,
-          idle_timeout_ms: 10000,
-        },
-        audio: {
-          input: {
-            format: { type: "audio/pcm", rate: 24000 },
-            transport: "binary",
-            transcription: { model: "grok-transcribe" },
-          },
-          output: {
-            format: { type: "audio/pcm", rate: 24000 },
-            transport: "binary",
-            speed: 1,
-          },
-        },
-        resumption: { enabled: true },
-      },
-    };
   }
 
   private cancelPlayback(): void {
