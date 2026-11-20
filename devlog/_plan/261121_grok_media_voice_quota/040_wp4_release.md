@@ -51,7 +51,8 @@ Revised order (replaces steps 3–6 above):
 3. Squash-merge. Record the merge SHA M and confirm main's HEAD is M (no one else pushed).
 4. Wait for ci.yml on the push to main at exactly M: typecheck, build & smoke, site, and all nine test cells
    (ubuntu/macos/windows × Node 22/24/26) green. Confirm pages.yml for M succeeded.
-5. Package gate on M: `npm pack` in a clean checkout of M; list the tarball (dist/, skills/, README, LICENSE,
+5. Package gate on M: in a clean checkout of M run `npm ci && npm run build` (packing has no build hook;
+   `prepublishOnly` only runs on publish), then `npm pack`; list the tarball (dist/, skills/, README, LICENSE,
    THIRD_PARTY_NOTICES only, no tests/devlog/site/.codexclaw); install the tarball into a temp dir with a throwaway
    HOME and run `progrok --version` (3.1.0), `progrok skill | head`, `progrok capabilities --json --offline`.
 6. Publish, by the credential the user chooses:
