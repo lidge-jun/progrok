@@ -1,6 +1,6 @@
 import type { XaiTransport } from "../transport/fetch.js";
 import { createVoiceHttpClient, expectRecord, expectString } from "./http.js";
-import type { AudioSampleRate } from "./tts.js";
+import { AUDIO_SAMPLE_RATES, type AudioSampleRate } from "./tts.js";
 
 export type SttAudioFormat = "pcm" | "mulaw" | "alaw" | "wav" | "mp3" | "ogg" | "opus" | "flac" | "aac" | "mp4" | "m4a" | "mkv";
 export type SttSource = { file: Blob; filename: string; url?: never } | { url: string; file?: never; filename?: never };
@@ -19,6 +19,8 @@ function validateSttRequest(request: SttRequest): void {
   if (hasFile && !raw.filename?.trim()) throw new RangeError("filename is required for file input");
   if (hasUrl) { const url = new URL(raw.url!); if (url.protocol !== "https:" && url.protocol !== "http:") throw new RangeError("STT url must use http or https"); }
   if (request.audio_format && RAW_FORMATS.has(request.audio_format) && request.sample_rate === undefined) throw new RangeError("sample_rate is required for raw audio");
+  if (request.sample_rate !== undefined && !AUDIO_SAMPLE_RATES.includes(request.sample_rate)) throw new RangeError(`sample_rate must be one of ${AUDIO_SAMPLE_RATES.join(", ")}`);
+  if (request.channels !== undefined && (!Number.isInteger(request.channels) || request.channels < 1 || request.channels > 8)) throw new RangeError("channels must be 1..8");
   if (request.format && !request.language) throw new RangeError("language is required when format=true");
   if (request.multichannel && request.channels !== undefined && (!Number.isInteger(request.channels) || request.channels < 2 || request.channels > 8)) throw new RangeError("channels must be 2..8");
   if (request.keyterm && (request.keyterm.length > 100 || request.keyterm.some((term) => term.length === 0 || term.length > 50))) throw new RangeError("keyterm supports at most 100 non-empty values of 50 characters");

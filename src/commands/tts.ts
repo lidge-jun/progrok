@@ -13,7 +13,12 @@ export interface TtsCliOptions {
   output?: string;
   stdout?: boolean;
   json?: boolean;
-  speed?: string; sampleRate?: string; bitRate?: string; latency?: string; textNormalization?: boolean; listVoices?: boolean;
+  speed?: string;
+  sampleRate?: string;
+  bitRate?: string;
+  latency?: string;
+  textNormalization?: boolean;
+  listVoices?: boolean;
 }
 
 function decodeTtsJsonBody(body: unknown): {

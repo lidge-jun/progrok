@@ -29,13 +29,12 @@ export function buildVideoGenerationRequest(input: VideoGenerationInput, toRef: 
   }
   if (keyframes.length > 4) throw new Error("--keyframe supports at most 4 keyframes");
   const slots = new Set<number>();
-  const times: number[] = [];
   for (const frame of keyframes) {
     if (!Number.isFinite(frame.timestampS) || frame.timestampS <= 0 || frame.timestampS >= duration) throw new Error("--keyframe timestamp must be greater than 0 and less than --duration");
     const slot = keyframeSlot(frame.timestampS);
-    if (slots.has(slot) || times.some(time => Math.abs(time - frame.timestampS) < 1 / 3)) throw new Error("--keyframe keyframes must be at least 1/3 s apart");
+    // xAI snaps anchors to a 1/3 s grid and rejects two that share a slot.
+    if (slots.has(slot)) throw new Error("--keyframe keyframes must be at least 1/3 s apart (they snap to a 1/3 s grid)");
     slots.add(slot);
-    times.push(frame.timestampS);
   }
   if (!prompt && !image && lastFrame === undefined && keyframes.length === 0) throw new Error("prompt is required unless a frame is pinned");
   return { model, ...(prompt ? { prompt } : {}), aspect_ratio: aspect, resolution, [input.durationField]: duration,

@@ -17,7 +17,9 @@ test('video model limits, frames, voices, and progress', () => {
  assert.deepEqual(parseKeyframe('a@b.png@2.5'),{input:'a@b.png',timestampS:2.5});
  for(const model of ['grok-imagine-video','grok-imagine-video-1.5-lite']) assert.throws(()=>make({model,lastFrame:'x'}),/--last-frame/);
  for(const t of [0,5]) assert.throws(()=>make({keyframes:[{input:'x',timestampS:t}]}),/keyframe/);
- assert.throws(()=>make({keyframes:[{input:'x',timestampS:1},{input:'y',timestampS:1.2}]}),/1\/3/);
+ // xAI snaps keyframes to a 1/3 s grid and rejects two that land in the same slot.
+ assert.throws(()=>make({keyframes:[{input:'x',timestampS:1},{input:'y',timestampS:1.1}]}),/1\/3/);
+ assert.equal((make({keyframes:[{input:'x',timestampS:1},{input:'y',timestampS:1.2}]}).keyframes as unknown[]).length,2);
  assert.throws(()=>make({keyframes:Array(5).fill({input:'x',timestampS:1})}),/4/);
  for(const extra of [{refs:['x']},{lastFrame:'x'},{keyframes:[{input:'x',timestampS:1}]}]) assert.throws(()=>make({...extra,resolution:'1080p'}),/720p/);
  for(const model of ['grok-imagine-video-1.5','grok-imagine-video-1.5-lite']) { assert.equal(make({model,resolution:'1080p'}).resolution,'1080p'); assert.equal(make({model,resolution:'1080p',image:'x'}).resolution,'1080p'); }

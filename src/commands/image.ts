@@ -121,7 +121,7 @@ export function imageCommand(): Command {
             const suffix = data.data.length > 1 ? `-${i + 1}` : "";
             const bytes = Buffer.from(item.b64_json, "base64");
             const outPath = opts.output
-              ? opts.output
+              ? (suffix ? opts.output.replace(/(\.\w+)?$/, (ext) => `${suffix}${ext}`) : opts.output)
               : `progrok-image${suffix}.${imageExtension(item, bytes)}`;
             writeFileSync(outPath, bytes);
             log.success(`Image saved: ${outPath}`);

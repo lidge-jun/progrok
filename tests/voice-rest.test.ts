@@ -70,6 +70,15 @@ describe("Voice REST", () => {
     assert.throws(() => buildSttForm({ url: "ftp://example.com/a", vad_threshold: 0.5 }), /http or https/);
     assert.throws(() => buildSttForm({ url: "https://example.com/a", multichannel: true, channels: 1 }), /2..8/);
     assert.throws(() => buildSttForm({ url: "https://example.com/a", vad_threshold: 2 }), /0..1/);
+    // CLI flags arrive as strings; a non-numeric value used to be sent as NaN.
+    assert.throws(() => buildSttForm({ url: "https://example.com/a", audio_format: "pcm", sample_rate: Number("abc") as 16000 }), /sample_rate/);
+    assert.throws(() => buildSttForm({ url: "https://example.com/a", channels: Number("x") }), /channels/);
+  });
+
+  it("rejects TTS output formats outside the documented rates", async () => {
+    const client = createTtsClient({ transport: transport(() => { throw new Error("unreachable"); }) });
+    await assert.rejects(client.synthesize({ text: "a", language: "en", output_format: { codec: "wav", sample_rate: Number("abc") as 24000 } }), /sample_rate/);
+    await assert.rejects(client.synthesize({ text: "a", language: "en", output_format: { codec: "mp3", bit_rate: 1000 as 32000 } }), /bit_rate/);
   });
 
   it("covers custom voice CRUD and audio", async () => {

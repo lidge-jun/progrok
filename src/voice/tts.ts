@@ -14,6 +14,8 @@ export interface TtsVoice { voice_id: string; name: string; language: string | n
 export interface ListTtsVoicesResponse { voices: TtsVoice[] }
 
 export const TTS_BUILTIN_VOICES = ["altair", "ara", "atlas", "aurora", "carina", "castor", "celeste", "cosmo", "eve", "helios", "helix", "iris", "kepler", "leo", "liora", "lumen", "luna", "lux", "naksh", "orion", "perseus", "rex", "rigel", "sal", "sirius", "ursa", "zagan", "zenith"] as const;
+export const AUDIO_SAMPLE_RATES: readonly AudioSampleRate[] = [8000, 16000, 22050, 24000, 44100, 48000];
+export const MP3_BIT_RATES: readonly Mp3BitRate[] = [32000, 64000, 96000, 128000, 192000];
 
 function validateTtsRequest(request: TtsRequest): void {
   if (request.optimize_streaming_latency !== undefined && (!Number.isInteger(request.optimize_streaming_latency) || request.optimize_streaming_latency < 0 || request.optimize_streaming_latency > 2)) throw new RangeError("optimize_streaming_latency must be 0..2");
@@ -21,6 +23,8 @@ function validateTtsRequest(request: TtsRequest): void {
   if (!request.language.trim()) throw new RangeError("language is required");
   if (request.speed !== undefined && (!Number.isFinite(request.speed) || request.speed < 0.7 || request.speed > 1.5)) throw new RangeError("speed must be 0.7..1.5");
   if (request.output_format?.bit_rate != null && request.output_format.codec !== "mp3") throw new RangeError("bit_rate is valid only for mp3");
+  if (request.output_format?.sample_rate != null && !AUDIO_SAMPLE_RATES.includes(request.output_format.sample_rate)) throw new RangeError(`sample_rate must be one of ${AUDIO_SAMPLE_RATES.join(", ")}`);
+  if (request.output_format?.bit_rate != null && !MP3_BIT_RATES.includes(request.output_format.bit_rate)) throw new RangeError(`bit_rate must be one of ${MP3_BIT_RATES.join(", ")}`);
   const replacements = Object.entries(request.replace ?? {});
   if (replacements.length > 200) throw new RangeError("replace supports at most 200 entries");
   for (const [from, to] of replacements) {

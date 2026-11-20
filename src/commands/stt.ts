@@ -10,7 +10,14 @@ export interface SttCliOptions {
   diarize?: boolean;
   multichannel?: boolean;
   keyterm?: string[];
-  json?: boolean; model?: string; fillerWords?: boolean; vadThreshold?: string; format?: boolean; audioFormat?: "pcm" | "mulaw" | "alaw"; sampleRate?: string; channels?: string;
+  json?: boolean;
+  model?: string;
+  fillerWords?: boolean;
+  vadThreshold?: string;
+  format?: boolean;
+  audioFormat?: "pcm" | "mulaw" | "alaw";
+  sampleRate?: string;
+  channels?: string;
 }
 
 export function sttCommand(): Command {
