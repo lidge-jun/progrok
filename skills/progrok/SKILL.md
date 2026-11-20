@@ -336,7 +336,10 @@ identifier when reproducibility matters.
 
 | Model | Type | Price |
 |-------|------|-------|
-| `grok-imagine-image` | Image gen/edit | $0.02 / image (1k/2k) |
+| `grok-imagine-image-2.0` | Default image model; quality low/medium/auto | From $0.04 / 1K low image; see the table below |
+| `grok-imagine-image` | Image gen/edit (1.0) | $0.02 / image (1k/2k) |
+| `grok-imagine-video-1.5` | Default video model: T2V, I2V, Ref2V, frame pins, voices | From $0.08 / sec at 480p |
+| `grok-imagine-video-1.5-lite` | Cheapest T2V/I2V | From $0.02 / sec at 480p |
 | `grok-imagine-video` | Video gen/edit/extend | See resolution-based pricing below |
 | `grok-voice-latest` | Rolling Voice alias | Resolve availability from the runtime catalog. |
 | `grok-voice-3.0` | Reproducible Voice pin; default is `grok-voice-latest` | Runtime catalog and xAI account terms are authoritative. |
@@ -440,8 +443,6 @@ Default video is `grok-imagine-video-1.5`: T2V, I2V and R2V; lite supports T2V/I
 | grok-imagine-video | $0.05/s | $0.07/s | — | image $0.002, input video $0.01/s |
 | grok-imagine-video-1.5 | $0.08/s | $0.14/s | $0.25/s (T2V/I2V only) | image $0.01; preset voices free |
 | grok-imagine-video-1.5-lite | $0.02/s | $0.03/s | $0.14/s (upscaled) | image $0.01 |
-
-xAI model catalog and docs.x.ai pricing, read 2026-11-21; live cost_in_usd_ticks matched 1.5 480p $0.08/s, lite 480p $0.02/s, lite 1080p $0.14/s and image 2.0 1K medium $0.06. Prices change; xAI's pricing page is authoritative.
 
 | Model | 1K | 1.5K | 2K | Inputs |
 | --- | --- | --- | --- | --- |

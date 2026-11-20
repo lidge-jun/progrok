@@ -167,7 +167,8 @@ curl http://127.0.0.1:18645/v1/images/generations \
 | `prompt` | string | **required** |
 | `model` | string | `grok-imagine-image` (1.0) / `grok-imagine-image-2.0` (default; quality low, medium, auto) |
 | `n` | integer | number of images |
-| `aspect_ratio` | enum | `1:1`, `16:9`, `9:16`, `4:3`, `3:4`, `2:3`, `3:2`, `2:1`, `1:2`, `auto`, … |
+| `aspect_ratio` | enum | `1:1`, `16:9`, `9:16`, `4:3`, `3:4`, `2:3`, `3:2`, `2:1`, `1:2`, `21:9`, `5:2`, `auto`, … |
+| `quality` | enum | `low` \| `medium` \| `auto` (image 2.0 only; default `auto`) |
 | `resolution` | enum | `1k` \| `1.5k` \| `2k` |
 | `response_format` | string | `url` (default) \| `b64_json` |
 
@@ -217,7 +218,7 @@ curl http://127.0.0.1:18645/v1/videos/generations \
 | `model` | string | `grok-imagine-video`, `grok-imagine-video-1.5`, or `grok-imagine-video-1.5-lite` |
 | `duration` | integer | seconds, range `[1, 15]`, default `8` |
 | `seconds` | integer | OpenAI-compatible alias for `duration` |
-| `aspect_ratio` | enum | `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `3:2`, `2:3` |
+| `aspect_ratio` | enum | `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `3:2`, `2:3`, `21:9`, `5:2` |
 | `resolution` | enum | `480p` \| `720p` \| `1080p`; 1080p T2V/I2V on 1.5 and lite, R2V at most 720p |
 | `image` | object | `{file_id \| url}` for image-to-video |
 | `reference_images[]` | array | `{file_id \| url}` references: 14 on 1.5 (15s), 7 on base (10s), none on lite |
@@ -719,7 +720,7 @@ progrok video "prompt" --json
 Options:
 - `--model <id>` — `grok-imagine-video-1.5` (default), `grok-imagine-video`, or `grok-imagine-video-1.5-lite`
 - `--duration <s>` — 1-15 seconds (default: 5)
-- `--aspect <ratio>` — 16:9 (default), 9:16, 1:1, 4:3, 3:4, 3:2, 2:3
+- `--aspect <ratio>` — 16:9 (default), 9:16, 1:1, 4:3, 3:4, 3:2, 2:3, 21:9, 5:2
 - `--resolution <r>` — 480p (default), 720p, or 1080p (T2V/I2V on 1.5/lite)
 - `--image <input>` — source image for image-to-video; file, URL, data URI, or `file_id:<id>`
 - `--ref <input>` — reference image for R2V; repeatable, max 14 on 1.5, 7 on base; 1.5 allows `--image` too
@@ -743,7 +744,7 @@ progrok image "Make it winter" --ref photo.jpg
 
 Options:
 - `--model <id>` — `grok-imagine-image-2.0` (default) or `grok-imagine-image`
-- `--aspect <ratio>` — 1:1 (default), 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, auto
+- `--aspect <ratio>` — 1:1 (default), 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 21:9, 5:2, auto
 - `--resolution <r>` — 1k (default), 1.5k or 2k
 - `--quality <q>` — low, medium or auto for image 2.0
 - `--ref <path>` — reference image for editing (repeatable, max 5)

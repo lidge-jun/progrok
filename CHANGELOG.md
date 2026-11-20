@@ -2,13 +2,34 @@
 
 ## [3.1.0] - 2026-11-21
 
-Version 3.0.0 never reached npm.
+3.0.0 was tagged in this file but never published to npm, so this is the first
+3.x release on npm. It includes everything listed under 3.0.0 below.
 
 ### Added
 
-- Video 1.5 frame pins, preset voices and reference generation, lite generation, and 1080p for supported requests. Image 2.0 quality and resolution controls, extended TTS/STT options and 28 built-in voices.
-- Billing shows weekly usage and reset coupons read-only; JSON adds plan, weekly and resetCoupons while preserving legacy fields.
-
+- Video: `grok-imagine-video-1.5` now does text-to-video and reference-to-video
+  (up to 14 reference images and 15 seconds), takes up to three preset voices
+  with `--voice`, and pins frames with `--last-frame` and up to four
+  `--keyframe <input@seconds>` anchors. `grok-imagine-video-1.5-lite` is
+  supported for text- and image-to-video. 1080p is accepted for text- and
+  image-to-video on 1.5 and lite; reference-to-video stays at 720p. The rules are
+  checked before a request is sent; a model without rules is left to xAI.
+- Image: `--quality low|medium|auto` for `grok-imagine-image-2.0`, `1.5k`
+  resolution, `21:9` and `5:2` aspect ratios, and up to five edit sources.
+- Voice: `tts --list-voices` and the 28 built-in voices (also in the web Voice
+  tab and `capabilities`); `tts` gains `--speed`, `--sample-rate`,
+  `--bit-rate`, `--latency 0|1|2` and `--text-normalization`; `stt` gains
+  `--model`, `--filler-words`, `--vad-threshold`, `--format`,
+  `--audio-format`, `--sample-rate` and `--channels`.
+- Billing: `progrok billing` reads the SuperGrok / X Subscription weekly usage
+  pool, per-product usage, prepaid balance and on-demand cap, and lists Grok reset
+  coupons with their expiry. Listing is read-only; progrok never redeems a reset.
+  `--json` keeps every 3.0.0 key and adds `plan`, `weekly` and
+  `resetCoupons`; if only the weekly endpoint answers it prints
+  `{email, plan, weekly, resetCoupons, legacy: null}` instead of failing.
+- `capabilities --json` reports the default image and video models, the
+  `grok-voice-3.0` pin, the TTS voices, frame-pin and voice-reference video
+  notes, and the read-only coupon limitation.
 - The local web app is one workspace with Chat, Voice and Media tabs. The top
   bar reports the served endpoint, the catalog model count and the active model,
   and each row stays hidden until a value is observed.
@@ -28,17 +49,41 @@ Version 3.0.0 never reached npm.
 
 ### Fixed
 
-- The test suite previously deleted the real `~/.progrok/auth.json`; it now uses a throwaway home. Re-run progrok login if your session vanished after running the tests.
-- Video progress, frame validation, realtime reasoning and TTS latency match the upstream protocol.
-
+- **The test suite deleted your real login.** `npm test` wrote a test token to
+  `~/.progrok/auth.json` and then removed the file. The suite now runs against a
+  throwaway home and a test fails if it ever reaches the real one. If your session
+  disappeared after running the tests, run `progrok login` again.
+- `tts --latency`/`optimize_streaming_latency` is sent as an integer. The
+  string form progrok used was rejected by xAI with HTTP 422; 2 is now accepted.
+- `live --reasoning low` and `medium` ended the session (`grok-voice-3.0` only
+  accepts `high` and `none`); they are now a one-line usage error, as is a
+  non `grok-voice-*` model.
+- Images were always saved as `.png`; they now get the extension of the returned
+  format (JPEG today). `--output` with `--n` above 1 writes one numbered file
+  per image instead of overwriting one path.
+- Video progress printed 100 times too large (10000%), and the web Media tab showed
+  1% as 100%. xAI reports an integer percent; both now show it as is.
+- `billing` showed "SuperGrok (0 val)" and a $0.00 limit for accounts on the
+  weekly pool. The text output now names the plan and shows weekly usage; reset
+  times are converted to UTC and missing amounts read "unavailable".
+- STT `smart_turn_timeout` is checked against the documented 1–5000 ms;
+  TTS and STT sample rates, bit rates and channel counts are checked, so a typo no
+  longer goes out as `NaN`.
 - A live voice call no longer ends when the server sends an event this build
   cannot model. The parser drops it, logs a sanitised type and keeps reading.
   Only a server `error` event fails the session.
 
 ### Changed
 
-- Default image and video models are Image 2.0 and Video 1.5. They cost more at their starting resolutions: image $0.04 versus $0.02, video $0.08/s versus $0.05/s; actual prices depend on resolution and quality.
-
+- **Defaults now cost more per request.** `progrok image` uses
+  `grok-imagine-image-2.0` (from $0.04 per 1K image, versus $0.02 for
+  `grok-imagine-image`) and `progrok video` uses `grok-imagine-video-1.5`
+  (from $0.08/s at 480p, versus $0.05/s). Pass `--model` to keep the old ones;
+  `video edit` and `video extend` still default to `grok-imagine-video`, the
+  only model that supports them.
+- Docs and examples pin `grok-voice-3.0` for reproducibility; the undocumented
+  `grok-voice-think-fast-2.0` is gone. `grok-imagine-image-quality` and `-pro`
+  are documented as retired (xAI serves them as 2.0 at low quality).
 - `DEFAULT_MODEL` is `grok-4.6`, and the realtime default is the rolling
   `grok-voice-latest` alias. The constant is now `DEFAULT_REALTIME_MODEL`
   because it no longer pins a dated build, and `live --model` accepts any
