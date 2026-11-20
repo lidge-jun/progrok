@@ -58,3 +58,33 @@ test('billing command preserves legacy JSON and handles weekly-only and failures
   weeklyOk=false; await assert.rejects(billingCommand().parseAsync(['node','progrok','--json']),/exit 1/);
  } finally {f.mock.restore();out.mock.restore();err.mock.restore();exit.mock.restore();}
 });
+
+test('billing text keeps missing values unknown, converts reset times to UTC and names a failed weekly read', async () => {
+ const { mock } = await import('node:test');
+ const {billingCommand}=await import('../src/commands/billing.js');
+ const legacy={config:{monthlyLimit:{val:0},used:{val:0},history:[]}};
+ const partial={config:{currentPeriod:{type:'USAGE_PERIOD_TYPE_WEEKLY',end:'2026-11-27T15:42:58+09:00'},creditUsagePercent:12,prepaidBalance:{val:250}}};
+ let weeklyOk=true; const logs:string[]=[];
+ const f=mock.method(globalThis,'fetch',async (input) => { const url=String(input); if(url.includes('GetRemainingResets'))return new Response(frame(new Uint8Array())); if(url.includes('/user'))return Response.json({}); if(url.includes('?format=credits'))return weeklyOk?Response.json(partial):new Response('',{status:500}); return Response.json(legacy); });
+ const out=mock.method(console,'log',(s:unknown)=>{logs.push(String(s));});
+ try {
+  await billingCommand().parseAsync(['node','progrok']); const text=logs.join('\n');
+  assert.match(text,/Weekly:.*12% used \(resets 2026-11-27 06:42 UTC\)/);
+  assert.match(text,/Prepaid:\s+\$2\.50/); assert.doesNotMatch(text,/on-demand cap \$0\.00/); assert.match(text,/on-demand cap unavailable/);
+  logs.length=0; weeklyOk=false; await billingCommand().parseAsync(['node','progrok']);
+  assert.match(logs.join('\n'),/Weekly:\s+unavailable/);
+ } finally { f.mock.restore(); out.mock.restore(); }
+});
+
+test('coupon lookup tries the new path first and falls back on 404 or UNIMPLEMENTED only', async () => {
+ const seen:string[]=[];
+ const reply=(first:Response)=>async (input:string|URL|Request)=>{ seen.push(String(input)); return seen.length===1?first:new Response(frame(new Uint8Array())); };
+ for (const first of [new Response('',{status:404}), new Response(frame(new Uint8Array(),'grpc-status:12'))]) {
+  seen.length=0; const result=await fetchResetCoupons({bearer:'test',fetch:reply(first) as typeof fetch});
+  assert.equal(result.status,'ok'); assert.deepEqual(seen.map((url)=>url.split('/').at(-2)),['grok_api_v2.GrokBuildBilling','prod_mc_billing.ConsumerUiSvc']);
+ }
+ seen.length=0; const denied=await fetchResetCoupons({bearer:'test',fetch:reply(new Response(frame(new Uint8Array(),'grpc-status:7'))) as typeof fetch});
+ assert.equal(denied.status,'error'); assert.equal(seen.length,1);
+ const conflicting=new Uint8Array([...frame(new Uint8Array()), ...(()=>{const t=encodeGrpcWebFrame(new TextEncoder().encode('grpc-status:5')); t[0]=128; return t;})()]);
+ assert.equal((await fetchResetCoupons({bearer:'test',fetch:async()=>new Response(conflicting)})).status,'error');
+});

@@ -58,6 +58,18 @@ function usd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+/** A missing amount stays unknown; printing $0.00 would claim there is no balance or cap. */
+function usdOrUnavailable(cents: number | undefined): string {
+  return cents === undefined ? "unavailable" : usd(cents);
+}
+
+/** The API sends timestamps with an offset; convert the instant before calling it UTC. */
+function utcMinute(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) return timestamp;
+  return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
+
 function printText(
   email: string | null,
   plan: string,
@@ -68,15 +80,16 @@ function printText(
   log.info(`Plan:      ${plan}`);
   if (email) log.info(`Account:   ${email}`);
   if (weekly) {
-    const resets = weekly.periodEnd
-      ? ` (resets ${weekly.periodEnd.slice(0, 16).replace("T", " ")} UTC)`
-      : "";
+    const resets = weekly.periodEnd ? ` (resets ${utcMinute(weekly.periodEnd)})` : "";
     const label = weekly.periodType === "weekly" ? "Weekly:   " : "Monthly:  ";
     log.info(`${label} ${weekly.usagePercent}% used${resets}`);
     for (const product of weekly.products) log.info(`  ${product.product} ${product.usagePercent}%`);
     if (weekly.prepaidBalanceCents !== undefined || weekly.onDemandCapCents !== undefined) {
-      log.info(`Prepaid:   ${usd(weekly.prepaidBalanceCents ?? 0)} · on-demand cap ${usd(weekly.onDemandCapCents ?? 0)}`);
+      log.info(`Prepaid:   ${usdOrUnavailable(weekly.prepaidBalanceCents)} · on-demand cap ${usdOrUnavailable(weekly.onDemandCapCents)}`);
     }
+  } else {
+    // Distinguish a failed lookup from an account without a weekly pool.
+    log.info("Weekly:    unavailable (the weekly usage request failed)");
   }
   // A unified (weekly pool) account reports a 0 monthly limit; that line would only mislead.
   if (legacy && legacy.limitCents > 0) {
