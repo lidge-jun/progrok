@@ -78,3 +78,9 @@ separable, but most of those parts touch private controller state, so extracting
 them costs more injection boilerplate than it removes. That trade-off is recorded
 in [devlog/_plan/260919_structure_modularize/000_roadmap.md](../devlog/_plan/260919_structure_modularize/000_roadmap.md).
 
+
+## Media and billing modules
+
+`src/utils/video-rules.ts` holds model-specific video rules shared by the CLI and web client. `src/commands/video-request.ts` assembles and validates CLI requests. `src/surfaces/billing.ts` reads legacy and weekly billing and reset coupons; `src/surfaces/grpc-web.ts` handles gRPC-web framing for the read-only coupon lookup.
+
+`scripts/run-tests.mjs` creates a throwaway HOME and USERPROFILE for the entire test suite; `tests/test-isolation.test.ts` enforces this boundary.

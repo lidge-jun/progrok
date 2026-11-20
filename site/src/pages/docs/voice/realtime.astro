@@ -5,12 +5,12 @@ const title = 'Realtime Voice';
 
 <DocsLayout title={title}>
 <h1>Realtime Voice</h1>
-<p>Connect directly to <code>wss://api.x.ai/v1/realtime</code> for native speech-to-speech. Use <code>grok-voice-latest</code> as the rolling alias or pin <code>grok-voice-think-fast-2.0</code> for reproducibility.</p>
+<p>Connect directly to <code>wss://api.x.ai/v1/realtime</code> for native speech-to-speech. Use <code>grok-voice-latest</code> as the rolling alias or pin <code>grok-voice-3.0</code> for reproducibility.</p>
 
 <h2>CLI</h2>
 <pre><code>{`progrok live \
-  --model grok-voice-think-fast-2.0 \
-  --reasoning medium \
+  --model grok-voice-3.0 \
+  --reasoning high \
   --event '{"type":"session.update","session":{"voice":"eve","resumption":{"enabled":true}}}' \
   --once`}</code></pre>
 <p><code>progrok live</code> bridges NDJSON stdin/stdout. It supports <code>--conversation-id</code>, repeatable <code>--event</code>, <code>--no-stdin</code>, and <code>--once</code>; it does not capture microphone audio.</p>
@@ -29,9 +29,10 @@ const title = 'Realtime Voice';
   if (!response.ok) throw new Error("secret mint failed: " + response.status);
   const secret = await response.json();
   return new WebSocket(
-    "wss://api.x.ai/v1/realtime?model=grok-voice-think-fast-2.0",
+    "wss://api.x.ai/v1/realtime?model=grok-voice-3.0",
     ["xai-client-secret." + secret.value],
   );
 }`}</code></pre>
 <p>Mint inside the connection function. A secret opens exactly one connection, so every reconnect needs a fresh secret. Never cache or reuse it, and never expose the OAuth access or refresh token to browser code.</p>
+<p><code>--reasoning &lt;effort&gt;</code> accepts high or none. Other values and non-<code>grok-voice-*</code> model IDs are usage errors (exit 1).</p>
 </DocsLayout>

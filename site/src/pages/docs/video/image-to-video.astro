@@ -19,5 +19,5 @@ progrok video "animate this uploaded file" --image file_id:file-abc123`}</code><
   "image": {"url": "https://example.com/photo.png"}
 }'`}</code></pre>
 <h2>Notes</h2>
-<p>Use either <code>image</code> or <code>reference_images</code>, never both. Image-to-video uses the source image as the starting frame; reference-to-video uses images as loose visual references.</p>
+<p>The base model rejects <code>image</code> with <code>reference_images</code>. On 1.5, <code>image</code> pins the first frame alongside reference images. 1080p is available for T2V/I2V on 1.5 and lite; R2V is limited to 720p.</p>
 </DocsLayout>

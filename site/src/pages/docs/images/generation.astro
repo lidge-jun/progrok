@@ -13,7 +13,7 @@ const title = 'Image Generation';
   -H 'Authorization: Bearer anything' \
   -H 'Content-Type: application/json' \
   -d '{
-  "model": "grok-imagine-image",
+  "model": "grok-imagine-image-2.0",
   "prompt": "a sunset over a cyberpunk city",
   "n": 1,
   "aspect_ratio": "1:1",
@@ -23,9 +23,10 @@ const title = 'Image Generation';
 <table>
 <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
 <tr><td>prompt</td><td>string</td><td>Text description of the image to generate</td></tr>
-<tr><td>n</td><td>integer</td><td>Number of images (1–4, default 1)</td></tr>
+<tr><td>n</td><td>integer</td><td>Number of images (1–10, default 1)</td></tr>
 <tr><td>aspect_ratio</td><td>string</td><td>Output shape such as 1:1, 16:9, or 9:16</td></tr>
-<tr><td>resolution</td><td>string</td><td>1k or 2k</td></tr>
+<tr><td>resolution</td><td>string</td><td>1k, 1.5k or 2k</td></tr>
 <tr><td>response_format</td><td>string</td><td>url or b64_json</td></tr>
 </table>
+<p>Image 2.0 supports quality <code>low</code>, <code>medium</code>, or <code>auto</code>. Auto serves low for generation and medium for edits; billing follows the served quality.</p>
 </DocsLayout>

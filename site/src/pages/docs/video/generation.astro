@@ -29,17 +29,18 @@ curl http://localhost:18645/v1/videos/vg_abc123 \
 <tr><td>prompt</td><td>string</td><td>Text description of the video</td></tr>
 <tr><td>duration / seconds</td><td>integer</td><td>Length in seconds. <code>seconds</code> is the OpenAI-compatible alias.</td></tr>
 <tr><td>aspect_ratio</td><td>string</td><td>16:9, 9:16, 1:1, 4:3, 3:4, 3:2, or 2:3</td></tr>
-<tr><td>resolution</td><td>string</td><td>480p or 720p confirmed. Treat 1080p as conflicting until live smoke confirms it.</td></tr>
+<tr><td>resolution</td><td>string</td><td>480p, 720p, or 1080p for T2V/I2V on 1.5/lite. R2V is capped at 720p.</td></tr>
 <tr><td>image</td><td>object</td><td><code>&#123;url | file_id&#125;</code> for image-to-video.</td></tr>
-<tr><td>reference_images</td><td>array</td><td><code>[&#123;url | file_id&#125;]</code>, max 7, max 10 second output.</td></tr>
+<tr><td>reference_images</td><td>array</td><td><code>[&#123;url | file_id&#125;]</code>, max 14 and 15 seconds on 1.5, 7 and 10 seconds on base; unavailable on lite.</td></tr>
 <tr><td>output.upload_url</td><td>string</td><td>Optional signed PUT destination for the result.</td></tr>
 </table>
 <h2>Mode Rules</h2>
-<p>REST has no <code>mode</code> body field. Text-to-video is <code>prompt</code> only, image-to-video adds <code>image</code>, and reference-to-video adds <code>reference_images</code>. Do not combine <code>image</code> and <code>reference_images</code>; xAI returns <code>400 Bad Request</code>.</p>
-<p><code>grok-imagine-video-1.5</code> is live-smoked as image-to-video only. Prompt-only T2V and <code>reference_images</code> currently return xAI 400 errors for that preview model.</p>
+<p>REST has no <code>mode</code> body field. Text-to-video is <code>prompt</code> only, image-to-video adds <code>image</code>, and reference-to-video adds <code>reference_images</code>. On base, do not combine <code>image</code> and <code>reference_images</code>; on 1.5 the image pins the first frame.</p>
+<p>1.5 supports T2V, I2V and R2V; lite supports T2V/I2V. Edit and extend require the base model.</p>
 <h2>Status Values</h2>
 <p><code>pending</code> — Generation in progress.</p>
 <p><code>done</code> — Video ready for download.</p>
 <p><code>failed</code> — Generation failed.</p>
 <p><code>expired</code> — Download URL has expired.</p>
+<p>On 1.5, <code>last_frame</code> pins the last frame, <code>keyframes</code> adds up to four timestamped pins, and <code>reference_audios</code> selects up to three preset voices. Timestamps must not round to the same 1/3-second slot. A frame pin alone selects R2V and its 720p limit.</p>
 </DocsLayout>

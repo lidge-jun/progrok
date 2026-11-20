@@ -13,11 +13,12 @@ const title = 'Image Editing';
   -H 'Authorization: Bearer anything' \
   -H 'Content-Type: application/json' \
   -d '{
-  "model": "grok-imagine-image",
+  "model": "grok-imagine-image-2.0",
   "prompt": "make the sky purple",
   "image": {"url": "https://example.com/photo.png"},
   "aspect_ratio": "1:1",
   "resolution": "1k"
 }'`}</code></pre>
 <p>Use the singular <code>image</code> object for one reference. It accepts a URL or file ID. <code>aspect_ratio</code> and <code>resolution</code> control the output; xAI's native shape does not use <code>size</code>.</p>
+<p>Image 2.0 accepts <code>quality</code> low, medium, or auto; auto selects medium for edits. Resolutions are 1k, 1.5k and 2k.</p>
 </DocsLayout>

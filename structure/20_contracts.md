@@ -11,6 +11,9 @@ that would tell you the contract broke.
 | One-use voice client secret per connection, never reused | `src/web/client/voice.ts` `openFreshSocket()` mints, `buildVoiceSocketSpec()` carries it in the subprotocol | `tests/voice-ws.test.ts`, `tests/webapp.test.ts` |
 | Tolerant voice parsing: an unmodelled event is dropped and the call continues; only a server `error` event fails the session | `src/voice/protocol.ts` `tryParseRealtimeServerEvent` / `tryParseSttServerEvent` | `tests/voice-tolerant-parse.test.ts` |
 | `capabilities --json` schema 2: `commands` is an array of objects, endpoints come from the surface registry | `src/commands/capabilities.ts` | `tests/capabilities.test.ts` |
+| Video model rules and request validation | `src/utils/video-rules.ts`, `src/commands/video-request.ts` | Video request and web media tests |
+| Billing JSON remains additive; coupons are read-only | `src/surfaces/billing.ts`, `src/surfaces/grpc-web.ts` | Billing tests |
+| Test suite uses a throwaway HOME and USERPROFILE | `scripts/run-tests.mjs` | `tests/test-isolation.test.ts` |
 | Layer dependency direction | [10_layers.md](10_layers.md) | not yet automated — see the roadmap |
 
 ## Why tolerant parsing is a contract
