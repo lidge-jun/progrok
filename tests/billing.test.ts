@@ -31,11 +31,12 @@ test('coupon transport verifies framing and status and falls back', async () => 
  const ok = await fetchResetCoupons({bearer:'test',fetch:fetcher}); assert.equal(ok.status,'ok'); assert.equal(calls,2); if(ok.status==='ok') assert.deepEqual(ok.coupons,[]);
  for (const bytes of [frame(new Uint8Array(),'grpc-status:16'), encodeGrpcWebFrame(new Uint8Array())]) assert.equal((await fetchResetCoupons({bearer:'test',fetch:async()=>new Response(bytes)})).status,'error');
  assert.equal((await fetchResetCoupons({bearer:'test',fetch:async()=>new Response(frame(new Uint8Array([8,1])))})).status,'unknown');
- // An empty protobuf message may arrive with no data frame at all, only the
- // trailer; with grpc-status 0 that is a confirmed zero (OpenCodex treats it the same).
+ // Live replies always carried one (empty) data frame. A reply with only the
+ // trailer is a shape nobody has observed, so it is reported as unknown rather
+ // than as a confirmed zero.
  const trailerOnly = encodeGrpcWebFrame(new TextEncoder().encode('grpc-status:0')); trailerOnly[0] = 128;
  const empty = await fetchResetCoupons({bearer:'test',fetch:async()=>new Response(trailerOnly)});
- assert.equal(empty.status,'ok'); if (empty.status==='ok') assert.deepEqual(empty.coupons,[]);
+ assert.equal(empty.status,'unknown');
  // Two data frames is not a shape this RPC produces.
  const twice = new Uint8Array([...encodeGrpcWebFrame(new Uint8Array()), ...frame(new Uint8Array())]);
  assert.equal((await fetchResetCoupons({bearer:'test',fetch:async()=>new Response(twice)})).status,'error');

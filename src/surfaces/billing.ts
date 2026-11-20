@@ -266,10 +266,12 @@ export async function fetchResetCoupons(deps: {
       const status = Number(first);
       if (status === GRPC_UNIMPLEMENTED) continue;
       if (status !== 0) return { status: "error", reason: `gRPC status ${status}` };
+      // Live replies carry exactly one data frame (empty when there are no coupons).
+      // No frame at all has never been observed, so it is not taken as zero.
+      if (decoded.messages.length === 0) return { status: "unknown", endpoint, reason: "unrecognized_payload" };
       if (decoded.messages.length > 1) return { status: "error", reason: "Unexpected gRPC message count" };
 
-      // No data frame at all is an empty message: zero coupons.
-      const coupons = decodeRemainingResets(decoded.messages[0] ?? new Uint8Array());
+      const coupons = decodeRemainingResets(decoded.messages[0]);
       if (coupons === "unrecognized") return { status: "unknown", endpoint, reason: "unrecognized_payload" };
       return { status: "ok", coupons, endpoint };
     }
