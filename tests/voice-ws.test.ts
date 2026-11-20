@@ -388,3 +388,15 @@ describe("Voice WebSocket", () => {
     } finally { await stopServer(server); }
   });
 });
+
+it("validates voice streaming boundaries and forwards STT model", async () => {
+ const {server, origin} = await startServer(); const urls: string[] = [];
+ server.on("connection", (socket, request) => { urls.push(request.url ?? ""); socket.close(); });
+ try {
+   for (const value of [0,5001]) await assert.rejects(createSttSession({smart_turn_timeout:value},{endpointOrigin:origin}), /smart_turn_timeout must be 1\.\.5000/);
+   for (const value of [1,5000]) { const session = await createSttSession({model:"grok-voice-transcribe-2.0", smart_turn_timeout:value},{endpointOrigin:origin}); session.close(); }
+   assert(urls.every((url) => new URL(url,origin).searchParams.get("model") === "grok-voice-transcribe-2.0"));
+   await assert.rejects(createTtsSession({language:"en",optimize_streaming_latency:3 as 0},{endpointOrigin:origin}), /latency/);
+   const tts = await createTtsSession({language:"en",optimize_streaming_latency:2 as 0},{endpointOrigin:origin}); tts.close();
+ } finally { await stopServer(server); }
+});

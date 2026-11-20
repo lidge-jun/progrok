@@ -53,7 +53,7 @@ describe("Voice CLI", () => {
     assert.equal(stt.name(), "stt");
     assert.equal(live.name(), "live");
     assert.equal(tts.options.some((option) => option.long === "--model"), false);
-    assert.equal(stt.options.some((option) => option.long === "--model"), false);
+    assert.equal(stt.options.some((option) => option.long === "--model"), true);
     assert.equal(
       live.options.find((option) => option.long === "--model")?.defaultValue,
       "grok-voice-latest",
@@ -278,4 +278,34 @@ describe("Voice CLI", () => {
       assert.deepEqual(liveCalls.map((call) => call.method), ["createRealtimeClient", "close"]);
     });
   }
+});
+
+it("accepts none and rejects low realtime reasoning", async () => {
+  await assert.rejects(liveCommand().parseAsync(["node", "progrok", "--reasoning", "low", "--no-stdin"]), /--reasoning must be high or none/);
+  await liveCommand().parseAsync(["node", "progrok", "--reasoning", "none", "--no-stdin"]);
+  assert.equal((liveCalls[0].args[0] as { reasoningEffort: string }).reasoningEffort, "none");
+});
+it("maps TTS and STT added flags and lists voices", async () => {
+  await saveTokens({ accessToken: "voice-cli-test", expiresAt: Date.now() + 600000 });
+  const directory = mkdtempSync(join(tmpdir(), "voice-flags-"));
+  const file = join(directory, "audio.wav"); writeFileSync(file, "audio");
+  const requests: Array<{url: string; body: unknown}> = [];
+  const fetchMock = mock.method(globalThis, "fetch", async (input, init) => {
+    requests.push({url: String(input), body: init?.body});
+    if (String(input).includes("/tts/voices")) return Response.json({voices: [{voice_id: "eve", name: "Eve", language: "en"}]});
+    if (init?.body instanceof FormData) return Response.json({text:"ok", language:"en", duration:1});
+    return new Response(new Uint8Array([1]), {headers:{"content-type":"audio/mpeg"}});
+  });
+  const logger = mock.method(console, "log", () => {});
+  try {
+    await ttsCommand().parseAsync(["node","progrok","hi","--output",join(directory,"a.mp3"),"--speed","1.2","--sample-rate","24000","--bit-rate","128000","--latency","2","--text-normalization"]);
+    const body = JSON.parse(String(requests[0].body));
+    assert.equal(body.speed, 1.2); assert.equal(body.optimize_streaming_latency, 2); assert.equal(body.text_normalization, true);
+    assert.deepEqual(body.output_format, {codec:"mp3", sample_rate:24000, bit_rate:128000});
+    await ttsCommand().parseAsync(["node","progrok","--list-voices","--json"]);
+    assert.match(requests[1].url, /\/tts\/voices/);
+    await sttCommand().parseAsync(["node","progrok",file,"--model","grok-voice-transcribe-2.0","--filler-words","--vad-threshold","0.4","--format","--language","en","--audio-format","pcm","--sample-rate","24000","--channels","2"]);
+    const form = requests[2].body as FormData;
+    for (const [key,value] of Object.entries({model:"grok-voice-transcribe-2.0", filler_words:"true", vad_threshold:"0.4", format:"true", audio_format:"pcm", sample_rate:"24000", channels:"2"})) assert.equal(form.get(key), value);
+  } finally { logger.mock.restore(); fetchMock.mock.restore(); rmSync(directory,{recursive:true,force:true}); }
 });

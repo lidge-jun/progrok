@@ -100,3 +100,14 @@ describe("Voice REST", () => {
     }
   });
 });
+
+it("validates numeric TTS latency and sends it as a number", async () => {
+ const client = createTtsClient({transport: transport((input) => { assert.equal(JSON.parse(String(input.body)).optimize_streaming_latency, 2); return new Response(new Uint8Array([1])); })});
+ await assert.rejects(client.synthesize({text:"x",language:"en", optimize_streaming_latency:3 as 0}), /latency/);
+ await assert.rejects(client.synthesize({text:"x",language:"en", optimize_streaming_latency:"1" as unknown as 0}), /latency/);
+ await client.synthesize({text:"x",language:"en", optimize_streaming_latency:2 as 0});
+});
+it("exposes 28 unique builtin voices", async () => {
+ const { TTS_BUILTIN_VOICES } = await import("../src/voice/tts.js");
+ assert.equal(new Set(TTS_BUILTIN_VOICES).size,28); assert(TTS_BUILTIN_VOICES.includes("eve"));
+});
