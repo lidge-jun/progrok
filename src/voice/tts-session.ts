@@ -17,7 +17,7 @@ export interface StreamingTtsOptions {
   codec?: "mp3" | "wav" | "pcm" | "mulaw" | "alaw";
   sample_rate?: StreamingSampleRate;
   bit_rate?: 32000 | 64000 | 96000 | 128000 | 192000;
-  optimize_streaming_latency?: 0 | 1;
+  optimize_streaming_latency?: 0 | 1 | 2;
   speed?: number;
   text_normalization?: boolean;
   with_timestamps?: boolean;
@@ -35,8 +35,9 @@ export async function createTtsSession(
   options: StreamingTtsOptions,
   deps: VoiceWsDeps = {},
 ): Promise<StreamingTtsSession> {
+  if (options.optimize_streaming_latency !== undefined && (!Number.isInteger(options.optimize_streaming_latency) || options.optimize_streaming_latency < 0 || options.optimize_streaming_latency > 2)) throw new RangeError("optimize_streaming_latency must be 0..2");
   if (!options.language.trim()) throw new RangeError("language is required");
-  if (options.speed !== undefined && (options.speed < 0.7 || options.speed > 1.5)) throw new RangeError("speed must be 0.7..1.5");
+  if (options.speed !== undefined && (!Number.isFinite(options.speed) || options.speed < 0.7 || options.speed > 1.5)) throw new RangeError("speed must be 0.7..1.5");
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(options)) {
     if (key !== "signal" && value !== undefined) query.set(key, String(value));

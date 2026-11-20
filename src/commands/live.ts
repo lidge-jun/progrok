@@ -39,8 +39,8 @@ function parseRealtimeModel(value: string): RealtimeVoiceModel {
 }
 
 function parseReasoningEffort(value: string): RealtimeReasoningEffort {
-  if (value !== "low" && value !== "medium" && value !== "high") {
-    throw new Error("--reasoning must be low, medium, or high");
+  if (value !== "none" && value !== "high") {
+    throw new Error("--reasoning must be high or none");
   }
   return value;
 }
@@ -80,9 +80,9 @@ function sendClientEvent(client: RealtimeClient, event: LiveClientEvent): void {
 export function liveCommand(): Command {
   return new Command("live")
     .description("Bridge xAI Realtime events over NDJSON stdin/stdout (no microphone capture)")
-    .option("--model <id>", "pinned Voice model or latest alias", parseRealtimeModel, DEFAULT_LIVE_MODEL)
+    .option("--model <id>", "grok-voice-3.0 pin or latest alias", parseRealtimeModel, DEFAULT_LIVE_MODEL)
     .option("--conversation-id <id>", "resume an existing conversation")
-    .option("--reasoning <effort>", "low|medium|high", parseReasoningEffort)
+    .option("--reasoning <effort>", "high|none (grok-voice-3.0)", parseReasoningEffort)
     .option("--event <json>", "send one client event (repeatable)", collectEvent, [])
     .option("--no-stdin", "do not read additional NDJSON events from stdin")
     .option("--once", "exit after the first response.done or error")

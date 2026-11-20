@@ -5,7 +5,7 @@ export type TtsCodec = "mp3" | "wav" | "pcm" | "mulaw" | "alaw";
 export type AudioSampleRate = 8000 | 16000 | 22050 | 24000 | 44100 | 48000;
 export type Mp3BitRate = 32000 | 64000 | 96000 | 128000 | 192000;
 export interface TtsOutputFormat { codec: TtsCodec; sample_rate?: AudioSampleRate | null; bit_rate?: Mp3BitRate | null }
-export interface TtsRequest { text: string; language: "auto" | (string & {}); voice_id?: string; output_format?: TtsOutputFormat; optimize_streaming_latency?: "0" | "1"; text_normalization?: boolean; with_timestamps?: boolean; speed?: number; replace?: Record<string, string> }
+export interface TtsRequest { text: string; language: "auto" | (string & {}); voice_id?: string; output_format?: TtsOutputFormat; optimize_streaming_latency?: 0 | 1 | 2; text_normalization?: boolean; with_timestamps?: boolean; speed?: number; replace?: Record<string, string> }
 export interface TtsGraphTime { start: number; end: number }
 export interface TtsAudioTimestamps { graph_chars: string[]; graph_times: TtsGraphTime[] }
 export interface TtsJsonResponse { audio: string; content_type: string; duration: number; audio_timestamps?: TtsAudioTimestamps }
@@ -13,10 +13,13 @@ export type TtsResult = { kind: "audio"; bytes: Uint8Array; contentType: string;
 export interface TtsVoice { voice_id: string; name: string; language: string | null }
 export interface ListTtsVoicesResponse { voices: TtsVoice[] }
 
+export const TTS_BUILTIN_VOICES = ["altair", "ara", "atlas", "aurora", "carina", "castor", "celeste", "cosmo", "eve", "helios", "helix", "iris", "kepler", "leo", "liora", "lumen", "luna", "lux", "naksh", "orion", "perseus", "rex", "rigel", "sal", "sirius", "ursa", "zagan", "zenith"] as const;
+
 function validateTtsRequest(request: TtsRequest): void {
+  if (request.optimize_streaming_latency !== undefined && (!Number.isInteger(request.optimize_streaming_latency) || request.optimize_streaming_latency < 0 || request.optimize_streaming_latency > 2)) throw new RangeError("optimize_streaming_latency must be 0..2");
   if (request.text.length === 0 || request.text.length > 60_000) throw new RangeError("text must contain 1..60000 characters");
   if (!request.language.trim()) throw new RangeError("language is required");
-  if (request.speed !== undefined && (request.speed < 0.7 || request.speed > 1.5)) throw new RangeError("speed must be 0.7..1.5");
+  if (request.speed !== undefined && (!Number.isFinite(request.speed) || request.speed < 0.7 || request.speed > 1.5)) throw new RangeError("speed must be 0.7..1.5");
   if (request.output_format?.bit_rate != null && request.output_format.codec !== "mp3") throw new RangeError("bit_rate is valid only for mp3");
   const replacements = Object.entries(request.replace ?? {});
   if (replacements.length > 200) throw new RangeError("replace supports at most 200 entries");
@@ -38,9 +41,16 @@ function decodeTtsJson(wire: unknown): TtsJsonResponse {
   }
   return result;
 }
-export function createTtsClient(deps?: { transport?: XaiTransport }): { synthesize(req: TtsRequest): Promise<TtsResult> } {
+export function createTtsClient(deps?: { transport?: XaiTransport }): { synthesize(req: TtsRequest): Promise<TtsResult>; listVoices(): Promise<ListTtsVoicesResponse> } {
   const http = createVoiceHttpClient(deps);
   return {
+    listVoices() {
+      return http.requestJson("/v1/tts/voices", { method: "GET" }, (wire) => {
+        const value = expectRecord(wire, "voices response");
+        if (!Array.isArray(value.voices)) throw new TypeError("voices must be an array");
+        return { voices: value.voices.map((item) => { const voice = expectRecord(item, "voice"); if (voice.language !== null && typeof voice.language !== "string") throw new TypeError("language must be a string or null"); return { voice_id: expectString(voice, "voice_id"), name: expectString(voice, "name"), language: voice.language as string | null }; }) };
+      });
+    },
     async synthesize(req) {
       validateTtsRequest(req);
       const response = await http.request("/v1/tts", { method: "POST", ...jsonBody(req) });

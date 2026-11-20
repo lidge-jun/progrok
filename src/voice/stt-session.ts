@@ -15,6 +15,7 @@ import {
 export type StreamingSttEncoding = "pcm" | "mulaw" | "alaw" | "opus";
 
 export interface StreamingSttOptions {
+  model?: string;
   encoding?: StreamingSttEncoding;
   sample_rate?: StreamingSampleRate;
   interim_results?: boolean;
@@ -64,7 +65,7 @@ function sttUrl(options: StreamingSttOptions): string {
   if (options.endpointing !== undefined && (options.endpointing < 0 || options.endpointing > 5000)) throw new RangeError("endpointing must be 0..5000");
   if (options.vad_threshold !== undefined && (options.vad_threshold < 0 || options.vad_threshold > 1)) throw new RangeError("vad_threshold must be 0..1");
   if (options.smart_turn !== undefined && (options.smart_turn < 0 || options.smart_turn > 1)) throw new RangeError("smart_turn must be 0..1");
-  if (options.smart_turn_timeout !== undefined && (options.smart_turn_timeout < 0 || options.smart_turn_timeout > 10_000)) throw new RangeError("smart_turn_timeout must be 0..10000");
+  if (options.smart_turn_timeout !== undefined && (!Number.isInteger(options.smart_turn_timeout) || options.smart_turn_timeout < 1 || options.smart_turn_timeout > 5000)) throw new RangeError("smart_turn_timeout must be 1..5000");
   if (options.multichannel && (!Number.isInteger(options.channels) || options.channels! < 2 || options.channels! > 8)) throw new RangeError("multichannel requires channels 2..8");
   if (options.encoding === "opus" && options.multichannel) throw new RangeError("opus does not support multichannel");
   if ((options.keyterm?.length ?? 0) > 100 || options.keyterm?.some((term) => term.length === 0 || term.length > 50)) throw new RangeError("invalid keyterm");
@@ -72,6 +73,7 @@ function sttUrl(options: StreamingSttOptions): string {
   const set = (key: string, value: string | number | boolean | undefined): void => {
     if (value !== undefined) query.set(key, String(value));
   };
+  set("model", options.model);
   set("encoding", options.encoding); set("sample_rate", options.sample_rate);
   set("interim_results", options.interim_results); set("endpointing", options.endpointing);
   set("language", options.language); set("multichannel", options.multichannel);
