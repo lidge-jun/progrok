@@ -10,7 +10,8 @@
 // Expanding the glob here in JS makes test discovery independent of both the
 // shell and the Node version, so the full OS x Node matrix stays green.
 
-import { readdirSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 
@@ -41,7 +42,26 @@ const nodeArgs = [
   ...files,
 ];
 
-const result = spawnSync(process.execPath, nodeArgs, { stdio: 'inherit' });
+// Every test file runs against a throwaway home. Several suites write and
+// delete ~/.progrok/auth.json; against the real home that wipes the user's
+// OAuth session. HOME covers POSIX, USERPROFILE covers os.homedir() on Windows.
+// tests/test-isolation.test.ts fails if this ever stops being true.
+const realHome = homedir();
+const testHome = mkdtempSync(join(tmpdir(), 'progrok-test-home-'));
+const env = {
+  ...process.env,
+  HOME: testHome,
+  USERPROFILE: testHome,
+  PROGROK_TEST_HOME: testHome,
+  PROGROK_REAL_HOME: realHome,
+};
+
+let result;
+try {
+  result = spawnSync(process.execPath, nodeArgs, { stdio: 'inherit', env });
+} finally {
+  rmSync(testHome, { recursive: true, force: true });
+}
 
 if (result.error) {
   console.error(`Failed to launch the test runner: ${result.error.message}`);

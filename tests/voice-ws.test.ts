@@ -1,3 +1,4 @@
+import "./helpers/isolated-home.js";
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
