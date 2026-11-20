@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { imageCommand } from "../src/commands/image.js";
+import { imageCommand, imageExtension } from "../src/commands/image.js";
 
 /** Minimal shape of a Commander Option for test assertions. */
 interface CliOption { long?: string; defaultValue?: unknown; }
@@ -15,7 +15,7 @@ describe("imageCommand", () => {
     const cmd = imageCommand();
     const opt = cmd.options.find((o: CliOption) => o.long === "--model");
     assert(opt, "missing --model option");
-    assert.equal(opt.defaultValue, "grok-imagine-image");
+    assert.equal(opt.defaultValue, "grok-imagine-image-2.0");
   });
 
   it("has --aspect option with default 1:1", () => {
@@ -50,4 +50,12 @@ describe("imageCommand", () => {
     assert(cmd.options.find((o: CliOption) => o.long === "--json"), "missing --json");
     assert(cmd.options.find((o: CliOption) => o.long === "--output"), "missing --output");
   });
+});
+
+it("supports quality and detects image formats", () => {
+ const quality = imageCommand().options.find(o => o.long === "--quality");
+ assert.ok(quality); assert.equal(quality.defaultValue, undefined);
+ assert.equal(imageExtension({mime_type:"image/jpeg"}, Buffer.alloc(0)), "jpg");
+ assert.equal(imageExtension({}, Buffer.from("89504e470d0a1a0a", "hex")), "png");
+ assert.equal(imageExtension({}, Buffer.from("unknown")), "jpg");
 });
