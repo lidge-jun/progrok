@@ -13,3 +13,30 @@
 9. Rollback: if publish produced a broken package, `npm deprecate progrok@3.1.0` and dist-tag latest back to 2.0.4,
    then report. A failed workflow with nothing published needs only a fix and a re-tag.
 
+
+## P amendment before wp4 (2026-11-21)
+
+Release facts checked read-only:
+
+- publish.yml has never succeeded: runs for v0.2.1, v2.0.3 and v2.0.4 all failed. The repository has no Actions
+  secrets (`gh secret list` is empty), so `NODE_AUTH_TOKEN: secrets.NPM_TOKEN` is empty. npm shows 2.0.3 and 2.0.4
+  published a few seconds before each tag push, i.e. from a local `npm publish`.
+- The local npm token in ~/.npmrc is rejected (`npm whoami` → 401). No working npm credential exists on this host.
+- main has no branch protection; Pages deploys from pages.yml on pushes to main that touch site/**.
+- v2.0.4 has a GitHub Release; publish.yml does not create one.
+
+Order for this release:
+
+1. Push the branch, open the PR (body via --body-file; it must describe the test-isolation fix and the credential
+   loss it caused), link it with goat_pull_request_link, wait for CI (all jobs, including the Windows matrix).
+2. Fresh Terra final review of the PR head (new reviewer, no continueFrom). Blockers → fix, re-run CI, re-review.
+3. Squash-merge; record the merge commit. Confirm pages.yml ran on that push and succeeded.
+4. npm publish needs a credential the user provides (asked asynchronously):
+   - NPM_TOKEN repo secret → tag v3.1.0 on the merge commit and push the tag; publish.yml publishes with provenance.
+   - local `npm login` → `npm publish --access public` from a clean checkout of the merge commit, then push the tag
+     (publish.yml will then fail on "version already published"; that run is expected and reported as such).
+   - no credential → tag and Release are still created; npm publish is reported NEEDS_HUMAN and the goal stays open.
+5. `gh release create v3.1.0 --notes-file <3.1.0 CHANGELOG section>` on the tag.
+6. Verify: npm view progrok dist-tags (latest 3.1.0), npx -y progrok@3.1.0 --version, gh release view v3.1.0,
+   Pages run success. Live billing smoke after the user re-logs in; otherwise NOT RUN.
+
