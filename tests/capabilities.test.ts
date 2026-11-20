@@ -107,6 +107,18 @@ describe("capabilities schema v2", () => {
     assert.equal(capabilities.recommendations.liveDefaultModel, "grok-voice-latest");
   });
 
+  it("publishes current media and voice capabilities offline", async () => {
+    const cap = await buildCapabilities({ offline: true });
+    assert.equal(cap.recommendations.liveReproduciblePin, "grok-voice-3.0");
+    assert.equal(cap.recommendations.imageDefaultModel, "grok-imagine-image-2.0");
+    assert.equal(cap.recommendations.videoDefaultModel, "grok-imagine-video-1.5");
+    assert.equal(cap.recommendations.ttsVoices.length, 28);
+    assert.ok(cap.webApp.surfaces.find(s => s.name === "media")?.features.includes("video-1080p"));
+    assert.ok(cap.videoNotes.some(n => n.id === "frame-pins"));
+    assert.ok(cap.videoNotes.some(n => n.id === "voice-references"));
+    assert.ok(cap.limitations.some(n => n.includes("coupons") && n.includes("read-only")));
+  });
+
   it("does not retain Voice 1.0 model literals", () => {
     const source = readFileSync("src/commands/capabilities.ts", "utf8");
     assert.doesNotMatch(source, /grok-voice-fast-1\.0/);

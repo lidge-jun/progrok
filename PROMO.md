@@ -40,7 +40,7 @@ HTTP 클라이언트는 `http://127.0.0.1:18645/v1`을 base URL로 잡고 API �
 - secret 하나는 WebSocket 연결 한 번만 열 수 있다. 재연결할 때도 새로 발급해야 하며 캐시하거나 재사용하면 안 된다.
 - secret은 URL이나 bearer header가 아니라 `xai-client-secret.<token>` WebSocket 서브프로토콜로 한 번만 전달한다.
 - 브라우저 TTS의 ephemeral 인증은 아직 실측 보장하지 않는다. streaming TTS는 서버측 bearer를 쓴다.
-- Voice 모델은 `grok-voice-latest`가 rolling alias이고, 재현성이 필요하면 `grok-voice-think-fast-2.0`을 고정한다.
+- Voice 모델은 `grok-voice-latest`가 rolling alias이고, 재현성이 필요하면 `grok-voice-3.0`을 고정한다.
 
 ## 4. 모델·메타데이터
 

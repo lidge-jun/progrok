@@ -13,6 +13,12 @@ export interface TtsCliOptions {
   output?: string;
   stdout?: boolean;
   json?: boolean;
+  speed?: string;
+  sampleRate?: string;
+  bitRate?: string;
+  latency?: string;
+  textNormalization?: boolean;
+  listVoices?: boolean;
 }
 
 function decodeTtsJsonBody(body: unknown): {
@@ -37,15 +43,28 @@ function decodeTtsJsonBody(body: unknown): {
 export function ttsCommand(): Command {
   return new Command("tts")
     .description("Synthesize speech with xAI TTS")
-    .argument("<text>", "text to synthesize")
+    .argument("[text]", "text to synthesize")
     .option("--voice <id>", "voice ID", DEFAULT_TTS_VOICE)
     .option("--language <code>", "BCP-47 language or auto", "auto")
     .option("--format <format>", "mp3|wav|pcm|mulaw|alaw", "mp3")
     .option("-o, --output <path>", "output audio path")
+    .option("--speed <n>", "speech speed 0.7..1.5")
+    .option("--sample-rate <hz>", "output sample rate")
+    .option("--bit-rate <bps>", "MP3 bit rate")
+    .option("--latency <0|1|2>", "streaming latency")
+    .option("--text-normalization", "normalize text")
+    .option("--list-voices", "list available voices")
     .option("--stdout", "write raw audio bytes to stdout")
     .option("--json", "write result metadata as JSON")
-    .action(async (text: string, opts: TtsCliOptions) => {
+    .action(async (text: string | undefined, opts: TtsCliOptions, command: Command) => {
       try {
+        if (opts.listVoices) {
+          const result = await createTtsClient().listVoices();
+          if (opts.json) console.log(JSON.stringify(result, null, 2));
+          else for (const voice of result.voices) console.log(`${voice.voice_id}  ${voice.name}`);
+          return;
+        }
+        if (!text) { command.help(); return; }
         if (opts.stdout && (opts.output || opts.json)) {
           throw new Error("--stdout cannot be combined with --output or --json");
         }
@@ -53,7 +72,10 @@ export function ttsCommand(): Command {
           voice_id: opts.voice ?? DEFAULT_TTS_VOICE,
           language: opts.language ?? "auto",
           text,
-          output_format: { codec: opts.format ?? "mp3" },
+          output_format: { codec: opts.format ?? "mp3", ...(opts.sampleRate !== undefined ? {sample_rate: Number(opts.sampleRate) as import("../voice/tts.js").AudioSampleRate} : {}), ...(opts.bitRate !== undefined ? {bit_rate: Number(opts.bitRate) as import("../voice/tts.js").Mp3BitRate} : {}) },
+          ...(opts.speed !== undefined ? {speed: Number(opts.speed)} : {}),
+          ...(opts.latency !== undefined ? {optimize_streaming_latency: Number(opts.latency) as 0 | 1 | 2} : {}),
+          ...(opts.textNormalization ? {text_normalization: true} : {}),
         });
         const json = result.kind === "json" ? decodeTtsJsonBody(result.body) : undefined;
         const bytes = result.kind === "audio"

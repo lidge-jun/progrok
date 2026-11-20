@@ -1,117 +1,169 @@
 import { Command } from "commander";
-import { getValidBearer } from "../auth/token-store.js";
+import { getValidBearer, loadTokens } from "../auth/token-store.js";
+import {
+  fetchLegacyBilling,
+  fetchResetCoupons,
+  fetchWeeklyCredits,
+  type LegacyBilling,
+  type ResetCouponsResult,
+  type WeeklyCredits,
+} from "../surfaces/billing.js";
 import { log } from "../utils/logger.js";
 
-const BILLING_URL = "https://cli-chat-proxy.grok.com/v1/billing";
 const USER_URL = "https://cli-chat-proxy.grok.com/v1/user";
 
-interface BillingConfig {
-  monthlyLimit: { val: number };
-  used: { val: number };
-  onDemandCap: { val: number };
-  billingPeriodStart: string;
-  billingPeriodEnd: string;
-  history: Array<{
-    billingCycle: { year: number; month: number };
-    includedUsed: { val: number };
-    onDemandUsed: { val: number };
-    totalUsed: { val: number };
-  }>;
-}
-
+/** Kept exactly as 3.0.0 computed it: the 3.0.0 JSON "tier" key must not change. */
 function tierFromLimit(val: number): string {
   if (val >= 150_000) return "SuperGrok Heavy";
   if (val >= 15_000) return "SuperGrok";
   return `SuperGrok (${val} val)`;
 }
 
+/** The corrected plan label, reported under the new "plan" key. */
+function planLabel(weekly: WeeklyCredits | null, legacy: LegacyBilling | null): string {
+  if (weekly && (!legacy || legacy.limitCents === 0)) return "X Subscription (weekly pool)";
+  return legacy ? tierFromLimit(legacy.limitCents) : "unknown";
+}
+
+function userIdFromToken(token: string): string {
+  try {
+    const payload: unknown = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"));
+    const sub = (payload as { sub?: unknown } | null)?.sub;
+    return typeof sub === "string" ? sub : "";
+  } catch {
+    return "";
+  }
+}
+
+async function readEmail(bearer: string): Promise<string | null> {
+  try {
+    const response = await fetch(USER_URL, {
+      headers: { Authorization: `Bearer ${bearer}` },
+      redirect: "error",
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!response.ok) return null;
+    const user = (await response.json()) as { email?: unknown };
+    return typeof user.email === "string" ? user.email : null;
+  } catch {
+    return null;
+  }
+}
+
+function settled<T>(result: PromiseSettledResult<T>): T | null {
+  return result.status === "fulfilled" ? result.value : null;
+}
+
+function usd(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+/** A missing amount stays unknown; printing $0.00 would claim there is no balance or cap. */
+function usdOrUnavailable(cents: number | undefined): string {
+  return cents === undefined ? "unavailable" : usd(cents);
+}
+
+/** The API sends timestamps with an offset; convert the instant before calling it UTC. */
+function utcMinute(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) return timestamp;
+  return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
+
+function printText(
+  email: string | null,
+  plan: string,
+  weekly: WeeklyCredits | null,
+  legacy: LegacyBilling | null,
+  coupons: ResetCouponsResult,
+): void {
+  log.info(`Plan:      ${plan}`);
+  if (email) log.info(`Account:   ${email}`);
+  if (weekly) {
+    const resets = weekly.periodEnd ? ` (resets ${utcMinute(weekly.periodEnd)})` : "";
+    const label = weekly.periodType === "weekly" ? "Weekly:   " : "Monthly:  ";
+    log.info(`${label} ${weekly.usagePercent}% used${resets}`);
+    for (const product of weekly.products) log.info(`  ${product.product} ${product.usagePercent}%`);
+    if (weekly.prepaidBalanceCents !== undefined || weekly.onDemandCapCents !== undefined) {
+      log.info(`Prepaid:   ${usdOrUnavailable(weekly.prepaidBalanceCents)} · on-demand cap ${usdOrUnavailable(weekly.onDemandCapCents)}`);
+    }
+  } else {
+    // Distinguish a failed lookup from an account without a weekly pool.
+    log.info("Weekly:    unavailable (the weekly usage request failed)");
+  }
+  // A unified (weekly pool) account reports a 0 monthly limit; that line would only mislead.
+  if (legacy && legacy.limitCents > 0) {
+    log.info(`Monthly:   ${usd(legacy.usedCents)} / ${usd(legacy.limitCents)}`);
+  }
+  if (coupons.status === "ok") {
+    const count = coupons.coupons.length;
+    const expiries = coupons.coupons.flatMap((coupon) => (coupon.validityEnd ? [coupon.validityEnd] : [])).sort();
+    const next = expiries.length > 0 ? `; next expires ${expiries[0].slice(0, 10)}` : "";
+    log.info(`Resets:    ${count} reset coupon${count === 1 ? "" : "s"} available${next}`);
+  } else if (coupons.status === "unknown") {
+    log.info("Resets:    unknown (unrecognized response; not shown as zero)");
+  } else {
+    log.info(`Resets:    unavailable (${coupons.reason})`);
+  }
+}
+
 export function billingCommand(): Command {
   return new Command("billing")
-    .description("Show subscription billing and usage")
+    .description("Show weekly usage, billing and reset coupons (read-only)")
     .option("--json", "Output raw JSON")
     .action(async (opts: { json?: boolean }) => {
       try {
-        const token = await getValidBearer();
-        const headers = { Authorization: `Bearer ${token}` };
-
-        const [billingRes, userRes] = await Promise.allSettled([
-          fetch(BILLING_URL, {
-            headers,
-            signal: AbortSignal.timeout(8000),
-          }),
-          fetch(USER_URL, {
-            headers,
-            signal: AbortSignal.timeout(5000),
-          }),
+        const bearer = await getValidBearer();
+        const userId = loadTokens()?.accountId || userIdFromToken(bearer);
+        const [weeklyResult, legacyResult, couponResult, emailResult] = await Promise.allSettled([
+          fetchWeeklyCredits({ bearer, userId }),
+          fetchLegacyBilling({ bearer }),
+          fetchResetCoupons({ bearer }),
+          readEmail(bearer),
         ]);
+        const weekly = settled(weeklyResult);
+        const legacy = settled(legacyResult);
+        const resetCoupons: ResetCouponsResult =
+          settled(couponResult) ?? { status: "error", reason: "Reset request failed" };
+        const email = settled(emailResult);
 
-        if (billingRes.status !== "fulfilled" || !billingRes.value.ok) {
+        if (!weekly && !legacy) {
           log.error("Failed to fetch billing data.");
           process.exit(1);
         }
-
-        const raw = (await billingRes.value.json()) as {
-          config?: BillingConfig;
-        };
-        const billing = raw?.config;
-        if (
-          !billing ||
-          billing.monthlyLimit?.val == null ||
-          billing.used?.val == null
-        ) {
-          log.error("Unexpected billing response format.");
-          process.exit(1);
-        }
-
-        const limit = billing.monthlyLimit.val;
-        const used = billing.used.val;
-        const remaining = limit - used;
-        const percent = limit > 0 ? Math.round((used / limit) * 100) : 0;
-        const tier = tierFromLimit(limit);
-
-        let email: string | null = null;
-        if (userRes.status === "fulfilled" && userRes.value.ok) {
-          try {
-            const user = (await userRes.value.json()) as { email?: string };
-            email = user.email ?? null;
-          } catch {
-            // non-JSON user response — ignore
-          }
-        }
-
-        const start = (billing.billingPeriodStart ?? "unknown").slice(0, 10);
-        const end = (billing.billingPeriodEnd ?? "unknown").slice(0, 10);
+        const plan = planLabel(weekly, legacy);
 
         if (opts.json) {
-          console.log(
-            JSON.stringify(
-              {
-                tier,
-                email,
-                limit,
-                used,
-                remaining,
-                percent,
-                limitUsd: limit / 100,
-                usedUsd: used / 100,
-                remainingUsd: remaining / 100,
-                billingPeriodStart: billing.billingPeriodStart,
-                billingPeriodEnd: billing.billingPeriodEnd,
-                history: billing.history ?? [],
-              },
-              null,
-              2,
-            ),
-          );
+          if (!legacy) {
+            // New in 3.1.0: 3.0.0 exited 1 here, so this shape has no older consumers.
+            console.log(JSON.stringify({ email, plan, weekly, resetCoupons, legacy: null }, null, 2));
+            return;
+          }
+          // Every 3.0.0 key keeps its value and type; plan, weekly and resetCoupons are added.
+          const limit = legacy.limitCents;
+          const used = legacy.usedCents;
+          const remaining = limit - used;
+          console.log(JSON.stringify({
+            tier: tierFromLimit(limit),
+            email,
+            limit,
+            used,
+            remaining,
+            percent: limit > 0 ? Math.round((used / limit) * 100) : 0,
+            limitUsd: limit / 100,
+            usedUsd: used / 100,
+            remainingUsd: remaining / 100,
+            billingPeriodStart: legacy.periodStart,
+            billingPeriodEnd: legacy.periodEnd,
+            history: legacy.history ?? [],
+            plan,
+            weekly,
+            resetCoupons,
+          }, null, 2));
           return;
         }
 
-        log.info(`Plan:      ${tier}`);
-        if (email) log.info(`Account:   ${email}`);
-        log.info(`Period:    ${start} → ${end}`);
-        log.info(`Limit:     $${(limit / 100).toFixed(2)}`);
-        log.info(`Used:      $${(used / 100).toFixed(2)} (${percent}%)`);
-        log.info(`Remaining: $${(remaining / 100).toFixed(2)}`);
+        printText(email, plan, weekly, legacy, resetCoupons);
       } catch (err) {
         log.error((err as Error).message);
         process.exit(1);

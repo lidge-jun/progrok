@@ -57,7 +57,9 @@ export type TtsServerEvent =
   | { type: "error"; message: string };
 
 export type RealtimeVoiceModel = string;
-export type RealtimeReasoningEffort = "low" | "medium" | "high";
+export type RealtimeReasoningEffort = "high" | "none";
+export const REALTIME_REASONING_EFFORTS = ["high", "none"] as const;
+export const PINNED_REALTIME_MODEL = "grok-voice-3.0" as const;
 export type RealtimeAudioType = "audio/pcm" | "audio/pcmu" | "audio/pcma" | "audio/opus";
 export type RealtimeAudioRate = 8000 | 11025 | 16000 | 22050 | 24000 | 32000 | 44100 | 48000;
 export type RealtimeAudioTransport = "json" | "binary";

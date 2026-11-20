@@ -30,4 +30,5 @@ const title = 'Speech to Text';
 <h2>Streaming WebSocket</h2>
 <p>Direct streaming uses <code>wss://api.x.ai/v1/stt</code>. Send binary audio after <code>transcript.created</code>, then <code>finalize</code> and <code>audio.done</code>. Treat <code>speech_final=true</code> on a partial event as final evidence even if <code>transcript.done.text</code> is empty.</p>
 <p>Browser clients must mint a new one-use secret for every connection and reconnect, and pass it only as the <code>xai-client-secret.&lt;token&gt;</code> WebSocket subprotocol.</p>
+<p>The default model is <code>grok-voice-transcribe-2.0</code>. VAD threshold defaults to 0.5 for REST and 0.08 for streaming; streaming <code>smart_turn_timeout</code> is 1–5000. The CLI accepts <code>--model &lt;id&gt;</code>, <code>--filler-words</code>, <code>--vad-threshold &lt;0..1&gt;</code>, <code>--format</code> (requires language), <code>--audio-format &lt;pcm|mulaw|alaw&gt;</code>, <code>--sample-rate &lt;hz&gt;</code>, and <code>--channels &lt;n&gt;</code>.</p>
 </DocsLayout>

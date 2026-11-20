@@ -8,6 +8,7 @@ export interface ImageRequest {
   response_format?: "url" | "b64_json";
   aspect_ratio?: string;
   resolution?: string;
+  quality?: "low" | "medium" | "auto";
   image?: unknown;
   images?: unknown[];
 }

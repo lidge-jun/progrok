@@ -16,7 +16,7 @@ describe("videoCommand", () => {
     const cmd = videoCommand();
     const opt = cmd.options.find((o: CliOption) => o.long === "--model");
     assert(opt, "missing --model option");
-    assert.equal(opt.defaultValue, "grok-imagine-video");
+    assert.equal(opt.defaultValue, "grok-imagine-video-1.5");
   });
 
   it("has --duration option with default 5", () => {
@@ -115,4 +115,10 @@ describe("videoCommand", () => {
     assert.equal(parsed.opts.video, "file_id:file-123");
     assert.equal(parsed.opts.json, true);
   });
+});
+
+it("registers frame and voice options and base edit defaults", () => {
+ const cmd = videoCommand();
+ for (const flag of ["--voice", "--last-frame", "--keyframe"]) assert.ok(cmd.options.find(o => o.long === flag));
+ for (const sub of cmd.commands) assert.equal(sub.options.find(o => o.long === "--model")?.defaultValue, "grok-imagine-video");
 });

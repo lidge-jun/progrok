@@ -109,15 +109,15 @@ not success, and mid-stream failure is never replayed.
 ### Pattern 3: Image generation / editing
 
 ```bash
-# Generate (resolution 1k|2k, aspect_ratio, n, response_format url|b64_json)
+# Generate (resolution 1k|1.5k|2k, aspect_ratio, n, response_format url|b64_json)
 curl http://127.0.0.1:18645/v1/images/generations \
   -H "Content-Type: application/json" \
-  -d '{"model": "grok-imagine-image-quality", "prompt": "A futuristic cityscape", "resolution": "2k"}'
+  -d '{"model": "grok-imagine-image-2.0", "prompt": "A futuristic cityscape", "resolution": "2k"}'
 
 # Edit (single image or multi-reference compose)
 curl http://127.0.0.1:18645/v1/images/edits \
   -H "Content-Type: application/json" \
-  -d '{"model": "grok-imagine-image-quality", "prompt": "Make it a pencil sketch", "image": {"url": "https://.../photo.png"}}'
+  -d '{"model": "grok-imagine-image-2.0", "prompt": "Make it a pencil sketch", "image": {"url": "https://.../photo.png"}}'
 ```
 
 ### Pattern 4: Video generation (async — poll)
@@ -129,7 +129,7 @@ progrok video "Ocean waves crashing on rocks" --duration 8 --resolution 720p
 # Image-to-video
 progrok video "Animate this scene" --image photo.jpg --duration 10
 
-# Reference-to-video (repeat --ref up to 7 times; max 10s)
+# Reference-to-video (repeat --ref up to 14 times on 1.5; max 15s)
 progrok video "Use this character and outfit" --ref character.png --ref outfit.png --duration 6
 
 # Video editing (real V2V — modify existing video, keep motion)
@@ -169,18 +169,18 @@ curl http://127.0.0.1:18645/v1/videos/abc-123
 
 **Model constraints:**
 - `grok-imagine-video`: T2V, I2V, Ref2V, Edit, Extend — all modes
-- `grok-imagine-video-1.5`: live-smoked I2V only; prompt-only T2V and Ref2V return xAI 400 errors
+- `grok-imagine-video-1.5`: T2V, I2V, and Ref2V; edit and extend use the base model
 - Media refs: `url`, `file_id`, data URI, or local file through the CLI
 - REST has no `mode` field; SDK mode strings are provider options only
-- `image` + `reference_images` is invalid
+- `image` + `reference_images` is invalid on the base model; on 1.5 image pins the first frame
 - Edit/Extend input: mp4, H.264/H.265/AV1, max 8.7s (edit) / 2-15s (extend)
-- Edit output inherits input duration/aspect/resolution (max 720p)
+- Edit output inherits input duration/aspect/resolution (up to 720p)
 - Extend duration: 2-10s added to original
 
 ### Pattern 5: Voice — TTS / STT (HTTP)
 
 ```bash
-# Text-to-speech (voices: eve, ara, leo, rex, sal). Returns audio bytes.
+# Text-to-speech (28 built-in voices; use progrok tts --list-voices). Returns audio bytes.
 curl http://127.0.0.1:18645/v1/tts \
   -H "Content-Type: application/json" \
   -d '{"text": "Hello [pause] world", "voice_id": "eve", "language": "en", "output_format": {"codec": "mp3"}}' -o out.mp3
@@ -227,7 +227,7 @@ async function openRealtime() {
   if (!response.ok) throw new Error(`secret mint failed: ${response.status}`);
   const secret = await response.json();
   const ws = new WebSocket(
-    "wss://api.x.ai/v1/realtime?model=grok-voice-think-fast-2.0",
+    "wss://api.x.ai/v1/realtime?model=grok-voice-3.0",
     [`xai-client-secret.${secret.value}`],
   );
   ws.addEventListener("open", () => ws.send(JSON.stringify({
@@ -336,11 +336,13 @@ identifier when reproducibility matters.
 
 | Model | Type | Price |
 |-------|------|-------|
-| `grok-imagine-image` | Image gen/edit | $0.02 / image (1k/2k) |
-| `grok-imagine-image-quality` | High-quality image gen/edit | $0.04 / image (1k/2k) |
-| `grok-imagine-video` | Video gen/edit/extend (async) | $0.05 / sec (480p/720p) |
+| `grok-imagine-image-2.0` | Default image model; quality low/medium/auto | From $0.04 / 1K low image; see the table below |
+| `grok-imagine-image` | Image gen/edit (1.0) | $0.02 / image (1k/2k) |
+| `grok-imagine-video-1.5` | Default video model: T2V, I2V, Ref2V, frame pins, voices | From $0.08 / sec at 480p |
+| `grok-imagine-video-1.5-lite` | Cheapest T2V/I2V | From $0.02 / sec at 480p |
+| `grok-imagine-video` | Video gen/edit/extend | See resolution-based pricing below |
 | `grok-voice-latest` | Rolling Voice alias | Resolve availability from the runtime catalog. |
-| `grok-voice-think-fast-2.0` | Reproducible Voice pin and `progrok live` default | Runtime catalog and xAI account terms are authoritative. |
+| `grok-voice-3.0` | Reproducible Voice pin; default is `grok-voice-latest` | Runtime catalog and xAI account terms are authoritative. |
 
 ### Reasoning effort
 
@@ -425,3 +427,27 @@ Do not treat `commands` as `string[]`; no legacy string-array shape is promised.
 ```bash
 npm i -g progrok
 ```
+
+## Current media, voice and billing
+
+Default image is `grok-imagine-image-2.0` with `--quality <q>` low, medium or auto and `--resolution <r>` 1k, 1.5k or 2k. Auto is low for generation and medium for edits. Up to five edit references are supported.
+
+Default video is `grok-imagine-video-1.5`: T2V, I2V and R2V; lite supports T2V/I2V, base supports those and R2V, edit and extend. R2V allows 14 references / 15s on 1.5 and 7 / 10s on base. 1080p supports T2V/I2V on 1.5/lite; R2V is 720p maximum. On 1.5 `--last-frame <input>`, repeatable `--keyframe <input@seconds>` (up to four), and `--voice <voice_id>` (up to three) set pins and voices. Keyframes cannot round to the same 1/3 s slot. A frame pin alone is R2V.
+
+`progrok live --reasoning` accepts high or none and requires a `grok-voice-*` model; invalid values exit 1. `progrok tts` supports `--speed <n>`, `--sample-rate <hz>`, `--bit-rate <bps>`, `--latency <0|1|2>`, `--text-normalization`, and `--list-voices`. TTS `optimize_streaming_latency` is integer 0, 1 or 2. `progrok stt` supports `--model <id>`, `--filler-words`, `--vad-threshold <0..1>`, `--format`, `--audio-format <pcm|mulaw|alaw>`, `--sample-rate <hz>`, `--channels <n>`. STT model defaults to `grok-voice-transcribe-2.0`; VAD defaults to 0.5 REST and 0.08 streaming; `smart_turn_timeout` is 1–5000.
+
+`progrok billing --json` preserves 3.0.0 keys and adds `plan`, `weekly`, `resetCoupons`. Weekly-only returns `{email, plan, weekly, resetCoupons, legacy: null}`. Coupon status is `ok`, `unknown`, or `error`; read-only; progrok never redeems a reset. Text shows missing values as unavailable and reset times in UTC.
+
+| Model | 480p | 720p | 1080p | Inputs |
+| --- | --- | --- | --- | --- |
+| grok-imagine-video | $0.05/s | $0.07/s | — | image $0.002, input video $0.01/s |
+| grok-imagine-video-1.5 | $0.08/s | $0.14/s | $0.25/s (T2V/I2V only) | image $0.01; preset voices free |
+| grok-imagine-video-1.5-lite | $0.02/s | $0.03/s | $0.14/s (upscaled) | image $0.01 |
+
+| Model | 1K | 1.5K | 2K | Inputs |
+| --- | --- | --- | --- | --- |
+| grok-imagine-image-2.0 low | $0.04 | $0.05 | $0.06 | edit input $0.01/image |
+| grok-imagine-image-2.0 medium | $0.06 | $0.07 | $0.08 | edit input $0.01/image |
+| grok-imagine-image (1.0) | $0.02 | — | $0.02 | $0.002/image |
+
+xAI model catalog and docs.x.ai pricing, read 2026-11-21; live cost_in_usd_ticks matched 1.5 480p $0.08/s, lite 480p $0.02/s, lite 1080p $0.14/s and image 2.0 1K medium $0.06. Prices change; xAI's pricing page is authoritative. `auto` is billed at the quality actually served.

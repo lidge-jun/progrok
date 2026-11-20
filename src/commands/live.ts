@@ -1,5 +1,5 @@
 import { createInterface, type Interface } from "node:readline";
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
 import {
   createRealtimeClient,
   type RealtimeClient,
@@ -31,16 +31,16 @@ type LiveClientEvent = Exclude<RealtimeClientEvent, { type: "pong" }>;
 function parseRealtimeModel(value: string): RealtimeVoiceModel {
   const model = value.trim();
   if (!model.startsWith("grok-voice-")) {
-    throw new Error(
-      "--model must be a grok-voice-* identifier, for example grok-voice-latest",
+    throw new InvalidArgumentError(
+      "--model must be a grok-voice-* identifier, for example grok-voice-latest or grok-voice-3.0",
     );
   }
   return model;
 }
 
 function parseReasoningEffort(value: string): RealtimeReasoningEffort {
-  if (value !== "low" && value !== "medium" && value !== "high") {
-    throw new Error("--reasoning must be low, medium, or high");
+  if (value !== "none" && value !== "high") {
+    throw new InvalidArgumentError("--reasoning must be high or none (grok-voice-3.0 rejects low and medium)");
   }
   return value;
 }
@@ -80,9 +80,9 @@ function sendClientEvent(client: RealtimeClient, event: LiveClientEvent): void {
 export function liveCommand(): Command {
   return new Command("live")
     .description("Bridge xAI Realtime events over NDJSON stdin/stdout (no microphone capture)")
-    .option("--model <id>", "pinned Voice model or latest alias", parseRealtimeModel, DEFAULT_LIVE_MODEL)
+    .option("--model <id>", "grok-voice-3.0 pin or latest alias", parseRealtimeModel, DEFAULT_LIVE_MODEL)
     .option("--conversation-id <id>", "resume an existing conversation")
-    .option("--reasoning <effort>", "low|medium|high", parseReasoningEffort)
+    .option("--reasoning <effort>", "high|none (grok-voice-3.0)", parseReasoningEffort)
     .option("--event <json>", "send one client event (repeatable)", collectEvent, [])
     .option("--no-stdin", "do not read additional NDJSON events from stdin")
     .option("--once", "exit after the first response.done or error")

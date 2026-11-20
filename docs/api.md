@@ -159,16 +159,17 @@ Handle upstream protocol errors including `previous_response_not_found` and
 ```bash
 curl http://127.0.0.1:18645/v1/images/generations \
   -H "Content-Type: application/json" \
-  -d '{"model": "grok-imagine-image-quality", "prompt": "A serene Japanese garden"}'
+  -d '{"model": "grok-imagine-image-2.0", "prompt": "A serene Japanese garden"}'
 ```
 
 | Field | Type | Notes |
 |-------|------|-------|
 | `prompt` | string | **required** |
-| `model` | string | `grok-imagine-image` (fast) / `grok-imagine-image-quality` (HQ) |
+| `model` | string | `grok-imagine-image` (1.0) / `grok-imagine-image-2.0` (default; quality low, medium, auto) |
 | `n` | integer | number of images |
-| `aspect_ratio` | enum | `1:1`, `16:9`, `9:16`, `4:3`, `3:4`, `2:3`, `3:2`, `2:1`, `1:2`, `auto`, … |
-| `resolution` | enum | `1k` \| `2k` |
+| `aspect_ratio` | enum | `1:1`, `16:9`, `9:16`, `4:3`, `3:4`, `2:3`, `3:2`, `2:1`, `1:2`, `21:9`, `5:2`, `auto`, … |
+| `quality` | enum | `low` \| `medium` \| `auto` (image 2.0 only; default `auto`) |
+| `resolution` | enum | `1k` \| `1.5k` \| `2k` |
 | `response_format` | string | `url` (default) \| `b64_json` |
 
 Response: `{ "data": [{ "url": "..." }], "usage": { "cost_in_usd_ticks": N } }`.
@@ -181,7 +182,7 @@ Edit a single image or compose multiple reference images.
 curl http://127.0.0.1:18645/v1/images/edits \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "grok-imagine-image-quality",
+    "model": "grok-imagine-image-2.0",
     "prompt": "Render this as a pencil sketch",
     "image": {"url": "https://example.com/photo.png"}
   }'
@@ -213,17 +214,20 @@ curl http://127.0.0.1:18645/v1/videos/generations \
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `prompt` | string | required for T2V/R2V; optional for I2V |
-| `model` | string | `grok-imagine-video` |
+| `prompt` | string | Optional when a frame is pinned; otherwise required |
+| `model` | string | `grok-imagine-video`, `grok-imagine-video-1.5`, or `grok-imagine-video-1.5-lite` |
 | `duration` | integer | seconds, range `[1, 15]`, default `8` |
 | `seconds` | integer | OpenAI-compatible alias for `duration` |
-| `aspect_ratio` | enum | `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `3:2`, `2:3` |
-| `resolution` | enum | `480p` \| `720p`; `1080p` appears in one schema but is not model-page confirmed |
+| `aspect_ratio` | enum | `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `3:2`, `2:3`, `21:9`, `5:2` |
+| `resolution` | enum | `480p` \| `720p` \| `1080p`; 1080p T2V/I2V on 1.5 and lite, R2V at most 720p |
 | `image` | object | `{file_id \| url}` for image-to-video |
-| `reference_images[]` | array | `{file_id \| url}` references for R2V; max 7 refs, max 10s |
+| `reference_images[]` | array | `{file_id \| url}` references: 14 on 1.5 (15s), 7 on base (10s), none on lite |
+| `last_frame` | object | Final frame pin, 1.5 only |
+| `keyframes` | array | Up to four image/timestamp pins on 1.5; timestamps must not round to the same 1/3 s slot |
+| `reference_audios` | array | Up to three preset voice IDs on 1.5 |
 | `output.upload_url` | string | Optional signed PUT destination for the result |
 
-`image` and `reference_images` are mutually exclusive. SDK `mode` values such
+On the base model `image` and `reference_images` are mutually exclusive; on 1.5 `image` pins the first frame alongside references. SDK `mode` values such
 as `reference-to-video` are provider options, not REST body fields.
 
 ### POST /v1/videos/edits
@@ -272,11 +276,11 @@ curl http://127.0.0.1:18645/v1/tts \
 | `output_format` | object | `{codec: mp3\|wav\|pcm\|mulaw\|alaw, sample_rate, bit_rate}` |
 | `speed` | number | speed multiplier, default `1.0` |
 | `text_normalization` | boolean | normalize numbers/abbreviations |
-| `optimize_streaming_latency` | string | `"0"` or `"1"`; latency vs quality |
+| `optimize_streaming_latency` | integer | `0`, `1`, or `2`; latency vs quality |
 
 ### GET /v1/tts/voices · GET /v1/tts/voices/{voice_id}
 
-List built-in voices / get one. Built-ins: `ara`, `eve`, `leo`, `rex`, `sal`.
+List built-in voices / get one. There are 28 built-in voices; `progrok tts --list-voices` lists them.
 
 ### POST /v1/stt
 
@@ -298,6 +302,9 @@ curl http://127.0.0.1:18645/v1/stt \
 | `multichannel` + `channels` | per-channel transcription |
 | `keyterm` | bias terms (≤100, ≤50 chars each) |
 | `filler_words` | include "uh"/"um" when `true` |
+| `model` | transcription model, default `grok-voice-transcribe-2.0` |
+| `vad_threshold` | voice activity threshold, REST default 0.5 |
+| `format` | inverse text normalization; requires `language` |
 
 Response: `{ text, language, duration, words: [{text, start, end, confidence}] }`.
 
@@ -309,7 +316,7 @@ connection. `{expires_after: {seconds}}` accepts up to 3600 seconds (default
 connection. Mint a new secret for every connect and reconnect.
 
 `session.model`: use `grok-voice-latest` for the rolling alias or pin
-`grok-voice-think-fast-2.0` for production reproducibility.
+`grok-voice-3.0` for production reproducibility.
 
 ### Custom Voices
 
@@ -333,14 +340,14 @@ described under [Browser authentication](#browser-authentication).
 Query parameters are `model`, `call_id`, `conversation_id`, and
 `reasoning.effort`. `call_id` joins an incoming SIP call and requires
 server-side bearer auth. Otherwise choose the rolling `grok-voice-latest` alias
-or the reproducible `grok-voice-think-fast-2.0` pin.
+or the reproducible `grok-voice-3.0` pin.
 
 ```ts
 // createRealtimeClient is exported by src/voice/realtime.ts.
 const client = createRealtimeClient({
   auth: { kind: "oauth" },
-  model: "grok-voice-think-fast-2.0",
-  reasoningEffort: "medium",
+  model: "grok-voice-3.0",
+  reasoningEffort: "high",
 });
 await client.ready();
 client.updateSession({
@@ -364,7 +371,7 @@ server-side bearer; the local web app uses a fresh browser client secret for
 each connection. Query options include `encoding`, `sample_rate`,
 `interim_results`, `endpointing`, `language`, `multichannel`, `channels`,
 `diarize`, repeated `keyterm`, `filler_words`, `smart_turn`,
-`smart_turn_timeout`, and `vad_threshold`.
+`smart_turn_timeout`, and `vad_threshold`. `smart_turn_timeout` is 1–5000; `vad_threshold` defaults to 0.08 for streaming and 0.5 for REST. The default model is `grok-voice-transcribe-2.0`.
 
 Wait for `transcript.created`, send audio as binary frames, optionally send
 `{"type":"finalize"}`, then finish with `{"type":"audio.done"}`. Treat a
@@ -405,7 +412,7 @@ async function connectRealtime() {
   if (!response.ok) throw new Error(`secret mint failed: ${response.status}`);
   const secret = await response.json();
   return new WebSocket(
-    "wss://api.x.ai/v1/realtime?model=grok-voice-think-fast-2.0",
+    "wss://api.x.ai/v1/realtime?model=grok-voice-3.0",
     [`xai-client-secret.${secret.value}`],
   );
 }
@@ -675,15 +682,15 @@ The positional argument is a local file. Options are `--language`,
 
 ```bash
 progrok live \
-  --model grok-voice-think-fast-2.0 \
-  --reasoning medium \
+  --model grok-voice-3.0 \
+  --reasoning high \
   --event '{"type":"session.update","session":{"voice":"eve"}}' \
   --once
 ```
 
 `live` is an NDJSON stdin/stdout bridge to the direct Realtime WebSocket, not a
 microphone recorder. It accepts `--conversation-id`, `--reasoning
-low|medium|high`, repeatable `--event`, `--no-stdin`, and `--once`.
+high|none`, repeatable `--event`, `--no-stdin`, and `--once`.
 
 ### progrok video
 
@@ -696,11 +703,11 @@ progrok video "A cat playing piano" --duration 10 --resolution 720p
 # Image-to-video
 progrok video "Animate this photo" --image photo.jpg
 
-# Reference-to-video (repeat --ref up to 7 times)
+# Reference-to-video (repeat --ref up to 14 times on 1.5)
 progrok video "Put this character in a quiet terminal workspace" \
   --ref character.png --ref workspace.png --duration 6
 
-# Video 1.5 preview (live-smoked I2V only)
+# Video 1.5 image-to-video
 progrok video "Animate this scene" --model grok-imagine-video-1.5 --image photo.jpg
 
 # Save to specific path
@@ -711,21 +718,19 @@ progrok video "prompt" --json
 ```
 
 Options:
-- `--model <id>` — `grok-imagine-video` (default) or `grok-imagine-video-1.5`
+- `--model <id>` — `grok-imagine-video-1.5` (default), `grok-imagine-video`, or `grok-imagine-video-1.5-lite`
 - `--duration <s>` — 1-15 seconds (default: 5)
-- `--aspect <ratio>` — 16:9 (default), 9:16, 1:1, 4:3, 3:4, 3:2, 2:3
-- `--resolution <r>` — 480p (default) or 720p
+- `--aspect <ratio>` — 16:9 (default), 9:16, 1:1, 4:3, 3:4, 3:2, 2:3, 21:9, 5:2
+- `--resolution <r>` — 480p (default), 720p, or 1080p (T2V/I2V on 1.5/lite)
 - `--image <input>` — source image for image-to-video; file, URL, data URI, or `file_id:<id>`
-- `--ref <input>` — reference image for R2V; repeatable, max 7, mutually exclusive with `--image`
+- `--ref <input>` — reference image for R2V; repeatable, max 14 on 1.5, 7 on base; 1.5 allows `--image` too
 - `--seconds <s>` — send OpenAI-compatible `seconds` instead of `duration`
 - `--upload-url <url>` — send `output.upload_url`
 - `--output <path>` — output file path
 - `--timeout <s>` — polling timeout (default: 600)
 - `--json` — structured JSON output
 
-Video 1.5 live smoke passes I2V, but prompt-only T2V and `reference_images`
-return upstream 400 errors. Edit/extend also block 1.5 until xAI exposes video
-input for that preview model.
+1.5 supports T2V, I2V, and R2V; edit and extend require the base model. Frame pins use `--last-frame <input>` and repeatable `--keyframe <input@seconds>`; `--voice <voice_id>` selects preset voices.
 
 ### progrok image
 
@@ -738,9 +743,18 @@ progrok image "Make it winter" --ref photo.jpg
 ```
 
 Options:
-- `--model <id>` — `grok-imagine-image` (default) or `grok-imagine-image-quality`
-- `--aspect <ratio>` — 1:1 (default), 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, auto
-- `--resolution <r>` — 1k (default) or 2k
-- `--ref <path>` — reference image for editing (repeatable, max 3)
+- `--model <id>` — `grok-imagine-image-2.0` (default) or `grok-imagine-image`
+- `--aspect <ratio>` — 1:1 (default), 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 21:9, 5:2, auto
+- `--resolution <r>` — 1k (default), 1.5k or 2k
+- `--quality <q>` — low, medium or auto for image 2.0
+- `--ref <path>` — reference image for editing (repeatable, max 5)
 - `--output <path>` — output file path
 - `--json` — structured JSON output
+
+### Billing and audio CLI
+
+`progrok billing --json` preserves the legacy 3.0.0 keys and adds `plan`, `weekly`, `resetCoupons`. When only weekly succeeds the shape is `{email, plan, weekly, resetCoupons, legacy: null}`. Coupon states are `ok`, `unknown`, and `error`: read-only; progrok never redeems a reset. Text shows missing amounts and failed weekly reads as unavailable, and reset times in UTC.
+
+`progrok tts` accepts `--speed <n>`, `--sample-rate <hz>`, `--bit-rate <bps>`, `--latency <0|1|2>`, `--text-normalization`, and `--list-voices`. `progrok stt` accepts `--model <id>`, `--filler-words`, `--vad-threshold <0..1>`, `--format`, `--audio-format <pcm|mulaw|alaw>`, `--sample-rate <hz>`, and `--channels <n>`. `progrok live --reasoning` accepts `high|none`; other values and non-`grok-voice-*` models exit 1.
+
+Image 2.0 accepts `quality` `low|medium|auto`; `auto` selects low for generation and medium for edits. Up to five edit inputs are accepted.

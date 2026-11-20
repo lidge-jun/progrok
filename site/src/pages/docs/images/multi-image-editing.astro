@@ -5,7 +5,7 @@ const title = 'Multi-Image Editing';
 
 <DocsLayout title={title}>
 <h1>Multi-Image Editing</h1>
-<p>Combine up to 3 reference images in a single edit request. The model blends elements from all references according to your prompt.</p>
+<p>Combine up to 5 reference images in a single edit request. The model blends elements from all references according to your prompt.</p>
 <h2>CLI</h2>
 <pre><code>{`progrok image --ref style.png --ref subject.png "combine the style with the subject"`}</code></pre>
 <h2>API</h2>
@@ -22,4 +22,5 @@ const title = 'Multi-Image Editing';
   "resolution": "1k"
 }'`}</code></pre>
 <p>Use <code>images[]</code> for multiple references; do not combine it with singular <code>image</code>. Output controls are <code>aspect_ratio</code> and <code>resolution</code>.</p>
+<p>Image 2.0 supports quality low, medium, or auto (medium for edits) and 1k, 1.5k, and 2k resolutions.</p>
 </DocsLayout>

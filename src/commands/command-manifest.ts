@@ -40,7 +40,7 @@ export const COMMAND_MANIFEST: CommandManifestEntry[] = [
   { name: "search", summary: "Search the web and X through Responses.", mutatesRemote: true, json: true },
   { name: "video", summary: "Generate, edit, or extend video.", mutatesRemote: true, json: true },
   { name: "image", summary: "Generate or edit images.", mutatesRemote: true, json: true },
-  { name: "billing", summary: "Read subscription billing and usage.", mutatesRemote: false, json: true },
+  { name: "billing", summary: "Read weekly usage, billing and reset coupons.", mutatesRemote: false, json: true },
   { name: "tts", summary: "Synthesize speech to a file or stdout.", mutatesRemote: true, json: true },
   { name: "stt", summary: "Transcribe an audio file.", mutatesRemote: true, json: true },
   { name: "live", summary: "Bridge Realtime events over NDJSON stdin/stdout.", mutatesRemote: true, json: true },

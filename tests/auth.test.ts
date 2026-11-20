@@ -18,8 +18,11 @@ import type {
 import type { TokenManagerDependencies } from "../src/auth/token-manager.js";
 
 const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 const tempHome = mkdtempSync(join(tmpdir(), "progrok-auth-test-"));
+// os.homedir() reads HOME on POSIX and USERPROFILE on Windows.
 process.env.HOME = tempHome;
+process.env.USERPROFILE = tempHome;
 
 const constants = await import("../src/auth/constants.js");
 const tokenStore = await import("../src/auth/token-store.js");
@@ -131,6 +134,8 @@ afterEach(() => {
 after(() => {
   if (originalHome === undefined) delete process.env.HOME;
   else process.env.HOME = originalHome;
+  if (originalUserProfile === undefined) delete process.env.USERPROFILE;
+  else process.env.USERPROFILE = originalUserProfile;
   rmSync(tempHome, { recursive: true, force: true });
 });
 
@@ -838,4 +843,13 @@ it("preserves config and onboarding utilities beside the auth changes", async ()
   await showStarPrompt();
   assert.equal(readConfig().onboarding?.starPrompted, true);
   assert.equal(existsSync(configFile), true);
+});
+
+describe("auth test home", () => {
+  // On Windows os.homedir() follows USERPROFILE, not HOME; both must point here
+  // or the store writes somewhere the fixtures never look.
+  it("resolves the auth and config paths inside this file's temporary home", () => {
+    assert.equal(constants.AUTH_FILE, authFile);
+    assert.equal(constants.CONFIG_FILE, configFile);
+  });
 });

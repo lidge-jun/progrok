@@ -16,15 +16,16 @@ progrok video extend "camera pulls back" --video file_id:file-abc123 --duration 
 <table>
 <tr><th>Flag</th><th>Description</th></tr>
 <tr><td><code>--image</code></td><td>Source image for image-to-video. File, URL, data URI, or <code>file_id:&lt;id&gt;</code>.</td></tr>
-<tr><td><code>--ref</code></td><td>Reference image for reference-to-video. Repeatable up to 7 times; cannot be combined with <code>--image</code>.</td></tr>
+<tr><td><code>--ref</code></td><td>Reference image for reference-to-video. Up to 14 on 1.5, 7 on base, none on lite. On 1.5 it may accompany <code>--image</code>.</td></tr>
 <tr><td><code>--video</code></td><td>Source video for edit/extend. File, URL, data URI, or <code>file_id:&lt;id&gt;</code>.</td></tr>
-<tr><td><code>--model</code></td><td><code>grok-imagine-video</code> by default; <code>grok-imagine-video-1.5</code> is live-smoked as I2V only.</td></tr>
+<tr><td><code>--model</code></td><td><code>grok-imagine-video-1.5</code> by default; base alone supports edit and extend.</td></tr>
 <tr><td><code>--output</code></td><td>Output file path for downloaded MP4.</td></tr>
-<tr><td><code>--duration</code></td><td>Generation duration 1-15s; reference-to-video max 10s; extension duration 2-10s.</td></tr>
+<tr><td><code>--duration</code></td><td>Generation duration 1-15s; reference-to-video max 15s on 1.5 and 10s on base; extension duration 2-10s.</td></tr>
 <tr><td><code>--seconds</code></td><td>Send the OpenAI-compatible <code>seconds</code> alias instead of <code>duration</code>.</td></tr>
 <tr><td><code>--upload-url</code></td><td>Send <code>output.upload_url</code> when you have a signed destination URL.</td></tr>
 <tr><td><code>--json</code></td><td>Print the final xAI response instead of downloading the MP4.</td></tr>
 </table>
 <h2>REST vs SDK Names</h2>
 <p>REST does not use a <code>mode</code> field. Vercel AI SDK mode strings such as <code>edit-video</code>, <code>extend-video</code>, and <code>reference-to-video</code> map to different endpoints or fields in REST. progrok exposes the REST-native shape.</p>
+<p><code>--resolution &lt;r&gt;</code> supports 1080p T2V/I2V on 1.5 and lite. On 1.5 use <code>--last-frame &lt;input&gt;</code>, repeatable <code>--keyframe &lt;input@seconds&gt;</code> (up to four), and repeatable <code>--voice &lt;voice_id&gt;</code> (up to three). Keyframes must not round to the same 1/3-second slot. Frame pins select R2V and its 720p limit.</p>
 </DocsLayout>

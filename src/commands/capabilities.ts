@@ -1,6 +1,8 @@
 import { Command } from "commander";
 import {
   AUTH_FILE,
+  DEFAULT_IMAGE_MODEL,
+  DEFAULT_VIDEO_MODEL,
   CHAT_DEFAULT_PORT,
   PROXY_DEFAULT_HOST,
   PROXY_DEFAULT_PORT,
@@ -11,6 +13,7 @@ import type { ModelFamily, XaiModel } from "../surfaces/models.js";
 import { SURFACE_REGISTRY } from "../surfaces/registry.js";
 import { createXaiTransport } from "../transport/fetch.js";
 import { readPackageVersion } from "../utils/version.js";
+import { TTS_BUILTIN_VOICES } from "../voice/tts.js";
 import { COMMAND_MANIFEST, DEFAULT_LIVE_MODEL } from "./command-manifest.js";
 
 const MODEL_FAMILIES = [
@@ -22,9 +25,11 @@ const MODEL_FAMILIES = [
 ] as const satisfies readonly ModelFamily[];
 
 const VIDEO_NOTES = [
-  { id: "text-to-video", endpoint: "POST /v1/videos/generations", cli: "progrok video <prompt>", status: "supported" },
-  { id: "image-to-video", endpoint: "POST /v1/videos/generations", cli: "progrok video <prompt> --image <input>", status: "supported" },
-  { id: "reference-to-video", endpoint: "POST /v1/videos/generations", cli: "progrok video <prompt> --ref <input>", status: "supported" },
+  { id: "text-to-video", endpoint: "POST /v1/videos/generations", cli: "progrok video <prompt>", status: "supported", notes: "All three video models." },
+  { id: "image-to-video", endpoint: "POST /v1/videos/generations", cli: "progrok video <prompt> --image <input>", status: "supported", notes: "All three video models." },
+  { id: "reference-to-video", endpoint: "POST /v1/videos/generations", cli: "progrok video <prompt> --ref <input>", status: "supported", notes: "Up to 14 references on 1.5, 7 on the base model; unavailable on lite." },
+  { id: "frame-pins", endpoint: "POST /v1/videos/generations", cli: "progrok video [prompt] --image <first> --last-frame <last> --keyframe <img@t>", status: "supported-grok-imagine-video-1.5-only" },
+  { id: "voice-references", cli: "--voice <id>", status: "supported-grok-imagine-video-1.5-only" },
   { id: "edit-video", endpoint: "POST /v1/videos/edits", cli: "progrok video edit <prompt> --video <input>", status: "supported-grok-imagine-video-only" },
   { id: "extend-video", endpoint: "POST /v1/videos/extensions", cli: "progrok video extend <prompt> --video <input>", status: "supported-grok-imagine-video-only" },
 ] as const;
@@ -159,6 +164,7 @@ export async function buildCapabilities(options: {
           features: [
             "image",
             "video-polling",
+            "video-1080p",
             "provenance-caption",
             "cancel",
           ],
@@ -172,6 +178,10 @@ export async function buildCapabilities(options: {
     voiceModels,
     recommendations: {
       liveDefaultModel: DEFAULT_LIVE_MODEL,
+      liveReproduciblePin: "grok-voice-3.0",
+      imageDefaultModel: DEFAULT_IMAGE_MODEL,
+      videoDefaultModel: DEFAULT_VIDEO_MODEL,
+      ttsVoices: TTS_BUILTIN_VOICES,
       note:
         "Rolling alias used as the operational default; realtime voice models are not listed in /v1/models.",
     },
@@ -190,6 +200,7 @@ export async function buildCapabilities(options: {
       models: "Use `progrok models --json` for the live model catalog.",
     },
     limitations: [
+      "Grok reset coupons are listed read-only; progrok never redeems them.",
       "The local proxy handles HTTP only; live and Responses WebSocket clients connect directly to api.x.ai.",
       "Collection management requires management-api.x.ai and a Management API key; progrok exposes only collection search.",
       "Browser ephemeral auth is verified for realtime and STT only; TTS over a browser-minted secret is unverified.",

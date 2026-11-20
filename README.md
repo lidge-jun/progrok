@@ -164,17 +164,19 @@ export OPENAI_API_KEY=anything
 | `progrok search <query> --web` | Restrict search to web sources. |
 | `progrok search <query> --x` | Restrict search to X sources. |
 | `progrok search <query> --reasoning high` | Add reasoning effort to a search request. |
-| `progrok image <prompt>` | Generate an Imagine image. |
+| `progrok image <prompt>` | Generate an Imagine image (`grok-imagine-image-2.0`; `--quality low\|medium\|auto`). |
 | `progrok image <prompt> --ref ./input.png` | Edit or compose from a reference image. |
 | `progrok video <prompt>` | Text-to-video generation. |
 | `progrok video <prompt> --image ./input.png` | Image-to-video (animate still image). |
+| `progrok video <prompt> --ref ./a.png --voice eve` | Reference-to-video with preset voices; `--last-frame` and `--keyframe` pin frames (1.5 only). |
 | `progrok video edit <prompt> --video <url>` | Edit existing video with text (real V2V). `grok-imagine-video` only. |
 | `progrok video extend <prompt> --video <url>` | Continue video from last frame. `grok-imagine-video` only. |
-| `progrok billing` | Show subscription plan, usage, and remaining quota. |
-| `progrok billing --json` | Machine-readable billing and usage data. |
-| `progrok tts <text>` | Synthesize speech to a file or raw stdout. |
-| `progrok stt <file>` | Transcribe a local audio file; supports language hints, diarization, multichannel audio, and repeatable key terms. |
-| `progrok live` | Bridge direct Realtime events over NDJSON stdin/stdout; it does not capture the microphone. |
+| `progrok billing` | Show the weekly usage pool, plan, balances and reset coupons (read-only; never redeems). |
+| `progrok billing --json` | The 3.0.0 billing JSON plus `plan`, `weekly` and `resetCoupons`. |
+| `progrok tts <text>` | Synthesize speech to a file or raw stdout; `--speed`, `--sample-rate`, `--bit-rate`, `--latency 0\|1\|2`, `--text-normalization`. |
+| `progrok tts --list-voices` | List the voices GET /v1/tts/voices returns for your session (28 built-in today). |
+| `progrok stt <file>` | Transcribe a local audio file; supports language hints, diarization, multichannel audio, repeatable key terms, `--filler-words`, `--vad-threshold`, `--format` and `--model`. |
+| `progrok live` | Bridge direct Realtime events over NDJSON stdin/stdout; it does not capture the microphone. `--reasoning high\|none`. |
 | `progrok capabilities --json` | Print machine-readable command, model, and endpoint metadata. |
 | `progrok skill` | Print an agent-oriented usage guide. |
 
@@ -197,92 +199,122 @@ Reasoning effort values: `none`, `low`, `medium`, `high`, `xhigh`.
 
 ## Image and Video
 
-Image generation:
+Media commands call xAI directly with your OAuth session. Video jobs are polled
+until they finish; progress is reported as a percent.
+
+Images use `grok-imagine-image-2.0` by default. `--quality low|medium|auto`
+picks the quality you pay for (omit it and xAI chooses: low for generation,
+medium for edits); `high` does not exist and is rejected. Resolutions are `1k`,
+`1.5k` and `2k`; aspect ratios include `21:9` and `5:2`. An edit takes up to
+five `--ref` images. Files are saved with the extension of what xAI returns,
+which today is JPEG (`progrok-image.jpg`); with `--n 2` or more and `--output`,
+each image gets a numbered name (`out-1.jpg`, `out-2.jpg`).
 
 ```bash
 progrok image "a crisp terminal UI product shot for a CLI called progrok"
-progrok image "make this diagram cleaner" --ref ./diagram.png --output ./out
+progrok image "a wide banner of the CLI" --quality medium --resolution 2k --aspect 5:2
+progrok image "make this diagram cleaner" --ref ./diagram.png --output ./out.jpg
 ```
 
-Video generation:
+Videos use `grok-imagine-video-1.5` by default:
 
 ```bash
 # Text-to-video
 progrok video "a terminal command expanding into a network diagram"
 
-# Image-to-video (animate a still image)
+# Cheapest per second: 1.5-lite at 480p ($0.02/s; no references or frame pins)
+progrok video "a calm product shot" --model grok-imagine-video-1.5-lite
+
+# 1080p text-to-video (lite upscales from 720p at $0.14/s; 1.5 renders natively)
+progrok video "a calm product shot" --model grok-imagine-video-1.5-lite --resolution 1080p
+
+# Image-to-video (animate a still image; prompt optional)
 progrok video "turn this interface into a smooth product demo" --image ./screen.png
 
-# Reference-to-video (guide the scene with up to 7 images, max 10s)
-progrok video "put this character in a quiet terminal workspace" \
-  --ref ./character.png --ref ./workspace.png --duration 6
+# Reference-to-video: up to 14 images and 3 preset voices on 1.5
+progrok video "the person from <IMAGE_0> presents the product from <IMAGE_1>, speaking with the voice from <AUDIO_0>" \
+  --ref ./person.png --ref ./product.png --voice eve --duration 8
 
-# Video editing — modify existing video, keep motion (grok-imagine-video only)
+# Pin the first, last and middle frames (1.5 only)
+progrok video "the camera glides between the two shots" \
+  --image ./first.png --last-frame ./last.png --keyframe ./middle.png@4 --duration 8
+
+# Video editing — modify an existing clip, keep the motion (grok-imagine-video only)
 progrok video edit "Make the background a sunset sky" --video ./clip.mp4
 
-# Video extension — continue from last frame (grok-imagine-video only)
+# Video extension — continue from the last frame (grok-imagine-video only)
 progrok video extend "Camera slowly pulls back revealing the full scene" \
   --video file_id:file-abc123 --duration 5
 ```
 
 ### Model constraints
 
-| Model | T2V | I2V | Ref2V | Edit | Extend |
-|-------|:---:|:---:|:-----:|:----:|:------:|
-| `grok-imagine-video` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `grok-imagine-video-1.5` | ❌¹ | ✅ | ❌¹ | ❌ | ❌ |
+| Model | T2V | I2V | Ref2V | Frame pins | Voices | Edit | Extend | Max resolution |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | --- |
+| `grok-imagine-video-1.5` | ✅ | ✅ | ✅ 14 refs, 15 s | ✅ | ✅ 3 | ❌ | ❌ | 1080p (T2V/I2V), 720p (Ref2V) |
+| `grok-imagine-video-1.5-lite` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | 1080p, upscaled from 720p |
+| `grok-imagine-video` | ✅ | ✅ | ✅ 7 refs, 10 s | ❌ | ❌ | ✅ | ✅ | 720p |
 
-¹ xAI's model page describes text+image input, but live OAuth smoke returned
-`Text-to-video is not supported for this model` for prompt-only T2V and
-``reference_images` is not supported for this model` for Ref2V. progrok treats
-1.5-preview as I2V-only until the API changes.
+- A reference image, a voice, `--last-frame` or a `--keyframe` makes the request
+  reference-to-video, so the 720p cap applies to all of them.
+- On 1.5, `--image` together with `--ref`, `--voice` or a pinned frame is the
+  first frame of that request. On `grok-imagine-video`, `--image` and `--ref`
+  cannot be combined (xAI returns 400).
+- `--keyframe <input@seconds>` takes up to four anchors strictly inside the clip.
+  xAI snaps them to a 1/3-second grid, so two that round to the same slot are
+  rejected.
+- progrok checks these rules before sending. A model it has no rules for is
+  passed through and left to xAI.
 
 ### Video API surface map
 
-| Surface | CLI | REST canonical shape | Status |
+| Surface | CLI | REST shape | Notes |
 | --- | --- | --- | --- |
-| Text-to-video | `progrok video "<prompt>"` | `prompt` only on `/v1/videos/generations` | Supported |
-| Image-to-video | `--image <file|url|data|file_id:id>` | `image: {url | file_id}` | Supported |
-| Reference-to-video | `--ref <input>` repeatable | `reference_images: [{url | file_id}]` | Supported, max 7 refs, max 10s |
-| Edit video | `progrok video edit ... --video <input>` | `video: {url | file_id}` on `/v1/videos/edits` | Supported on base model |
-| Extend video | `progrok video extend ... --video <input>` | `video: {url | file_id}` on `/v1/videos/extensions` | Supported on base model |
-| Duration alias | `--seconds <s>` | `seconds` instead of `duration` | OpenAI-compat alias |
-| Signed output target | `--upload-url <url>` | `output: {upload_url}` | Exposed for signed PUT destinations |
+| Text-to-video | `progrok video "<prompt>"` | `prompt` on `/v1/videos/generations` | All three models |
+| Image-to-video | `--image <file\|url\|data\|file_id:id>` | `image: {url \| file_id}` | Prompt optional |
+| Reference-to-video | `--ref <input>` repeatable | `reference_images: [{url \| file_id}]` | 14 on 1.5, 7 on base |
+| Preset voices | `--voice <voice_id>` repeatable | `reference_audios: [{voice_id}]` | 1.5 only, max 3 |
+| Last frame | `--last-frame <input>` | `last_frame: {url \| file_id}` | 1.5 only |
+| Keyframes | `--keyframe <input@seconds>` | `keyframes: [{image, timestamp_s}]` | 1.5 only, max 4 |
+| Edit video | `progrok video edit ... --video <input>` | `video: {url \| file_id}` on `/v1/videos/edits` | Base model; source up to 8.7 s, output keeps its duration and aspect, max 720p |
+| Extend video | `progrok video extend ... --video <input>` | `video: {url \| file_id}` on `/v1/videos/extensions` | Base model; adds 2–10 s (default 6) |
+| Duration alias | `--seconds <s>` | `seconds` instead of `duration` | OpenAI-compatible alias |
+| Signed output target | `--upload-url <url>` | `output: {upload_url}` | xAI PUTs the result there |
 
-`mode: "edit-video"` / `"extend-video"` / `"reference-to-video"` is a Vercel
-AI SDK provider option, not a direct REST selector. Live REST smoke accepted a
-stray `mode` field but treated the request as ordinary T2V.
+Every `--image`, `--ref`, `--last-frame`, `--keyframe` and `--video` input can be
+a local file, an HTTPS URL, a data URI or `file_id:<id>`. Use `video: {url}` for
+REST calls; the `video_url` alias fails with `422 missing field video`.
 
-### Live smoke verdicts
+### Live smoke (2026-11-21)
 
 | Probe | Result |
 | --- | --- |
-| T2V, I2V, R2V on `grok-imagine-video` | Passed, `status: done` |
-| Edit/extend by source URL | Passed, `status: done` |
-| `file_id` image/video input | Passed for I2V, R2V, edit, and extend |
-| `seconds` alias | Passed |
-| `image_url` REST alias | Passed |
-| `output.upload_url` | Passed with a public PUT endpoint; result `video.url` equals the upload URL |
-| `video_url` REST alias | Failed with `422 missing field video`; use `video: {url}` |
-| `1080p` | Failed for this team: `1080p video resolution is not available for your team` |
-| `grok-imagine-video-1.5` | I2V passed; prompt-only T2V and Ref2V failed |
+| `grok-imagine-video-1.5` text-to-video, no image | Done |
+| 1.5 with first frame, a reference image, voice `eve`, `last_frame` and a keyframe | Done |
+| `grok-imagine-video-1.5-lite` text-to-video at 480p and at 1080p | Done |
+| 1.5 reference-to-video at 1080p, or `last_frame` alone at 1080p | Rejected: 720p cap for reference-to-video |
+| lite with `reference_images` or `last_frame` | Rejected: not supported for this model |
+| 1.5 with 15 reference images | Rejected: maximum 14 |
+| Job progress | Integer percent, 1 → 10 → 50 → 100 |
 
-### Video editing/extension constraints
+### Historical smoke (2026-06)
 
-- **Input**: `.mp4` (H.264/H.265/AV1), max 8.7s (edit) or 2–15s (extend)
-- **`--image`, `--ref`, `--video`**: local file, HTTPS URL, data URI, or
-  `file_id:<id>`
-- **Mutual exclusion**: `--image` and `--ref` cannot be combined; xAI returns
-  `400 Bad Request`
-- **Edit output**: Same duration/aspect/resolution as input (max 720p)
-- **Extend duration**: 2–10s (default 6s), added to original
-- **Model**: `grok-imagine-video` only — 1.5-preview returns "not supported"
-- **Unsupported knobs**: edit ignores/rejects duration/aspect/resolution;
-  extend ignores/rejects aspect/resolution; 1080p appears in one REST schema
-  but current model/docs/pricing pages only confirm 480p/720p
+These results came from an earlier API and are kept as a record. The two marked
+rows no longer hold.
 
-Media commands call xAI endpoints directly with your OAuth session and poll async
-jobs until completion.
+| Probe | Result then |
+| --- | --- |
+| T2V, I2V, R2V on `grok-imagine-video` | Passed |
+| Edit/extend by source URL | Passed |
+| `file_id` image/video input | Passed for I2V, R2V, edit and extend |
+| `seconds` alias, `image_url` REST alias | Passed |
+| `output.upload_url` | Passed; result `video.url` equals the upload URL |
+| `video_url` REST alias | Failed with `422 missing field video` |
+| `1080p` | Failed for this team (**no longer holds**: 1080p works on 1.5 and lite) |
+| `grok-imagine-video-1.5` | Only I2V passed (**no longer holds**: T2V and R2V work) |
+
+The web Media tab offers 1080p when the selected model allows it, and for a model
+this build has no rules for.
 
 ## Proxy Coverage
 
@@ -329,10 +361,30 @@ source of truth, not this page.
 | `grok-4.20-0309-non-reasoning` | Lower-latency text | 200K+ | Legacy non-reasoning model. |
 | `grok-4.20-multi-agent-0309` | Deep research | 200K+ | Supports high and xhigh effort. |
 | `grok-imagine-image` | Image generation and editing | - | $0.002/input image; $0.02/output image. |
-| `grok-imagine-image-2.0` | Current Imagine image model | - | Returned by the live catalog. |
-| `grok-imagine-image-quality` | Higher-quality image output | - | $0.01/input image; $0.05 (1K) or $0.07 (2K) output image. |
+| `grok-imagine-image-2.0` | Current Imagine image model | - | Default; quality low, medium, or auto. |
 | `grok-imagine-video` | Video: T2V, I2V, Ref2V, Edit, Extend | - | $0.002/input image, $0.01/input video sec; $0.05/sec (480p), $0.07/sec (720p). |
-| `grok-imagine-video-1.5` | Video: I2V only in live smoke; no native T2V/Ref2V/Edit/Extend | - | $0.01/input image; $0.08/sec (480p), $0.14/sec (720p). |
+| `grok-imagine-video-1.5` | T2V, I2V, Ref2V | - | Default video model. |
+| `grok-imagine-video-1.5-lite` | T2V, I2V | - | 1080p upscaled. |
+
+### Media pricing
+
+| Model | 480p | 720p | 1080p | Inputs |
+| --- | --- | --- | --- | --- |
+| grok-imagine-video | $0.05/s | $0.07/s | — | image $0.002, input video $0.01/s |
+| grok-imagine-video-1.5 | $0.08/s | $0.14/s | $0.25/s (T2V/I2V only) | image $0.01; preset voices free |
+| grok-imagine-video-1.5-lite | $0.02/s | $0.03/s | $0.14/s (upscaled) | image $0.01 |
+
+| Model | 1K | 1.5K | 2K | Inputs |
+| --- | --- | --- | --- | --- |
+| grok-imagine-image-2.0 low | $0.04 | $0.05 | $0.06 | edit input $0.01/image |
+| grok-imagine-image-2.0 medium | $0.06 | $0.07 | $0.08 | edit input $0.01/image |
+| grok-imagine-image (1.0) | $0.02 | — | $0.02 | $0.002/image |
+
+xAI model catalog and docs.x.ai pricing, read 2026-11-21; live cost_in_usd_ticks matched 1.5 480p $0.08/s, lite 480p $0.02/s, lite 1080p $0.14/s and image 2.0 1K medium $0.06. Prices change; xAI's pricing page is authoritative. `auto` is billed at the quality actually served.
+
+### Billing
+
+`progrok billing` shows weekly usage, plan, balances and reset coupons read-only. Missing amounts and failed weekly reads are shown as unavailable; reset times are UTC. `progrok billing --json` preserves legacy fields and adds `plan`, `weekly`, and `resetCoupons`; when only weekly succeeds it returns `{email, plan, weekly, resetCoupons, legacy: null}`. Coupon status is `ok`, `unknown`, or `error`; progrok never redeems a reset.
 
 ### Not in `/v1/models`
 
@@ -342,7 +394,8 @@ will not show them.
 | Model | Best for | Notes |
 | --- | --- | --- |
 | `grok-composer-2.5-fast` | Agentic code composition | Live on `/v1/chat/completions`; supports `reasoning_content`. May need team-level access. |
-| `grok-voice-latest` | Rolling Voice alias, `progrok live` default | Realtime voice models are not catalog entries. Pin a dated build for reproducibility. |
+| `grok-voice-latest` | Rolling Voice alias, `progrok live` default | Points to `grok-voice-3.0`. Realtime voice models are not catalog entries. |
+| `grok-voice-3.0` | Reproducible Voice pin | Reasoning effort `high` (default) or `none`; `grok-voice-2.0` is deprecated. |
 
 Text pricing for `grok-4.6` is $2.00 per 1M input tokens and $6.00 per 1M output
 tokens, from [docs.x.ai/developers/models](https://docs.x.ai/developers/models)

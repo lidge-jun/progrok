@@ -11,7 +11,10 @@ that would tell you the contract broke.
 | One-use voice client secret per connection, never reused | `src/web/client/voice.ts` `openFreshSocket()` mints, `buildVoiceSocketSpec()` carries it in the subprotocol | `tests/voice-ws.test.ts`, `tests/webapp.test.ts` |
 | Tolerant voice parsing: an unmodelled event is dropped and the call continues; only a server `error` event fails the session | `src/voice/protocol.ts` `tryParseRealtimeServerEvent` / `tryParseSttServerEvent` | `tests/voice-tolerant-parse.test.ts` |
 | `capabilities --json` schema 2: `commands` is an array of objects, endpoints come from the surface registry | `src/commands/capabilities.ts` | `tests/capabilities.test.ts` |
-| Layer dependency direction | [10_layers.md](10_layers.md) | not yet automated — see the roadmap |
+| Video model rules and request validation | `src/utils/video-rules.ts`, `src/commands/video-request.ts` | `tests/video-request.test.ts`, `tests/video-cli.test.ts`, `tests/media-screen.test.ts` |
+| Billing JSON remains additive; coupons are read-only and an unrecognized reply is never shown as zero | `src/surfaces/billing.ts`, `src/surfaces/grpc-web.ts`, `src/commands/billing.ts` | `tests/billing.test.ts` |
+| Test suite uses a throwaway HOME and USERPROFILE | `scripts/run-tests.mjs` | `tests/test-isolation.test.ts` |
+| Layer dependency direction | [10_layers.md](10_layers.md) | `tests/module-boundaries.test.ts` (POSIX and Windows paths) |
 
 ## Why tolerant parsing is a contract
 
@@ -22,7 +25,8 @@ a call to drop.
 
 ## Meta
 
-The layer-direction row has no enforcement yet. A boundary test is planned in
-[devlog/_plan/260919_structure_modularize/020_modularize.md](../devlog/_plan/260919_structure_modularize/020_modularize.md);
-until it exists, this table is describing intent, not a gate.
+Every row names the test that enforces it. The layer-direction row is enforced by
+`tests/module-boundaries.test.ts`, which reads each import and fails on an edge that
+[10_layers.md](10_layers.md) does not allow; it splits paths on either separator so the
+Windows CI cells check the same edges as POSIX.
 

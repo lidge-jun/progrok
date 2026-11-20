@@ -5,7 +5,7 @@ const title = 'Reference to Video';
 
 <DocsLayout title={title}>
 <h1>Reference to Video</h1>
-<p>Generate videos guided by reference images. Supply up to 7 inputs through <code>reference_images</code>; each input is <code>&#123;url | file_id&#125;</code>. The generated video is capped at 10 seconds for this mode.</p>
+<p>Generate videos guided by reference images. Supply up to 14 inputs on 1.5 or 7 on the base model through <code>reference_images</code>; each input is <code>&#123;url | file_id&#125;</code>. The generated video is capped at 15 seconds on 1.5 and 10 seconds on the base model.</p>
 <h2>CLI</h2>
 <pre><code>{`progrok video "put this character in a quiet terminal workspace" \
   --ref character.png --ref workspace.png --duration 6`}</code></pre>
@@ -23,5 +23,6 @@ const title = 'Reference to Video';
     "duration": 10
   }'`}</code></pre>
 <h2>Mode Boundary</h2>
-<p>Reference-to-video is not image-to-video. Do not send <code>image</code> with <code>reference_images</code>; use one mode per request. Vercel AI SDK names this with <code>providerOptions.xai.mode = "reference-to-video"</code>, but REST selects the mode from the fields you send.</p>
+<p>Reference-to-video is not image-to-video. On base, do not send <code>image</code> with <code>reference_images</code>; 1.5 uses the image as a first-frame pin. Vercel AI SDK names this with <code>providerOptions.xai.mode = "reference-to-video"</code>, but REST selects the mode from the fields you send.</p>
+<p>1.5 supports <code>last_frame</code>, up to four <code>keyframes</code> and up to three preset voices in <code>reference_audios</code>. Keyframes cannot round to the same 1/3-second slot. Frame-only requests are R2V, capped at 720p. Lite does not support references.</p>
 </DocsLayout>

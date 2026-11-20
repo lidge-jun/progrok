@@ -3,15 +3,18 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { mockExports } from "./helpers/mock-exports.js";
 
 const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 const testHome = fs.mkdtempSync(join(tmpdir(), "progrok-auth-atomic-test-"));
+// os.homedir() reads HOME on POSIX and USERPROFILE on Windows.
 process.env.HOME = testHome;
+process.env.USERPROFILE = testHome;
 
 const originalRenameSync = fs.renameSync;
 let blockAuthPublish = false;
-const fsMock = mock.module("node:fs", {
-  exports: {
+const fsMock = mock.module("node:fs", mockExports({
     chmodSync: fs.chmodSync,
     existsSync: fs.existsSync,
     mkdirSync: fs.mkdirSync,
@@ -19,15 +22,14 @@ const fsMock = mock.module("node:fs", {
     rmSync: fs.rmSync,
     writeFileSync: fs.writeFileSync,
     renameSync(from: fs.PathLike, to: fs.PathLike): void {
-      if (blockAuthPublish && String(to).endsWith("/.progrok/auth.json")) {
+      if (blockAuthPublish && String(to).replaceAll("\\", "/").endsWith("/.progrok/auth.json")) {
         throw Object.assign(new Error("injected rename failure"), {
           code: "EACCES",
         });
       }
       originalRenameSync(from, to);
     },
-  },
-});
+  }));
 
 const tokenStore = await import("../src/auth/token-store.js");
 const authDir = join(testHome, ".progrok");
@@ -37,6 +39,8 @@ after(() => {
   fsMock.restore();
   if (originalHome === undefined) delete process.env.HOME;
   else process.env.HOME = originalHome;
+  if (originalUserProfile === undefined) delete process.env.USERPROFILE;
+  else process.env.USERPROFILE = originalUserProfile;
   fs.rmSync(testHome, { recursive: true, force: true });
 });
 
