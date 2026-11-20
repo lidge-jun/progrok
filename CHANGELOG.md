@@ -1,8 +1,13 @@
 # Changelog
 
-## [Unreleased]
+## [3.1.0] - 2026-11-21
+
+Version 3.0.0 never reached npm.
 
 ### Added
+
+- Video 1.5 frame pins, preset voices and reference generation, lite generation, and 1080p for supported requests. Image 2.0 quality and resolution controls, extended TTS/STT options and 28 built-in voices.
+- Billing shows weekly usage and reset coupons read-only; JSON adds plan, weekly and resetCoupons while preserving legacy fields.
 
 - The local web app is one workspace with Chat, Voice and Media tabs. The top
   bar reports the served endpoint, the catalog model count and the active model,
@@ -23,11 +28,16 @@
 
 ### Fixed
 
+- The test suite previously deleted the real `~/.progrok/auth.json`; it now uses a throwaway home. Re-run progrok login if your session vanished after running the tests.
+- Video progress, frame validation, realtime reasoning and TTS latency match the upstream protocol.
+
 - A live voice call no longer ends when the server sends an event this build
   cannot model. The parser drops it, logs a sanitised type and keeps reading.
   Only a server `error` event fails the session.
 
 ### Changed
+
+- Default image and video models are Image 2.0 and Video 1.5. They cost more at their starting resolutions: image $0.04 versus $0.02, video $0.08/s versus $0.05/s; actual prices depend on resolution and quality.
 
 - `DEFAULT_MODEL` is `grok-4.6`, and the realtime default is the rolling
   `grok-voice-latest` alias. The constant is now `DEFAULT_REALTIME_MODEL`
