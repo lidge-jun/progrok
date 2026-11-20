@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseCreditsResponse, parseLegacyBilling, decodeRemainingResets, fetchResetCoupons } from '../src/surfaces/billing.js';
 import { encodeGrpcWebFrame, decodeVarint } from '../src/surfaces/grpc-web.js';
+import { mockExports } from './helpers/mock-exports.js';
 
 const credits = { config: { currentPeriod: { type: 'USAGE_PERIOD_TYPE_WEEKLY', start: '2026-11-20T06:42:00Z', end: '2026-11-27T06:42:00Z' }, creditUsagePercent: 3, productUsage: [{ product: 'GrokBuild', usagePercent: 3 }], prepaidBalance: { val: 0 }, onDemandCap: { val: 0 }, onDemandUsed: { val: 0 }, isUnifiedBillingUser: true } };
 const v = (n: number): number[] => { const a: number[] = []; do { let b = n % 128; n = Math.floor(n / 128); if (n) b |= 128; a.push(b); } while (n); return a; };
@@ -45,7 +46,7 @@ test('source contains no coupon redemption RPC', () => { const walk=(p:string):s
 
 test('billing command preserves legacy JSON and handles weekly-only and failures', async () => {
  const { mock } = await import('node:test');
- mock.module(new URL('../src/auth/token-store.ts', import.meta.url), { exports: {getValidBearer:async()=> 'fake', loadTokens:()=>({accountId:'user'})} });
+ mock.module(new URL('../src/auth/token-store.ts', import.meta.url), mockExports({getValidBearer:async()=> 'fake', loadTokens:()=>({accountId:'user'})}));
  const {billingCommand}=await import('../src/commands/billing.js');
  let legacyOk=true, weeklyOk=true; const logs:string[]=[];
  const legacy={config:{monthlyLimit:{val:0},used:{val:78},onDemandCap:{val:0},billingPeriodStart:'2026-11-01T00:00:00+00:00',billingPeriodEnd:'2026-12-01T00:00:00+00:00',history:[]}};

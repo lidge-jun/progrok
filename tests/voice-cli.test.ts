@@ -8,11 +8,11 @@ import { join } from "node:path";
 import { saveTokens } from "../src/auth/token-store.js";
 import { sttCommand } from "../src/commands/stt.js";
 import { ttsCommand } from "../src/commands/tts.js";
+import { mockExports } from "./helpers/mock-exports.js";
 
 const liveCalls: Array<{ method: string; args: unknown[] }> = [];
 let liveServerEvents: unknown[] = [];
-mock.module(new URL("../src/voice/realtime.ts", import.meta.url), {
-  exports: {
+mock.module(new URL("../src/voice/realtime.ts", import.meta.url), mockExports({
     createRealtimeClient(options: unknown) {
       liveCalls.push({ method: "createRealtimeClient", args: [options] });
       const record = (method: string, ...args: unknown[]): void => {
@@ -35,8 +35,7 @@ mock.module(new URL("../src/voice/realtime.ts", import.meta.url), {
         close: (...args: unknown[]) => record("close", ...args),
       };
     },
-  },
-});
+  }));
 const { liveCommand } = await import("../src/commands/live.js");
 
 afterEach(() => {

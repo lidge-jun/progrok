@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { mockExports } from './helpers/mock-exports.js';
 let request: Record<string, unknown> | undefined;
 let items: unknown[] = [{b64_json:Buffer.from([0xff,0xd8,0xff]).toString('base64'),mime_type:'image/jpeg'}];
-mock.module(new URL('../src/surfaces/index.ts', import.meta.url), { exports: { ImagesClient: class {
+mock.module(new URL('../src/surfaces/index.ts', import.meta.url), mockExports({ ImagesClient: class {
  async create(body: Record<string, unknown>) { request = body; return {data:items}; }
-}}});
+}}));
 const {imageCommand} = await import('../src/commands/image.js');
 test('image action sends quality and writes jpg', async () => {
  const dir = mkdtempSync(join(tmpdir(), 'progrok-image-')); const prior = process.cwd();

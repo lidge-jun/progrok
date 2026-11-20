@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { mockExports } from "./helpers/mock-exports.js";
 
 const originalHome = process.env.HOME;
 const originalUserProfile = process.env.USERPROFILE;
@@ -13,8 +14,7 @@ process.env.USERPROFILE = testHome;
 
 const originalRenameSync = fs.renameSync;
 let blockAuthPublish = false;
-const fsMock = mock.module("node:fs", {
-  exports: {
+const fsMock = mock.module("node:fs", mockExports({
     chmodSync: fs.chmodSync,
     existsSync: fs.existsSync,
     mkdirSync: fs.mkdirSync,
@@ -29,8 +29,7 @@ const fsMock = mock.module("node:fs", {
       }
       originalRenameSync(from, to);
     },
-  },
-});
+  }));
 
 const tokenStore = await import("../src/auth/token-store.js");
 const authDir = join(testHome, ".progrok");

@@ -1,11 +1,12 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
+import { mockExports } from './helpers/mock-exports.js';
 const calls: Record<string, unknown>[] = [];
 let pending = false;
-mock.module(new URL('../src/surfaces/index.ts', import.meta.url), { exports: { VideosClient: class {
+mock.module(new URL('../src/surfaces/index.ts', import.meta.url), mockExports({ VideosClient: class {
  async start(_kind: string, body: Record<string,unknown>) { calls.push(body); return {requestId:'test'}; }
  async poll() { if (pending) { pending = false; return {status:'pending',progress:1,raw:{}}; } return {status:'done',progress:100,raw:{},video:{url:'https://example.invalid/video',duration:5}}; }
-}}});
+}}));
 const {videoCommand} = await import('../src/commands/video.js');
 test('video generation action sends 1.5 text, references and pinned frames', async () => {
  for (const args of [ ['prompt'], ['prompt',...Array(8).fill(['--ref','file_id:x']).flat()], ['--keyframe','file_id:x@2','--last-frame','file_id:y'] ]) {
