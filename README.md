@@ -222,7 +222,10 @@ Videos use `grok-imagine-video-1.5` by default:
 # Text-to-video
 progrok video "a terminal command expanding into a network diagram"
 
-# Cheapest per second: 1.5-lite (no references or frame pins)
+# Cheapest per second: 1.5-lite at 480p ($0.02/s; no references or frame pins)
+progrok video "a calm product shot" --model grok-imagine-video-1.5-lite
+
+# 1080p text-to-video (lite upscales from 720p at $0.14/s; 1.5 renders natively)
 progrok video "a calm product shot" --model grok-imagine-video-1.5-lite --resolution 1080p
 
 # Image-to-video (animate a still image; prompt optional)

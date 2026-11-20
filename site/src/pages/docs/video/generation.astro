@@ -35,7 +35,7 @@ curl http://localhost:18645/v1/videos/vg_abc123 \
 <tr><td>output.upload_url</td><td>string</td><td>Optional signed PUT destination for the result.</td></tr>
 </table>
 <h2>Mode Rules</h2>
-<p>REST has no <code>mode</code> body field. Text-to-video is <code>prompt</code> only, image-to-video adds <code>image</code>, and reference-to-video adds <code>reference_images</code>. On base, do not combine <code>image</code> and <code>reference_images</code>; on 1.5 the image pins the first frame.</p>
+<p>REST has no <code>mode</code> body field. Text-to-video is <code>prompt</code> only, image-to-video adds <code>image</code>, and reference-to-video is selected by any of <code>reference_images</code>, <code>reference_audios</code>, <code>last_frame</code> or <code>keyframes</code> (the last three on 1.5 only). On base, do not combine <code>image</code> and <code>reference_images</code>; on 1.5 the image pins the first frame.</p>
 <p>1.5 supports T2V, I2V and R2V; lite supports T2V/I2V. Edit and extend require the base model.</p>
 <h2>Status Values</h2>
 <p><code>pending</code> — Generation in progress.</p>
