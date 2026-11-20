@@ -245,6 +245,8 @@ Edit and extend use `grok-imagine-video` only. Generation also accepts `--second
 
 Earlier smoke found 1.5 prompt-only T2V and R2V unavailable and this team's 1080p requests rejected. Those results no longer hold; see the 2026-11-21 results above.
 
+The web media form enables 1080p for known models that allow it and for models this build has no rules for.
+
 Media commands call xAI endpoints directly with your OAuth session and poll async
 jobs until completion.
 
@@ -293,7 +295,7 @@ source of truth, not this page.
 | `grok-4.20-0309-non-reasoning` | Lower-latency text | 200K+ | Legacy non-reasoning model. |
 | `grok-4.20-multi-agent-0309` | Deep research | 200K+ | Supports high and xhigh effort. |
 | `grok-imagine-image` | Image generation and editing | - | $0.002/input image; $0.02/output image. |
-| `grok-imagine-image-2.0` | Current Imagine image model | - | Returned by the live catalog. |
+| `grok-imagine-image-2.0` | Current Imagine image model | - | Default; quality low, medium, or auto. |
 | `grok-imagine-video` | Video: T2V, I2V, Ref2V, Edit, Extend | - | $0.002/input image, $0.01/input video sec; $0.05/sec (480p), $0.07/sec (720p). |
 | `grok-imagine-video-1.5` | T2V, I2V, Ref2V | - | Default video model. |
 | `grok-imagine-video-1.5-lite` | T2V, I2V | - | 1080p upscaled. |

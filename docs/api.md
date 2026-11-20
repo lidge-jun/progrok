@@ -213,8 +213,8 @@ curl http://127.0.0.1:18645/v1/videos/generations \
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `prompt` | string | required for T2V/R2V; optional for I2V |
-| `model` | string | `grok-imagine-video` |
+| `prompt` | string | Optional when a frame is pinned; otherwise required |
+| `model` | string | `grok-imagine-video`, `grok-imagine-video-1.5`, or `grok-imagine-video-1.5-lite` |
 | `duration` | integer | seconds, range `[1, 15]`, default `8` |
 | `seconds` | integer | OpenAI-compatible alias for `duration` |
 | `aspect_ratio` | enum | `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `3:2`, `2:3` |
@@ -745,6 +745,7 @@ Options:
 - `--model <id>` — `grok-imagine-image-2.0` (default) or `grok-imagine-image`
 - `--aspect <ratio>` — 1:1 (default), 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, auto
 - `--resolution <r>` — 1k (default), 1.5k or 2k
+- `--quality <q>` — low, medium or auto for image 2.0
 - `--ref <path>` — reference image for editing (repeatable, max 5)
 - `--output <path>` — output file path
 - `--json` — structured JSON output
