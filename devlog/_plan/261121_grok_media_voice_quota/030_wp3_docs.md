@@ -48,3 +48,38 @@ Facts that changed after this doc was written and must reach the docs:
   src/commands/video-request.ts, src/surfaces/billing.ts, src/surfaces/grpc-web.ts) and the test-home contract.
 - Exact CLI help text for every changed command: /tmp/progrok-research/cli-help.txt (copied into the lane brief).
 
+
+## Audit dispositions for the docs phase (Terra plan audit, VERDICT FAIL, 4 blockers)
+
+1. Add `site/src/pages/docs/video/image-to-video.astro`: `image` with `reference_images` is refused on grok-imagine-video
+   only; on grok-imagine-video-1.5 `image` pins the first frame of a reference-to-video request.
+2. README: rewrite the video prose and smoke-result sections (around lines 256–281). Current behaviour is stated as current;
+   the 2026-06 smoke results that failed (1.5 T2V/R2V, 1080p for this team) stay only under a dated "Historical smoke
+   (2026-06)" heading that says they no longer hold, with the 2026-11-21 live results beside them. Same for
+   site/src/pages/docs/video/smoke-matrix.astro and advanced/smoke-matrix.astro.
+3. Prices are written per resolution and per input, with provenance, never as one flat rate:
+
+   | Model | 480p | 720p | 1080p | Inputs |
+   |---|---|---|---|---|
+   | grok-imagine-video | $0.05/s | $0.07/s | — | image $0.002, input video $0.01/s |
+   | grok-imagine-video-1.5 | $0.08/s | $0.14/s | $0.25/s (T2V/I2V only) | image $0.01; preset voices free |
+   | grok-imagine-video-1.5-lite | $0.02/s | $0.03/s | $0.14/s (upscaled) | image $0.01 |
+
+   | Model | 1K | 1.5K | 2K | Inputs |
+   |---|---|---|---|---|
+   | grok-imagine-image-2.0 low | $0.04 | $0.05 | $0.06 | edit input $0.01/image |
+   | grok-imagine-image-2.0 medium | $0.06 | $0.07 | $0.08 | edit input $0.01/image |
+   | grok-imagine-image (1.0) | $0.02 | — | $0.02 | $0.002/image |
+
+   Provenance line under each table: "xAI model catalog and docs.x.ai pricing, read 2026-11-21; live
+   cost_in_usd_ticks matched 1.5 480p $0.08/s, lite 480p $0.02/s, lite 1080p $0.14/s and image 2.0 1K medium $0.06.
+   Prices change; xAI's pricing page is authoritative." `auto` is billed at the quality actually served.
+4. Consistency gate, split in two:
+   - must return nothing (stale behaviour): `rg -n "grok-voice-think-fast|prompt-only T2V and reference_images are rejected|1080p is conflicting|max 7 refs|\"0\" or \"1\"|grok-imagine-image-quality.*(HQ|Higher-quality)" README.md docs skills site/src src PROMO.md PROMO.txt`
+   - allowed matches, reviewed by hand: the alias table in src/utils/video-rules.ts (`grok-imagine-video-1.5-preview`,
+     `-2026-05-30`), retirement notes for `grok-imagine-image-quality`/`-pro`, and the dated historical smoke sections.
+
+Non-blocking folded: docs/api.md and skills/progrok/SKILL.md describe both billing JSON shapes (legacy success with the
+3.0.0 keys plus plan/weekly/resetCoupons; weekly-only `{email, plan, weekly, resetCoupons, legacy: null}`) and the coupon
+states ok/unknown/error, with "read-only; progrok never redeems a reset".
+
