@@ -29,3 +29,22 @@
 returns only intentional retirement notes. `node dist/index.js skill | head` and
 `node dist/index.js capabilities --json --offline` show the new fields.
 
+
+## P amendment before wp3 (2026-11-21)
+
+Facts that changed after this doc was written and must reach the docs:
+
+- `progrok billing --json` keeps every 3.0.0 key and adds `plan`, `weekly`, `resetCoupons`; when only the weekly
+  endpoint answers it prints `{email, plan, weekly, resetCoupons, legacy: null}`. Text output prints "unavailable" for
+  missing amounts and a failed weekly read, and converts the reset time to UTC. Coupons are read-only.
+- `progrok live --reasoning` accepts high|none; other values and a non grok-voice-* model are usage errors (exit 1).
+- Keyframes are rejected only when two timestamps round to the same 1/3 s slot.
+- The web media form enables 1080p for known models that allow it and for models this build has no rules for.
+- `progrok tts` has --speed, --sample-rate, --bit-rate, --latency 0|1|2, --text-normalization, --list-voices;
+  `progrok stt` has --model, --filler-words, --vad-threshold, --format, --audio-format, --sample-rate, --channels.
+- Test isolation: scripts/run-tests.mjs runs the suite with a throwaway HOME/USERPROFILE. The old suite deleted the
+  real ~/.progrok/auth.json; CHANGELOG must say so under Fixed so contributors know to re-login.
+- `structure/20_contracts.md` and `structure/10_layers.md` gain the new modules (src/utils/video-rules.ts,
+  src/commands/video-request.ts, src/surfaces/billing.ts, src/surfaces/grpc-web.ts) and the test-home contract.
+- Exact CLI help text for every changed command: /tmp/progrok-research/cli-help.txt (copied into the lane brief).
+
