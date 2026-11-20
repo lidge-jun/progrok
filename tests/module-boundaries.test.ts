@@ -35,12 +35,12 @@ function walk(dir: string): string[] {
 }
 
 function layerOf(path: string): string | undefined {
-  const parts = path.split("/");
+  const parts = path.split(/[\\/]/);
   return parts[0] === SRC && parts.length > 2 ? parts[1] : undefined;
 }
 
 function importedLayers(path: string, source: string): string[] {
-  const depth = path.split("/").length - 2;
+  const depth = path.split(/[\\/]/).length - 2;
   const found = new Set<string>();
   for (const match of source.matchAll(/from\s+"((?:\.\.\/)+[^"]+)"/g)) {
     const spec = match[1];
@@ -54,6 +54,12 @@ function importedLayers(path: string, source: string): string[] {
 }
 
 describe("module boundaries", () => {
+  it("reads Windows-style paths the same as POSIX paths", () => {
+    // walk() builds paths with path.join, which uses backslashes on Windows.
+    assert.equal(layerOf("src\\auth\\token-store.ts"), "auth");
+    assert.deepEqual(importedLayers("src\\commands\\billing.ts", 'import { x } from "../surfaces/billing.js";'), ["surfaces"]);
+  });
+
   it("keeps the voice websocket facade exporting transport, STT and TTS", async () => {
     const mod = await import("../src/voice/ws-client.js");
     for (const name of [
