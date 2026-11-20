@@ -282,7 +282,16 @@ describe("Voice CLI", () => {
 });
 
 it("accepts none and rejects low realtime reasoning", async () => {
-  await assert.rejects(liveCommand().parseAsync(["node", "progrok", "--reasoning", "low", "--no-stdin"]), /--reasoning must be high or none/);
+  // Commander reports an InvalidArgumentError as a usage error; any other error
+  // thrown from an option parser escapes as an uncaught stack trace.
+  await assert.rejects(
+    liveCommand().exitOverride().configureOutput({ writeErr: () => {} }).parseAsync(["node", "progrok", "--reasoning", "low", "--no-stdin"]),
+    (error: { code?: string; message: string }) => error.code === "commander.invalidArgument" && /high or none/.test(error.message),
+  );
+  await assert.rejects(
+    liveCommand().exitOverride().configureOutput({ writeErr: () => {} }).parseAsync(["node", "progrok", "--model", "gpt-4o", "--no-stdin"]),
+    (error: { code?: string }) => error.code === "commander.invalidArgument",
+  );
   await liveCommand().parseAsync(["node", "progrok", "--reasoning", "none", "--no-stdin"]);
   assert.equal((liveCalls[0].args[0] as { reasoningEffort: string }).reasoningEffort, "none");
 });

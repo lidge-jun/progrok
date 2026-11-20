@@ -1,5 +1,5 @@
 import { createInterface, type Interface } from "node:readline";
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
 import {
   createRealtimeClient,
   type RealtimeClient,
@@ -31,8 +31,8 @@ type LiveClientEvent = Exclude<RealtimeClientEvent, { type: "pong" }>;
 function parseRealtimeModel(value: string): RealtimeVoiceModel {
   const model = value.trim();
   if (!model.startsWith("grok-voice-")) {
-    throw new Error(
-      "--model must be a grok-voice-* identifier, for example grok-voice-latest",
+    throw new InvalidArgumentError(
+      "--model must be a grok-voice-* identifier, for example grok-voice-latest or grok-voice-3.0",
     );
   }
   return model;
@@ -40,7 +40,7 @@ function parseRealtimeModel(value: string): RealtimeVoiceModel {
 
 function parseReasoningEffort(value: string): RealtimeReasoningEffort {
   if (value !== "none" && value !== "high") {
-    throw new Error("--reasoning must be high or none");
+    throw new InvalidArgumentError("--reasoning must be high or none (grok-voice-3.0 rejects low and medium)");
   }
   return value;
 }
