@@ -31,6 +31,14 @@ test('coupon transport verifies framing and status and falls back', async () => 
  const ok = await fetchResetCoupons({bearer:'test',fetch:fetcher}); assert.equal(ok.status,'ok'); assert.equal(calls,2); if(ok.status==='ok') assert.deepEqual(ok.coupons,[]);
  for (const bytes of [frame(new Uint8Array(),'grpc-status:16'), encodeGrpcWebFrame(new Uint8Array())]) assert.equal((await fetchResetCoupons({bearer:'test',fetch:async()=>new Response(bytes)})).status,'error');
  assert.equal((await fetchResetCoupons({bearer:'test',fetch:async()=>new Response(frame(new Uint8Array([8,1])))})).status,'unknown');
+ // An empty protobuf message may arrive with no data frame at all, only the
+ // trailer; with grpc-status 0 that is a confirmed zero (OpenCodex treats it the same).
+ const trailerOnly = encodeGrpcWebFrame(new TextEncoder().encode('grpc-status:0')); trailerOnly[0] = 128;
+ const empty = await fetchResetCoupons({bearer:'test',fetch:async()=>new Response(trailerOnly)});
+ assert.equal(empty.status,'ok'); if (empty.status==='ok') assert.deepEqual(empty.coupons,[]);
+ // Two data frames is not a shape this RPC produces.
+ const twice = new Uint8Array([...encodeGrpcWebFrame(new Uint8Array()), ...frame(new Uint8Array())]);
+ assert.equal((await fetchResetCoupons({bearer:'test',fetch:async()=>new Response(twice)})).status,'error');
 });
 test('source contains no coupon redemption RPC', () => { const walk=(p:string):string[]=>readdirSync(p,{withFileTypes:true}).flatMap(x=>x.isDirectory()?walk(join(p,x.name)):[join(p,x.name)]); for(const f of walk('src')) assert.equal(readFileSync(f,'utf8').includes('Redeem'+'Reset'),false,f); });
 
