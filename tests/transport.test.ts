@@ -11,10 +11,13 @@ import { join } from "node:path";
 import type { XaiFetchInput } from "../src/transport/fetch.js";
 
 const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 const originalFetch = globalThis.fetch;
 const originalDeploymentKey = process.env.GROK_DEPLOYMENT_KEY;
 const tempHome = mkdtempSync(join(tmpdir(), "progrok-transport-test-"));
+// os.homedir() reads HOME on POSIX and USERPROFILE on Windows.
 process.env.HOME = tempHome;
+process.env.USERPROFILE = tempHome;
 
 const {
   XAI_PUBLIC_API_BASE_URL,
@@ -82,6 +85,8 @@ afterEach(() => {
 after(() => {
   if (originalHome === undefined) delete process.env.HOME;
   else process.env.HOME = originalHome;
+  if (originalUserProfile === undefined) delete process.env.USERPROFILE;
+  else process.env.USERPROFILE = originalUserProfile;
   rmSync(tempHome, { recursive: true, force: true });
 });
 

@@ -29,6 +29,8 @@ test('media form follows model capabilities and shows one percent', async () => 
   await new Promise(resolve=>setImmediate(resolve)); assert.equal(sent[0].resolution,'1080p'); assert.match(status.textContent,/1%/);
   model.value='grok-imagine-video'; model.dispatchEvent(new Event('change')); assert.equal(hd.disabled,true); assert.equal(resolution.value,'720p');
   form.dispatchEvent(new Event('submit',{cancelable:true})); await new Promise(resolve=>setImmediate(resolve)); assert.equal(sent[1].resolution,'720p');
+  // A model this build has no rules for is left to the server, as the CLI does.
+  model.value='grok-imagine-video-2'; model.dispatchEvent(new Event('change')); assert.equal(hd.disabled,false);
   // Abort outstanding polls so the test does not leave timers running.
   kind.dispatchEvent(new Event('change'));
  } finally { fetcher.mock.restore(); Object.defineProperty(globalThis,'Option',{value:originalOption,configurable:true}); Object.defineProperty(globalThis,'window',{value:originalWindow,configurable:true}); }

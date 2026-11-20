@@ -93,7 +93,10 @@ export class MediaController {
     const field = this.el.form.querySelector<HTMLSelectElement>("#video-resolution");
     const option = field?.querySelector<HTMLOptionElement>('option[value="1080p"]');
     if (!field || !option) return;
-    option.disabled = !videoRulesFor(this.el.model.value)?.resolutions.includes("1080p");
+    // Known models follow their rules; a model this build has no rules for is
+    // left to the server, the same policy the CLI uses.
+    const rules = videoRulesFor(this.el.model.value);
+    option.disabled = rules !== undefined && !rules.resolutions.includes("1080p");
     if (option.disabled && field.value === "1080p") field.value = "720p";
   }
 

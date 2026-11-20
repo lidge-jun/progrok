@@ -33,7 +33,7 @@ export function buildVideoGenerationRequest(input: VideoGenerationInput, toRef: 
     if (!Number.isFinite(frame.timestampS) || frame.timestampS <= 0 || frame.timestampS >= duration) throw new Error("--keyframe timestamp must be greater than 0 and less than --duration");
     const slot = keyframeSlot(frame.timestampS);
     // xAI snaps anchors to a 1/3 s grid and rejects two that share a slot.
-    if (slots.has(slot)) throw new Error("--keyframe keyframes must be at least 1/3 s apart (they snap to a 1/3 s grid)");
+    if (slots.has(slot)) throw new Error("--keyframe timestamps must not round to the same 1/3 s slot (xAI snaps keyframes to a 1/3 s grid)");
     slots.add(slot);
   }
   if (!prompt && !image && lastFrame === undefined && keyframes.length === 0) throw new Error("prompt is required unless a frame is pinned");
