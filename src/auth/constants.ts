@@ -45,8 +45,8 @@ export const PROXY_DEFAULT_HOST = "127.0.0.1";
 export const CHAT_DEFAULT_PORT = 18646;
 
 // Image / Video
-export const DEFAULT_IMAGE_MODEL = "grok-imagine-image";
-export const DEFAULT_VIDEO_MODEL = "grok-imagine-video";
+export const DEFAULT_IMAGE_MODEL = "grok-imagine-image-2.0";
+export const DEFAULT_VIDEO_MODEL = "grok-imagine-video-1.5";
 export const VIDEO_POLL_INTERVAL_MS = 5_000;
 export const VIDEO_DEFAULT_TIMEOUT_S = 600;
 
@@ -61,3 +61,6 @@ export const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 // GitHub
 export const GITHUB_REPO = "lidge-jun/progrok";
 export const GITHUB_URL = `https://github.com/${GITHUB_REPO}`;
+
+/** The only model that supports video edits and extensions. */
+export const VIDEO_EDIT_MODEL = "grok-imagine-video";

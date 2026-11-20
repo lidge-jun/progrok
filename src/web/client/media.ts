@@ -1,3 +1,4 @@
+import { videoRulesFor } from "../../utils/video-rules.js";
 import { generateImages, readVideoJob, submitVideo } from "./api.js";
 import type { ModelRecord, VideoJob } from "./contracts.js";
 
@@ -52,6 +53,7 @@ export class MediaController {
       this.#active?.abort();
       this.syncModels();
     }, options);
+    this.el.model.addEventListener("change", () => this.syncVideoResolution(), options);
     this.el.form.addEventListener("submit", (event) => {
       event.preventDefault();
       void this.run();
@@ -68,6 +70,7 @@ export class MediaController {
     this.el.model.replaceChildren(
       ...matches.map((model) => new Option(model.id, model.id)),
     );
+    this.syncVideoResolution();
     this.el.model.disabled = matches.length === 0;
     this.el.submit.disabled = matches.length === 0;
     this.el.progress.hidden = image;
@@ -84,6 +87,14 @@ export class MediaController {
     this.el.status.textContent = matches.length > 0
       ? "Ready"
       : `No ${image ? "image" : "video"} model was returned by /v1/models.`;
+  }
+
+  private syncVideoResolution(): void {
+    const field = this.el.form.querySelector<HTMLSelectElement>("#video-resolution");
+    const option = field?.querySelector<HTMLOptionElement>('option[value="1080p"]');
+    if (!field || !option) return;
+    option.disabled = !videoRulesFor(this.el.model.value)?.resolutions.includes("1080p");
+    if (option.disabled && field.value === "1080p") field.value = "720p";
   }
 
   private formNumber(selector: string, fallback: number): number {
@@ -215,7 +226,7 @@ export class MediaController {
       }
       const job = await readVideoJob(requestId, signal);
       if (typeof job.progress === "number") {
-        const normalized = job.progress > 1 ? job.progress / 100 : job.progress;
+        const normalized = job.progress / 100;
         this.el.progress.value = Math.max(0, Math.min(1, normalized));
         this.el.status.textContent = `Video job ${requestId}: ${Math.round(this.el.progress.value * 100)}%`;
       } else {

@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import {
   DEFAULT_VIDEO_MODEL,
+  VIDEO_EDIT_MODEL,
   VIDEO_POLL_INTERVAL_MS,
   VIDEO_DEFAULT_TIMEOUT_S,
   USD_TICKS_DIVISOR,
@@ -12,6 +13,8 @@ import { log } from "../utils/logger.js";
 import { writeFileSync } from "node:fs";
 import { mediaRef } from "../utils/media.js";
 import { collectRefs } from "../utils/collect-refs.js";
+import { buildVideoGenerationRequest, parseKeyframe } from "./video-request.js";
+import { normalizeVideoProgress, videoRulesFor } from "../utils/video-rules.js";
 import { parseIntOrThrow } from "../utils/parse-int.js";
 
 export interface VideoOptions {
@@ -22,6 +25,9 @@ export interface VideoOptions {
   resolution?: string;
   image?: string;
   ref?: string[];
+  voice?: string[];
+  lastFrame?: string;
+  keyframe?: string[];
   uploadUrl?: string;
   output?: string;
   json?: boolean;
@@ -71,7 +77,7 @@ async function pollUntilDone(
 
     if (!json && typeof data.progress === "number" && data.progress !== lastProgress) {
       lastProgress = data.progress;
-      process.stdout.write(`\r  Progress: ${Math.round(lastProgress * 100)}%`);
+      process.stdout.write(`\r  Progress: ${normalizeVideoProgress(lastProgress)}%`);
     }
   }
 
@@ -111,15 +117,18 @@ export function videoCommand(): Command {
     .option("--duration <s>", "duration in seconds (1-15)", "5")
     .option("--seconds <s>", "OpenAI-compatible duration alias; sends 'seconds' instead of 'duration'")
     .option("--aspect <ratio>", "aspect ratio", "16:9")
-    .option("--resolution <r>", "480p or 720p (1080p is conflicting/experimental)", "480p")
+    .option("--resolution <r>", "480p, 720p or 1080p (1080p: T2V/I2V on 1.5 and 1.5-lite)", "480p")
     .option("--image <input>", "source image for image-to-video: file, URL, data URI, or file_id:<id>")
-    .option("--ref <input>", "reference image for reference-to-video (repeatable, max 7)", collectRefs, [])
+    .option("--ref <input>", "reference image for reference-to-video (repeatable; 14 on 1.5, 7 on grok-imagine-video, none on lite)", collectRefs, [])
+    .option("--voice <voice_id>", "preset voice for reference_audios (1.5 only, max 3)", collectRefs, [])
+    .option("--last-frame <input>", "pin the final frame (1.5 only)")
+    .option("--keyframe <input@seconds>", "pin an image at a timestamp (1.5 only, max 4)", collectRefs, [])
     .option("--upload-url <url>", "signed output.upload_url for xAI to PUT the result")
     .option("--output <path>", "output file path")
     .option("--json", "output structured JSON")
     .option("--timeout <s>", "polling timeout in seconds", String(VIDEO_DEFAULT_TIMEOUT_S))
     .action(async (prompt: string | undefined, opts: VideoOptions) => {
-      if (!prompt) { cmd.help(); return; }
+      if (!prompt && !opts.image && !opts.lastFrame && !opts.keyframe?.length) { cmd.help(); return; }
       await generateAction(prompt, opts);
     });
 
@@ -128,7 +137,7 @@ export function videoCommand(): Command {
     .command("edit <prompt>")
     .description("Edit existing video with a text prompt (real V2V). Model: grok-imagine-video only.")
     .requiredOption("--video <input>", "source video: file, URL, data URI, or file_id:<id>")
-    .option("--model <id>", "video model (must be grok-imagine-video)", DEFAULT_VIDEO_MODEL)
+    .option("--model <id>", "video model (must be grok-imagine-video)", VIDEO_EDIT_MODEL)
     .option("--upload-url <url>", "signed output.upload_url for xAI to PUT the result")
     .option("--output <path>", "output file path")
     .option("--json", "output structured JSON")
@@ -142,7 +151,7 @@ export function videoCommand(): Command {
     .command("extend <prompt>")
     .description("Extend video from its last frame. Model: grok-imagine-video only.")
     .requiredOption("--video <input>", "source video: file, URL, data URI, or file_id:<id>")
-    .option("--model <id>", "video model (must be grok-imagine-video)", DEFAULT_VIDEO_MODEL)
+    .option("--model <id>", "video model (must be grok-imagine-video)", VIDEO_EDIT_MODEL)
     .option("--duration <s>", "extension duration 2-10s (default 6)", "6")
     .option("--upload-url <url>", "signed output.upload_url for xAI to PUT the result")
     .option("--output <path>", "output file path")
@@ -155,40 +164,18 @@ export function videoCommand(): Command {
   return cmd;
 }
 
-async function generateAction(prompt: string, opts: VideoOptions): Promise<void> {
+async function generateAction(prompt: string | undefined, opts: VideoOptions): Promise<void> {
   try {
     const client = new VideosClient(createXaiTransport());
     const duration = parseIntOrThrow(opts.seconds ?? opts.duration ?? "5", "duration", 1, 15);
     const timeout = parseIntOrThrow(opts.timeout ?? String(VIDEO_DEFAULT_TIMEOUT_S), "timeout", 1) * 1000;
-    const refs = opts.ref ?? [];
-
-    if (opts.image && refs.length > 0) {
-      throw new Error("--image and --ref/reference_images cannot be combined; xAI returns 400 for mixed modes.");
-    }
-    if (refs.length > 7) {
-      throw new Error("Reference-to-video supports at most 7 reference images.");
-    }
-    if (refs.length > 0 && duration > 10) {
-      throw new Error("Reference-to-video duration is capped at 10 seconds.");
-    }
-    if (opts.model?.includes("1.5") && !opts.image) {
-      throw new Error("grok-imagine-video-1.5 live-smoke supports image-to-video only; prompt-only T2V and reference_images are rejected by xAI.");
-    }
-
-    const body: Record<string, unknown> = {
-      model: opts.model ?? DEFAULT_VIDEO_MODEL,
-      prompt,
-      aspect_ratio: opts.aspect ?? "16:9",
-      resolution: opts.resolution ?? "480p",
-    };
-    body[opts.seconds ? "seconds" : "duration"] = duration;
-
-    if (opts.image) {
-      body.image = mediaRef(opts.image, "image");
-    } else if (refs.length > 0) {
-      body.reference_images = refs.map((ref) => mediaRef(ref, "image"));
-    }
-    if (opts.uploadUrl) body.output = { upload_url: opts.uploadUrl };
+    const body = buildVideoGenerationRequest({
+      model: opts.model ?? DEFAULT_VIDEO_MODEL, prompt, duration,
+      durationField: opts.seconds ? "seconds" : "duration", aspect: opts.aspect ?? "16:9",
+      resolution: opts.resolution ?? "480p", image: opts.image, refs: opts.ref ?? [],
+      voices: opts.voice ?? [], lastFrame: opts.lastFrame,
+      keyframes: (opts.keyframe ?? []).map(parseKeyframe), uploadUrl: opts.uploadUrl,
+    }, (value) => mediaRef(value, "image"));
 
     const { requestId } = await client.start("generations", body);
     if (!opts.json) {
@@ -219,10 +206,10 @@ async function editAction(prompt: string, opts: VideoEditOptions): Promise<void>
   try {
     const client = new VideosClient(createXaiTransport());
     const timeout = parseIntOrThrow(opts.timeout ?? String(VIDEO_DEFAULT_TIMEOUT_S), "timeout", 1) * 1000;
-    const model = opts.model ?? DEFAULT_VIDEO_MODEL;
+    const model = opts.model ?? VIDEO_EDIT_MODEL;
 
-    if (model.includes("1.5")) {
-      throw new Error("Video editing is only supported by grok-imagine-video (not 1.5-preview).");
+    if (videoRulesFor(model) && model !== VIDEO_EDIT_MODEL) {
+      throw new Error("Video editing is only supported by grok-imagine-video.");
     }
 
     const sourceVideo = mediaRef(opts.video, "video");
@@ -260,10 +247,10 @@ async function extendAction(prompt: string, opts: VideoExtendOptions): Promise<v
     const client = new VideosClient(createXaiTransport());
     const timeout = parseIntOrThrow(opts.timeout ?? String(VIDEO_DEFAULT_TIMEOUT_S), "timeout", 1) * 1000;
     const duration = parseIntOrThrow(opts.duration ?? "6", "duration", 2, 10);
-    const model = opts.model ?? DEFAULT_VIDEO_MODEL;
+    const model = opts.model ?? VIDEO_EDIT_MODEL;
 
-    if (model.includes("1.5")) {
-      throw new Error("Video extension is only supported by grok-imagine-video (not 1.5-preview).");
+    if (videoRulesFor(model) && model !== VIDEO_EDIT_MODEL) {
+      throw new Error("Video extension is only supported by grok-imagine-video.");
     }
 
     const sourceVideo = mediaRef(opts.video, "video");
